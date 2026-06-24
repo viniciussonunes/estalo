@@ -25,7 +25,7 @@ class Settings(BaseSettings):
     # Chave da API do Gemini (gerar cards com IA). Fica vazia por padrão;
     # você preenche no arquivo .env. NUNCA suba a chave real pro GitHub.
     GEMINI_API_KEY: str = ""
-    GEMINI_MODEL: str = "gemini-flash-latest"
+    GEMINI_MODEL: str = "gemini-2.5-flash"
 
 
 settings = Settings()

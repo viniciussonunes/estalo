@@ -24,10 +24,17 @@ export default function Cards({ deck, aoVoltar, aoEstudar, aoAprender, aoRevelar
   const [editVerso, setEditVerso] = useState("");
   const [salvandoEdit, setSalvandoEdit] = useState(false);
 
+  const [stats, setStats] = useState(null);
+
   const carregarCards = useCallback(async () => {
     setErro("");
     try {
-      setCards(await api.listarCards(deck.id));
+      const [listaCards, dadosStats] = await Promise.all([
+        api.listarCards(deck.id),
+        api.statsEstudo(deck.id),
+      ]);
+      setCards(listaCards);
+      setStats(dadosStats);
     } catch (err) {
       setErro(err.message);
     } finally {
@@ -129,6 +136,28 @@ export default function Cards({ deck, aoVoltar, aoEstudar, aoAprender, aoRevelar
             </span>
           )}
         </div>
+
+        {/* Painel de progresso */}
+        {stats && (
+          <div className="stats-deck">
+            <div className="stat-badge stat-novo">
+              <span className="stat-badge-valor">{stats.new_cards}</span>
+              <span className="stat-badge-label">Novos</span>
+            </div>
+            <div className="stat-badge stat-aprendendo">
+              <span className="stat-badge-valor">
+                {Math.max(0, stats.due_now - stats.new_cards)}
+              </span>
+              <span className="stat-badge-label">Para revisar</span>
+            </div>
+            <div className="stat-badge stat-dominado">
+              <span className="stat-badge-valor">
+                {Math.max(0, stats.total_cards - stats.due_now)}
+              </span>
+              <span className="stat-badge-label">Dominados</span>
+            </div>
+          </div>
+        )}
 
         {/* Formulário de criação */}
         <div className="cards-criar">

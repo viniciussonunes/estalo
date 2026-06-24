@@ -913,6 +913,51 @@ body {
 }
 .botao-add-linha:hover { border-color: var(--violeta); color: var(--violeta); }
 
+/* ---------- Painel de progresso do deck ---------- */
+.stats-deck {
+  display: flex;
+  gap: 0.6rem;
+  margin-bottom: 1.25rem;
+}
+.stat-badge {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.2rem;
+  padding: 0.7rem 0.5rem;
+  border-radius: 10px;
+  border: 1.5px solid transparent;
+}
+.stat-badge-valor {
+  font-family: "Fraunces", serif;
+  font-size: 1.5rem;
+  font-weight: 600;
+  line-height: 1;
+}
+.stat-badge-label {
+  font-size: 0.73rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  opacity: 0.8;
+}
+.stat-novo      { background: #eef2ff; border-color: #c7d2fe; color: #3730a3; }
+.stat-aprendendo{ background: #fffbeb; border-color: #fde68a; color: #92400e; }
+.stat-dominado  { background: #f0fdf4; border-color: #bbf7d0; color: #166534; }
+
+/* ---------- Indicador de repetição no quiz ---------- */
+.quiz-repetindo {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #92400e;
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  border-radius: 20px;
+  padding: 0.18rem 0.55rem;
+  white-space: nowrap;
+}
+
 /* ---------- Acessibilidade ---------- */
 *:focus-visible { outline: 2px solid var(--violeta); outline-offset: 2px; }
 @media (prefers-reduced-motion: reduce) {
@@ -954,4 +999,9 @@ body {
   .form-card-rodape .botao-principal { flex: none; }
 
   .breadcrumb-item { font-size: 0.84rem; }
+
+  .stats-deck { gap: 0.4rem; }
+  .stat-badge { padding: 0.55rem 0.3rem; }
+  .stat-badge-valor { font-size: 1.25rem; }
+  .stat-badge-label { font-size: 0.68rem; }
 }
