@@ -1,0 +1,18 @@
+# --- Núcleo da API ---
+fastapi==0.115.0
+uvicorn[standard]==0.32.0
+python-multipart==0.0.12   # necessário pro formulário de login
+
+# --- Banco de dados ---
+sqlalchemy==2.0.35
+pydantic-settings==2.5.2
+
+# --- Autenticação ---
+python-jose[cryptography]==3.3.0   # tokens JWT (o "crachá")
+bcrypt==4.2.0                      # criptografia de senha (direto, sem passlib)
+
+# --- Testes ---
+httpx==0.27.2              # usado pelo test_auth.py
+
+# --- PostgreSQL em produção (descomente quando for usar) ---
+# psycopg2-binary==2.9.9

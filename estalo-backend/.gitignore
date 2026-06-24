@@ -1,0 +1,11 @@
+# Segredos — NUNCA versionar
+.env
+
+# Banco local
+*.db
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/

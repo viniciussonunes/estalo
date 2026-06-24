@@ -1,0 +1,216 @@
+/* ===== Estalo — identidade visual =====
+   violeta = foco/memória · âmbar = o "estalo" (usado com parcimônia)
+   Fraunces (display) + Inter (corpo)
+*/
+:root {
+  --tinta: #17161f;
+  --tinta-suave: #56535f;
+  --papel: #faf9fb;
+  --superficie: #ffffff;
+  --borda: #e8e6ec;
+  --violeta: #5b4be8;
+  --violeta-escuro: #4a3cc9;
+  --ambar: #ffb020;
+  --perigo: #d64545;
+  --raio: 12px;
+  --sombra: 0 1px 2px rgba(23, 22, 31, 0.04), 0 8px 24px rgba(23, 22, 31, 0.06);
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: "Inter", system-ui, -apple-system, sans-serif;
+  background: var(--papel);
+  color: var(--tinta);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ---------- Marca ---------- */
+.marca { text-align: center; margin-bottom: 1.75rem; }
+.marca-nome {
+  font-family: "Fraunces", serif;
+  font-weight: 600;
+  font-size: 2.25rem;
+  letter-spacing: -0.02em;
+  /* o âmbar entra só aqui, como um sublinhado discreto: o "estalo" */
+  background-image: linear-gradient(transparent 70%, rgba(255, 176, 32, 0.35) 0);
+  background-size: 100% 100%;
+}
+.marca-nome.pequeno { font-size: 1.35rem; }
+.marca-sub {
+  display: block;
+  margin-top: 0.35rem;
+  color: var(--tinta-suave);
+  font-size: 0.9rem;
+}
+
+/* ---------- Layout central (login) ---------- */
+.tela-centro {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 1.5rem;
+}
+.cartao-auth {
+  width: 100%;
+  max-width: 380px;
+  background: var(--superficie);
+  border: 1px solid var(--borda);
+  border-radius: var(--raio);
+  box-shadow: var(--sombra);
+  padding: 2rem;
+}
+
+/* ---------- Abas (entrar / criar conta) ---------- */
+.abas {
+  display: flex;
+  background: var(--papel);
+  border-radius: 10px;
+  padding: 4px;
+  margin-bottom: 1.25rem;
+}
+.aba {
+  flex: 1;
+  border: none;
+  background: transparent;
+  padding: 0.55rem;
+  border-radius: 7px;
+  font: inherit;
+  font-weight: 500;
+  color: var(--tinta-suave);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.aba.ativa {
+  background: var(--superficie);
+  color: var(--tinta);
+  box-shadow: 0 1px 2px rgba(23, 22, 31, 0.08);
+}
+
+/* ---------- Campos de formulário ---------- */
+.campo { display: block; margin-bottom: 1rem; }
+.campo span {
+  display: block;
+  font-size: 0.85rem;
+  font-weight: 500;
+  margin-bottom: 0.35rem;
+  color: var(--tinta-suave);
+}
+.campo input,
+.criar-deck input {
+  width: 100%;
+  padding: 0.65rem 0.8rem;
+  border: 1px solid var(--borda);
+  border-radius: 9px;
+  font: inherit;
+  background: var(--papel);
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.campo input:focus,
+.criar-deck input:focus {
+  outline: none;
+  border-color: var(--violeta);
+  box-shadow: 0 0 0 3px rgba(91, 75, 232, 0.15);
+}
+
+/* ---------- Botões ---------- */
+.botao-principal {
+  width: 100%;
+  padding: 0.7rem;
+  border: none;
+  border-radius: 9px;
+  background: var(--violeta);
+  color: #fff;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.botao-principal:hover { background: var(--violeta-escuro); }
+.botao-principal:disabled { opacity: 0.6; cursor: default; }
+
+.botao-texto {
+  border: none;
+  background: transparent;
+  font: inherit;
+  color: var(--tinta-suave);
+  cursor: pointer;
+  padding: 0.3rem 0.5rem;
+  border-radius: 7px;
+}
+.botao-texto:hover { background: var(--papel); color: var(--tinta); }
+.botao-texto.perigo:hover { color: var(--perigo); }
+
+/* ---------- Erro ---------- */
+.erro {
+  background: #fdeaea;
+  color: var(--perigo);
+  padding: 0.6rem 0.8rem;
+  border-radius: 9px;
+  font-size: 0.88rem;
+  margin-bottom: 1rem;
+}
+
+/* ---------- Página interna ---------- */
+.pagina { min-height: 100vh; }
+.topo {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem 1.5rem;
+  background: var(--superficie);
+  border-bottom: 1px solid var(--borda);
+}
+.topo-direita { display: flex; align-items: center; gap: 0.75rem; }
+.usuario-email { color: var(--tinta-suave); font-size: 0.9rem; }
+
+.conteudo { max-width: 720px; margin: 0 auto; padding: 2rem 1.5rem; }
+.titulo-pagina {
+  font-family: "Fraunces", serif;
+  font-weight: 500;
+  font-size: 1.8rem;
+  margin-bottom: 1.25rem;
+  letter-spacing: -0.01em;
+}
+
+/* ---------- Criar deck ---------- */
+.criar-deck { display: flex; gap: 0.6rem; margin-bottom: 1.5rem; }
+.criar-deck input { flex: 1; }
+.criar-deck .botao-principal { width: auto; white-space: nowrap; }
+
+/* ---------- Lista de decks ---------- */
+.lista-decks { list-style: none; display: grid; gap: 0.6rem; }
+.card-deck {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--superficie);
+  border: 1px solid var(--borda);
+  border-radius: var(--raio);
+  padding: 1rem 1.2rem;
+  transition: border-color 0.15s, transform 0.05s;
+}
+.card-deck:hover { border-color: #d8d4e0; }
+.card-deck-titulo { font-weight: 600; display: block; }
+.card-deck-desc {
+  display: block;
+  color: var(--tinta-suave);
+  font-size: 0.88rem;
+  margin-top: 0.2rem;
+}
+
+/* ---------- Estados vazios ---------- */
+.vazio, .vazio-bloco { color: var(--tinta-suave); }
+.vazio-bloco {
+  text-align: center;
+  padding: 3rem 1rem;
+  border: 1px dashed var(--borda);
+  border-radius: var(--raio);
+}
+.vazio-dica { font-size: 0.88rem; margin-top: 0.4rem; }
+
+/* ---------- Acessibilidade ---------- */
+*:focus-visible { outline: 2px solid var(--violeta); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; }
+}
