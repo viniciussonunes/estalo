@@ -59,12 +59,25 @@ export const api = {
 
   eu: () => request("/auth/me"),
 
+  listarPastas: () => request("/folders"),
+
+  criarPasta: (name, parent_id = null) =>
+    request("/folders", { method: "POST", body: { name, parent_id } }),
+
+  renomearPasta: (id, name) =>
+    request(`/folders/${id}`, { method: "PATCH", body: { name } }),
+
+  excluirPasta: (id) => request(`/folders/${id}`, { method: "DELETE" }),
+
   listarDecks: () => request("/decks"),
 
-  criarDeck: (title, description) =>
-    request("/decks", { method: "POST", body: { title, description } }),
+  criarDeck: (title, description = null, folder_id = null) =>
+    request("/decks", { method: "POST", body: { title, description, folder_id } }),
 
   excluirDeck: (id) => request(`/decks/${id}`, { method: "DELETE" }),
+
+  atualizarCard: (id, front, back) =>
+    request(`/cards/${id}`, { method: "PATCH", body: { front, back } }),
 
   proximoCard: (deckId) => request(`/study/decks/${deckId}/next`),
 

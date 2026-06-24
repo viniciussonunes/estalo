@@ -17,7 +17,7 @@ class Settings(BaseSettings):
 
     # Chave usada pra assinar os tokens JWT. NUNCA suba a real pro GitHub.
     SECRET_KEY: str = "troque-isso-em-producao"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 10080  # 7 dias
 
     # Profundidade máxima da árvore de pastas (sua dor #3: 4 níveis).
     MAX_FOLDER_DEPTH: int = 4
