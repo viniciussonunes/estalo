@@ -11,6 +11,7 @@ a resposta. É a diferença entre receber um formulário preenchido e um bilhete
 escrito à mão.
 """
 import json
+import time
 
 import httpx
 
@@ -24,6 +25,45 @@ GEMINI_URL = (
 
 class IAError(Exception):
     """Erro ao falar com a IA (chave faltando, API fora do ar, resposta estranha)."""
+
+
+_RETRY_STATUS = {429, 500, 502, 503, 504}
+
+
+def _chamar_gemini(prompt: str, timeout: int = 90) -> str:
+    """Chama o Gemini e retorna o texto gerado. Tenta até 3 vezes em erros transitórios."""
+    if not settings.GEMINI_API_KEY:
+        raise IAError("Chave do Gemini não configurada. Preencha GEMINI_API_KEY no arquivo .env")
+
+    url = GEMINI_URL.format(model=settings.GEMINI_MODEL)
+    payload = {"contents": [{"parts": [{"text": prompt}]}]}
+    headers = {
+        "Content-Type": "application/json",
+        "X-goog-api-key": settings.GEMINI_API_KEY,
+    }
+
+    ultimo_erro: Exception | None = None
+    for tentativa in range(3):
+        if tentativa > 0:
+            time.sleep(2 ** tentativa)  # 2s, 4s
+        try:
+            resp = httpx.post(url, json=payload, headers=headers, timeout=timeout)
+            if resp.status_code in _RETRY_STATUS and tentativa < 2:
+                ultimo_erro = Exception(f"status {resp.status_code}")
+                continue
+            resp.raise_for_status()
+        except httpx.HTTPStatusError as e:
+            raise IAError(f"Gemini respondeu com erro {e.response.status_code}") from e
+        except httpx.RequestError as e:
+            raise IAError(f"Falha ao conectar no Gemini: {e}") from e
+
+        try:
+            dados = resp.json()
+            return dados["candidates"][0]["content"]["parts"][0]["text"]
+        except (KeyError, IndexError) as e:
+            raise IAError("Resposta do Gemini veio em formato inesperado") from e
+
+    raise IAError(f"Gemini indisponível após 3 tentativas ({ultimo_erro})")
 
 
 def _montar_prompt(texto: str, quantidade: int) -> str:
@@ -99,31 +139,7 @@ def gerar_quiz(cards: list[dict]) -> list[dict]:
     {card_id, question, correct, distractors, explanation}.
     Lança IAError se algo der errado.
     """
-    if not settings.GEMINI_API_KEY:
-        raise IAError(
-            "Chave do Gemini não configurada. Preencha GEMINI_API_KEY no arquivo .env"
-        )
-
-    url = GEMINI_URL.format(model=settings.GEMINI_MODEL)
-    payload = {"contents": [{"parts": [{"text": _montar_prompt_quiz(cards)}]}]}
-    headers = {
-        "Content-Type": "application/json",
-        "X-goog-api-key": settings.GEMINI_API_KEY,
-    }
-
-    try:
-        resp = httpx.post(url, json=payload, headers=headers, timeout=90)
-        resp.raise_for_status()
-    except httpx.HTTPStatusError as e:
-        raise IAError(f"Gemini respondeu com erro {e.response.status_code}") from e
-    except httpx.RequestError as e:
-        raise IAError(f"Falha ao conectar no Gemini: {e}") from e
-
-    try:
-        dados = resp.json()
-        bruto = dados["candidates"][0]["content"]["parts"][0]["text"]
-    except (KeyError, IndexError) as e:
-        raise IAError("Resposta do Gemini veio em formato inesperado") from e
+    bruto = _chamar_gemini(_montar_prompt_quiz(cards))
 
     try:
         resultado = json.loads(_limpar_json(bruto))
@@ -159,31 +175,7 @@ def gerar_explicacoes(cards: list[dict]) -> list[dict]:
     {card_id, explanation}.
     Lança IAError se algo der errado.
     """
-    if not settings.GEMINI_API_KEY:
-        raise IAError(
-            "Chave do Gemini não configurada. Preencha GEMINI_API_KEY no arquivo .env"
-        )
-
-    url = GEMINI_URL.format(model=settings.GEMINI_MODEL)
-    payload = {"contents": [{"parts": [{"text": _montar_prompt_revelar(cards)}]}]}
-    headers = {
-        "Content-Type": "application/json",
-        "X-goog-api-key": settings.GEMINI_API_KEY,
-    }
-
-    try:
-        resp = httpx.post(url, json=payload, headers=headers, timeout=90)
-        resp.raise_for_status()
-    except httpx.HTTPStatusError as e:
-        raise IAError(f"Gemini respondeu com erro {e.response.status_code}") from e
-    except httpx.RequestError as e:
-        raise IAError(f"Falha ao conectar no Gemini: {e}") from e
-
-    try:
-        dados = resp.json()
-        bruto = dados["candidates"][0]["content"]["parts"][0]["text"]
-    except (KeyError, IndexError) as e:
-        raise IAError("Resposta do Gemini veio em formato inesperado") from e
+    bruto = _chamar_gemini(_montar_prompt_revelar(cards))
 
     try:
         resultado = json.loads(_limpar_json(bruto))
@@ -209,38 +201,8 @@ def gerar_cards(texto: str, quantidade: int) -> list[dict]:
     Chama o Gemini e devolve uma lista de dicts: [{"front": ..., "back": ...}].
     Lança IAError se algo der errado.
     """
-    if not settings.GEMINI_API_KEY:
-        raise IAError(
-            "Chave do Gemini não configurada. Preencha GEMINI_API_KEY no arquivo .env"
-        )
+    bruto = _chamar_gemini(_montar_prompt(texto, quantidade), timeout=60)
 
-    url = GEMINI_URL.format(model=settings.GEMINI_MODEL)
-    payload = {
-        "contents": [
-            {"parts": [{"text": _montar_prompt(texto, quantidade)}]}
-        ]
-    }
-    headers = {
-        "Content-Type": "application/json",
-        "X-goog-api-key": settings.GEMINI_API_KEY,
-    }
-
-    try:
-        resp = httpx.post(url, json=payload, headers=headers, timeout=60)
-        resp.raise_for_status()
-    except httpx.HTTPStatusError as e:
-        raise IAError(f"Gemini respondeu com erro {e.response.status_code}") from e
-    except httpx.RequestError as e:
-        raise IAError(f"Falha ao conectar no Gemini: {e}") from e
-
-    # Extrai o texto que a IA gerou de dentro da resposta do Gemini.
-    try:
-        dados = resp.json()
-        bruto = dados["candidates"][0]["content"]["parts"][0]["text"]
-    except (KeyError, IndexError) as e:
-        raise IAError("Resposta do Gemini veio em formato inesperado") from e
-
-    # Converte o texto (que deve ser JSON) em lista de dicts.
     try:
         cards = json.loads(_limpar_json(bruto))
     except json.JSONDecodeError as e:
