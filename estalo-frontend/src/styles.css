@@ -209,6 +209,402 @@ body {
 }
 .vazio-dica { font-size: 0.88rem; margin-top: 0.4rem; }
 
+/* ---------- Botões de modo de estudo (Cards header) ---------- */
+.modos-estudo-topo { display: flex; align-items: center; gap: 0.4rem; }
+.botao-modo {
+  border: 1.5px solid var(--borda);
+  background: transparent;
+  color: var(--tinta-suave);
+  font: inherit;
+  font-weight: 600;
+  font-size: 0.88rem;
+  padding: 0.4rem 0.85rem;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
+}
+.botao-modo:hover { border-color: var(--violeta); color: var(--violeta); background: #f5f3ff; }
+
+/* ---------- Rótulo de modo (header das telas de estudo) ---------- */
+.modo-label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--tinta-suave);
+  background: var(--papel);
+  border: 1px solid var(--borda);
+  border-radius: 20px;
+  padding: 0.28rem 0.7rem;
+}
+
+/* ---------- IA carregando ---------- */
+.ia-carregando {
+  text-align: center;
+  padding: 4rem 1.5rem;
+}
+.ia-carregando-icone {
+  font-size: 2rem;
+  color: var(--violeta);
+  margin-bottom: 1rem;
+  display: block;
+  animation: pulsar 1.6s ease-in-out infinite;
+}
+@keyframes pulsar {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.3; }
+}
+.ia-carregando-msg {
+  font-weight: 600;
+  font-size: 1.05rem;
+  margin-bottom: 0.4rem;
+}
+.ia-carregando-sub { color: var(--tinta-suave); font-size: 0.9rem; }
+
+/* ---------- Barra de progresso ---------- */
+.quiz-progresso {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  width: 100%;
+  max-width: 560px;
+  margin-bottom: 1rem;
+  font-size: 0.82rem;
+  color: var(--tinta-suave);
+}
+.quiz-barra {
+  flex: 1;
+  height: 4px;
+  background: var(--borda);
+  border-radius: 4px;
+  overflow: hidden;
+}
+.quiz-barra-fill {
+  height: 100%;
+  background: var(--violeta);
+  border-radius: 4px;
+  transition: width 0.3s ease;
+}
+.quiz-acertos { color: #2d8a4e; font-weight: 600; }
+
+/* ---------- Opções de múltipla escolha ---------- */
+.quiz-opcoes { display: flex; flex-direction: column; gap: 0.45rem; }
+
+.quiz-opcao {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  width: 100%;
+  padding: 0.75rem 1rem;
+  border: 1.5px solid var(--borda);
+  border-radius: 10px;
+  background: var(--superficie);
+  font: inherit;
+  font-size: 0.95rem;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.12s, background 0.12s;
+}
+.quiz-opcao:not(:disabled):hover { border-color: var(--violeta); background: #f5f3ff; }
+.quiz-opcao:disabled { cursor: default; }
+
+.quiz-opcao.correta  { border-color: #2d8a4e; background: #f0faf4; }
+.quiz-opcao.errada   { border-color: var(--perigo); background: #fdeaea; }
+.quiz-opcao.neutra   { opacity: 0.45; }
+
+.quiz-opcao-letra {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--papel);
+  border: 1.5px solid var(--borda);
+  display: grid;
+  place-items: center;
+  font-weight: 700;
+  font-size: 0.78rem;
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
+}
+.quiz-opcao.correta .quiz-opcao-letra { background: #2d8a4e; border-color: #2d8a4e; color: #fff; }
+.quiz-opcao.errada  .quiz-opcao-letra { background: var(--perigo); border-color: var(--perigo); color: #fff; }
+.quiz-opcao-texto { flex: 1; line-height: 1.4; }
+
+/* ---------- Explicação pós-resposta ---------- */
+.quiz-explicacao {
+  border-radius: 10px;
+  padding: 1rem 1.1rem;
+  border: 1.5px solid var(--borda);
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+.quiz-explicacao.acertou { background: #f0faf4; border-color: #2d8a4e; }
+.quiz-explicacao.errou   { background: #fdeaea; border-color: var(--perigo); }
+.quiz-explicacao-status  { font-weight: 700; font-size: 0.88rem; }
+.quiz-explicacao.acertou .quiz-explicacao-status { color: #2d8a4e; }
+.quiz-explicacao.errou   .quiz-explicacao-status { color: var(--perigo); }
+.quiz-explicacao-texto { font-size: 0.92rem; line-height: 1.55; color: var(--tinta); }
+
+/* ---------- Resultado final do quiz ---------- */
+.quiz-resultado-placar {
+  font-size: 1.15rem;
+  font-weight: 600;
+  color: var(--violeta);
+  margin-bottom: 1.5rem;
+}
+
+/* ---------- Explicação do Revelar ---------- */
+.revelar-explicacao {
+  background: #f5f3ff;
+  border: 1px solid #d4ceff;
+  border-radius: 10px;
+  padding: 0.9rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+.revelar-explicacao-texto { font-size: 0.92rem; line-height: 1.6; color: var(--tinta); }
+
+/* ---------- Deck clicável (Dashboard) ---------- */
+.card-deck-link {
+  border: none;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  padding: 0;
+  font: inherit;
+  flex: 1;
+}
+.card-deck-link:hover .card-deck-titulo { color: var(--violeta); }
+
+/* ---------- Botão Estudar (Dashboard) ---------- */
+.card-deck-acoes { display: flex; align-items: center; gap: 0.5rem; }
+.botao-estudar {
+  border: 1.5px solid var(--violeta);
+  background: transparent;
+  color: var(--violeta);
+  font: inherit;
+  font-weight: 600;
+  font-size: 0.88rem;
+  padding: 0.4rem 0.85rem;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.botao-estudar:hover { background: var(--violeta); color: #fff; }
+
+/* ---------- Tela de Cards ---------- */
+.cards-cabecalho {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 1.25rem;
+}
+.cards-cabecalho .titulo-pagina { margin-bottom: 0; }
+
+.cards-criar {
+  background: var(--superficie);
+  border: 1px solid var(--borda);
+  border-radius: var(--raio);
+  padding: 1.25rem;
+  margin-bottom: 1.5rem;
+}
+.cards-criar .abas { margin-bottom: 1rem; }
+
+.form-card { display: flex; flex-direction: column; gap: 0.75rem; }
+.form-card textarea {
+  width: 100%;
+  padding: 0.65rem 0.8rem;
+  border: 1px solid var(--borda);
+  border-radius: 9px;
+  font: inherit;
+  font-size: 0.95rem;
+  background: var(--papel);
+  resize: vertical;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.form-card textarea:focus {
+  outline: none;
+  border-color: var(--violeta);
+  box-shadow: 0 0 0 3px rgba(91, 75, 232, 0.15);
+}
+.form-card-rodape {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.75rem;
+}
+.campo-inline { margin-bottom: 0; flex-shrink: 0; }
+.campo-inline input[type="number"] {
+  width: 72px;
+  padding: 0.65rem 0.8rem;
+  border: 1px solid var(--borda);
+  border-radius: 9px;
+  font: inherit;
+  background: var(--papel);
+}
+.form-card-rodape .botao-principal { flex: 1; }
+
+/* ---------- Lista de cards ---------- */
+.lista-cards { list-style: none; display: grid; gap: 0.5rem; }
+.item-card {
+  background: var(--superficie);
+  border: 1px solid var(--borda);
+  border-radius: var(--raio);
+  padding: 1rem 1.2rem 0.75rem;
+  transition: border-color 0.15s;
+}
+.item-card:hover { border-color: #d8d4e0; }
+.item-card-conteudo { margin-bottom: 0.6rem; }
+.item-card-frente {
+  font-weight: 600;
+  font-size: 0.95rem;
+  margin-bottom: 0.3rem;
+}
+.item-card-verso {
+  color: var(--tinta-suave);
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+.item-card-rodape {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  border-top: 1px solid var(--borda);
+  padding-top: 0.5rem;
+}
+.badge-ia {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--violeta);
+  background: #ede9ff;
+  border-radius: 5px;
+  padding: 0.15rem 0.45rem;
+  margin-right: auto;
+}
+
+/* ---------- Cabeçalho da tela de estudo ---------- */
+.topo-esquerda { display: flex; align-items: center; gap: 0.75rem; }
+.estudo-deck-nome {
+  font-weight: 600;
+  font-size: 0.95rem;
+  color: var(--tinta);
+}
+.estudo-contador {
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--tinta-suave);
+  background: var(--papel);
+  border: 1px solid var(--borda);
+  border-radius: 20px;
+  padding: 0.3rem 0.75rem;
+}
+
+/* ---------- Layout central da tela de estudo ---------- */
+.estudo-centro {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding-top: 3rem;
+}
+
+/* ---------- Card de estudo ---------- */
+.cartao-estudo {
+  width: 100%;
+  max-width: 560px;
+  background: var(--superficie);
+  border: 1px solid var(--borda);
+  border-radius: var(--raio);
+  box-shadow: var(--sombra);
+  padding: 2rem 2rem 1.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+.cartao-lado-label {
+  display: block;
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--tinta-suave);
+  margin-bottom: 0.6rem;
+}
+.cartao-frente .cartao-texto {
+  font-family: "Fraunces", serif;
+  font-size: 1.45rem;
+  font-weight: 500;
+  line-height: 1.4;
+  letter-spacing: -0.01em;
+}
+.cartao-divisor {
+  border: none;
+  border-top: 1px solid var(--borda);
+  margin: 0 -2rem;
+}
+.cartao-verso .cartao-texto {
+  font-size: 1.05rem;
+  line-height: 1.6;
+  color: var(--tinta);
+}
+.botao-mostrar { margin-top: 0.25rem; }
+
+/* ---------- Botões de nota ---------- */
+.notas {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.5rem;
+  margin-top: 0.25rem;
+}
+.nota {
+  border: none;
+  border-radius: 9px;
+  font: inherit;
+  font-weight: 600;
+  font-size: 0.88rem;
+  padding: 0.6rem 0.25rem;
+  cursor: pointer;
+  transition: opacity 0.15s, filter 0.15s;
+}
+.nota:disabled { opacity: 0.5; cursor: default; }
+.nota:not(:disabled):hover { filter: brightness(0.92); }
+
+.nota-errei   { background: #fdeaea; color: var(--perigo); }
+.nota-dificil { background: #f0eeff; color: #6b5ce7; }
+.nota-bom     { background: #ede9ff; color: var(--violeta); }
+.nota-facil   { background: #fff8e6; color: #b07800; }
+
+/* ---------- Sessão concluída ---------- */
+.estudo-concluido {
+  text-align: center;
+  padding: 3rem 1.5rem;
+  max-width: 400px;
+}
+.estudo-concluido-icone {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: #ede9ff;
+  color: var(--violeta);
+  font-size: 1.6rem;
+  display: grid;
+  place-items: center;
+  margin: 0 auto 1.25rem;
+}
+.estudo-concluido-titulo {
+  font-family: "Fraunces", serif;
+  font-size: 1.5rem;
+  font-weight: 500;
+  margin-bottom: 0.5rem;
+}
+.estudo-concluido-sub {
+  color: var(--tinta-suave);
+  font-size: 0.95rem;
+  margin-bottom: 1.75rem;
+}
+.estudo-concluido-botao { max-width: 240px; margin: 0 auto; }
+
 /* ---------- Acessibilidade ---------- */
 *:focus-visible { outline: 2px solid var(--violeta); outline-offset: 2px; }
 @media (prefers-reduced-motion: reduce) {

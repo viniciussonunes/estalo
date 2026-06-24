@@ -65,4 +65,27 @@ export const api = {
     request("/decks", { method: "POST", body: { title, description } }),
 
   excluirDeck: (id) => request(`/decks/${id}`, { method: "DELETE" }),
+
+  proximoCard: (deckId) => request(`/study/decks/${deckId}/next`),
+
+  responderCard: (cardId, quality) =>
+    request(`/study/cards/${cardId}/answer`, { method: "POST", body: { quality } }),
+
+  statsEstudo: (deckId) => request(`/study/decks/${deckId}/stats`),
+
+  listarCards: (deckId) => request(`/decks/${deckId}/cards`),
+
+  criarCard: (deckId, front, back) =>
+    request(`/decks/${deckId}/cards`, { method: "POST", body: { front, back } }),
+
+  excluirCard: (cardId) => request(`/cards/${cardId}`, { method: "DELETE" }),
+
+  gerarCardsIA: (deckId, text, quantity) =>
+    request(`/decks/${deckId}/cards/generate`, { method: "POST", body: { text, quantity } }),
+
+  gerarQuiz: (deckId) =>
+    request(`/study/decks/${deckId}/quiz`, { method: "POST" }),
+
+  gerarRevelar: (deckId) =>
+    request(`/study/decks/${deckId}/reveal`, { method: "POST" }),
 };

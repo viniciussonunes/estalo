@@ -2,15 +2,20 @@ import { useState, useEffect } from "react";
 import { api, token } from "./api.js";
 import Auth from "./pages/Auth.jsx";
 import Dashboard from "./pages/Dashboard.jsx";
+import Cards from "./pages/Cards.jsx";
+import Estudo from "./pages/Estudo.jsx";
+import Aprender from "./pages/Aprender.jsx";
+import Revelar from "./pages/Revelar.jsx";
 
 // App é o "porteiro" do frontend: decide qual tela mostrar.
 // Sem crachá válido -> tela de login/cadastro.
-// Com crachá -> o painel (decks).
+// Com crachá -> painel (decks) ou tela de estudo.
 export default function App() {
   const [usuario, setUsuario] = useState(null);
   const [carregando, setCarregando] = useState(true);
+  const [tela, setTela] = useState("dashboard"); // "dashboard" | "estudo"
+  const [deckAtivo, setDeckAtivo] = useState(null);
 
-  // Ao abrir o app, se já tem crachá guardado, confere se ainda vale.
   useEffect(() => {
     if (!token.get()) {
       setCarregando(false);
@@ -19,7 +24,7 @@ export default function App() {
     api
       .eu()
       .then(setUsuario)
-      .catch(() => token.clear()) // crachá velho/inválido: descarta
+      .catch(() => token.clear())
       .finally(() => setCarregando(false));
   }, []);
 
@@ -30,15 +35,70 @@ export default function App() {
   function sair() {
     token.clear();
     setUsuario(null);
+    setTela("dashboard");
+    setDeckAtivo(null);
+  }
+
+  function aoVerCards(deck) {
+    setDeckAtivo(deck);
+    setTela("cards");
+  }
+
+  function aoEstudar(deck) {
+    setDeckAtivo(deck);
+    setTela("estudo");
+  }
+
+  function aoAprender(deck) {
+    setDeckAtivo(deck);
+    setTela("aprender");
+  }
+
+  function aoRevelar(deck) {
+    setDeckAtivo(deck);
+    setTela("revelar");
+  }
+
+  function voltarAosDeck() {
+    setTela("cards");
+  }
+
+  function voltarAoDashboard() {
+    setDeckAtivo(null);
+    setTela("dashboard");
   }
 
   if (carregando) {
     return <div className="tela-centro">Carregando…</div>;
   }
 
-  return usuario ? (
-    <Dashboard usuario={usuario} aoSair={sair} />
-  ) : (
-    <Auth aoEntrar={aoEntrar} />
-  );
+  if (!usuario) {
+    return <Auth aoEntrar={aoEntrar} />;
+  }
+
+  if (tela === "cards" && deckAtivo) {
+    return (
+      <Cards
+        deck={deckAtivo}
+        aoVoltar={voltarAoDashboard}
+        aoEstudar={() => aoEstudar(deckAtivo)}
+        aoAprender={() => aoAprender(deckAtivo)}
+        aoRevelar={() => aoRevelar(deckAtivo)}
+      />
+    );
+  }
+
+  if (tela === "estudo" && deckAtivo) {
+    return <Estudo deck={deckAtivo} aoVoltar={voltarAosDeck} />;
+  }
+
+  if (tela === "aprender" && deckAtivo) {
+    return <Aprender deck={deckAtivo} aoVoltar={voltarAosDeck} />;
+  }
+
+  if (tela === "revelar" && deckAtivo) {
+    return <Revelar deck={deckAtivo} aoVoltar={voltarAosDeck} />;
+  }
+
+  return <Dashboard usuario={usuario} aoSair={sair} aoEstudar={aoEstudar} aoVerCards={aoVerCards} />;
 }

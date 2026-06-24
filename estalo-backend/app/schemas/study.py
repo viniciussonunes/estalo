@@ -39,3 +39,27 @@ class StudyStats(BaseModel):
     total_cards: int
     due_now: int      # vencidos, prontos pra revisar
     new_cards: int    # nunca estudados
+
+
+# --- Modo Aprender (múltipla escolha gerada por IA) ---
+
+class QuizOption(BaseModel):
+    letter: str   # "A", "B", "C" ou "D"
+    text: str
+
+
+class QuizQuestion(BaseModel):
+    card_id: int
+    question: str
+    options: list[QuizOption]     # 4 opções embaralhadas
+    correct_letter: str           # qual letra tem a resposta certa
+    explanation: str              # explicação pós-resposta
+
+
+# --- Modo Revelar (flashcard com explicação gerada por IA) ---
+
+class RevealCard(BaseModel):
+    card_id: int
+    front: str
+    back: str
+    explanation: str

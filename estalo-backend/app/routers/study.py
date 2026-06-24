@@ -13,6 +13,7 @@ fácil vai ter due_date lá na frente, some da fila. Card que errou volta amanh�
 Detalhe importante (criar sob demanda): a ficha de revisão (Review) de um card
 só nasce na primeira vez que você estuda ele. Card nunca aberto = card "novo".
 """
+import random
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -21,7 +22,11 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.dependencies import get_current_user
 from app.models import Card, Deck, Review, User
-from app.schemas.study import ReviewAnswer, ReviewResult, StudyCard, StudyStats
+from app.schemas.study import (
+    QuizOption, QuizQuestion, RevealCard,
+    ReviewAnswer, ReviewResult, StudyCard, StudyStats,
+)
+from app.services.ai import IAError, gerar_explicacoes, gerar_quiz
 from app.services.sm2 import SM2State, calcular_proxima_revisao
 
 router = APIRouter(prefix="/study", tags=["Estudo"])
@@ -177,3 +182,90 @@ def estatisticas(
             vencidos += 1
 
     return StudyStats(total_cards=total, due_now=vencidos, new_cards=novos)
+
+
+@router.post("/decks/{deck_id}/quiz", response_model=list[QuizQuestion])
+def gerar_quiz_deck(
+    deck_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """
+    Gera questões de múltipla escolha para todos os cards do deck (máx. 20).
+    A IA cria 1 resposta correta + 3 distratores exclusivos por questão.
+    """
+    _deck_do_usuario(deck_id, user, db)
+    cards = db.query(Card).filter(Card.deck_id == deck_id).all()
+    if not cards:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY,
+                            "O deck não tem cards para gerar um quiz")
+
+    random.shuffle(cards)
+    cards_data = [
+        {"card_id": c.id, "front": c.front, "back": c.back}
+        for c in cards[:20]
+    ]
+
+    try:
+        resultado = gerar_quiz(cards_data)
+    except IAError as e:
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(e))
+
+    card_ids_validos = {c.id for c in cards}
+    questoes = []
+    for item in resultado:
+        if item["card_id"] not in card_ids_validos:
+            continue
+        opcoes = [item["correct"]] + item["distractors"]
+        random.shuffle(opcoes)
+        letras = ["A", "B", "C", "D"]
+        opts = [QuizOption(letter=letras[i], text=opcoes[i]) for i in range(len(opcoes))]
+        correct_letter = letras[opcoes.index(item["correct"])]
+        questoes.append(QuizQuestion(
+            card_id=item["card_id"],
+            question=item["question"],
+            options=opts,
+            correct_letter=correct_letter,
+            explanation=item["explanation"],
+        ))
+
+    return questoes
+
+
+@router.post("/decks/{deck_id}/reveal", response_model=list[RevealCard])
+def gerar_reveal_deck(
+    deck_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """
+    Gera explicações detalhadas para os cards do deck (máx. 20).
+    Retorna front + back + explanation gerada pela IA.
+    """
+    _deck_do_usuario(deck_id, user, db)
+    cards = db.query(Card).filter(Card.deck_id == deck_id).all()
+    if not cards:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY,
+                            "O deck não tem cards para gerar explicações")
+
+    cards_limitados = cards[:20]
+    cards_data = [
+        {"card_id": c.id, "front": c.front, "back": c.back}
+        for c in cards_limitados
+    ]
+
+    try:
+        resultado = gerar_explicacoes(cards_data)
+    except IAError as e:
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(e))
+
+    explicacao_map = {item["card_id"]: item["explanation"] for item in resultado}
+    return [
+        RevealCard(
+            card_id=c.id,
+            front=c.front,
+            back=c.back,
+            explanation=explicacao_map.get(c.id, ""),
+        )
+        for c in cards_limitados
+    ]

@@ -3,11 +3,12 @@ import { api } from "../api.js";
 
 // Painel principal: lista seus decks e deixa criar/excluir.
 // (As pastas e a tela de estudo entram nos próximos blocos.)
-export default function Dashboard({ usuario, aoSair }) {
+export default function Dashboard({ usuario, aoSair, aoEstudar, aoVerCards }) {
   const [decks, setDecks] = useState([]);
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState("");
   const [novoTitulo, setNovoTitulo] = useState("");
+  const [criando, setCriando] = useState(false);
 
   async function carregarDecks() {
     try {
@@ -26,12 +27,16 @@ export default function Dashboard({ usuario, aoSair }) {
   async function criar(e) {
     e.preventDefault();
     if (!novoTitulo.trim()) return;
+    setCriando(true);
+    setErro("");
     try {
       await api.criarDeck(novoTitulo.trim(), null);
       setNovoTitulo("");
       carregarDecks();
     } catch (err) {
       setErro(err.message);
+    } finally {
+      setCriando(false);
     }
   }
 
@@ -64,7 +69,9 @@ export default function Dashboard({ usuario, aoSair }) {
             onChange={(e) => setNovoTitulo(e.target.value)}
             placeholder="Nome do novo deck (ex: SC-900 Fundamentos)"
           />
-          <button className="botao-principal" type="submit">Criar deck</button>
+          <button className="botao-principal" type="submit" disabled={criando}>
+            {criando ? "Criando…" : "Criar deck"}
+          </button>
         </form>
 
         {erro && <p className="erro">{erro}</p>}
@@ -80,15 +87,20 @@ export default function Dashboard({ usuario, aoSair }) {
           <ul className="lista-decks">
             {decks.map((d) => (
               <li key={d.id} className="card-deck">
-                <div>
+                <button className="card-deck-link" onClick={() => aoVerCards(d)}>
                   <span className="card-deck-titulo">{d.title}</span>
                   {d.description && (
                     <span className="card-deck-desc">{d.description}</span>
                   )}
-                </div>
-                <button className="botao-texto perigo" onClick={() => excluir(d.id)}>
-                  Excluir
                 </button>
+                <div className="card-deck-acoes">
+                  <button className="botao-estudar" onClick={() => aoEstudar(d)}>
+                    Estudar
+                  </button>
+                  <button className="botao-texto perigo" onClick={() => excluir(d.id)}>
+                    Excluir
+                  </button>
+                </div>
               </li>
             ))}
           </ul>
