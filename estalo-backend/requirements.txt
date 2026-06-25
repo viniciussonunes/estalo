@@ -1,18 +1,17 @@
-# --- Núcleo da API ---
+# ── Núcleo da API ──────────────────────────────────────────────────────────
 fastapi==0.115.0
 uvicorn[standard]==0.32.0
-python-multipart==0.0.12   # necessário pro formulário de login
+gunicorn==23.0.0              # servidor de produção (Render / Railway)
+python-multipart==0.0.12      # formulário de login OAuth2
 
-# --- Banco de dados ---
+# ── Banco de dados ─────────────────────────────────────────────────────────
 sqlalchemy==2.0.35
 pydantic-settings==2.5.2
+psycopg2-binary==2.9.9        # driver PostgreSQL (produção); ignorado com SQLite
 
-# --- Autenticação ---
-python-jose[cryptography]==3.3.0   # tokens JWT (o "crachá")
-bcrypt==4.2.0                      # criptografia de senha (direto, sem passlib)
+# ── Autenticação ───────────────────────────────────────────────────────────
+python-jose[cryptography]==3.3.0
+bcrypt==4.2.0
 
-# --- Testes ---
-httpx==0.27.2              # usado pelo test_auth.py
-
-# --- PostgreSQL em produção (descomente quando for usar) ---
-# psycopg2-binary==2.9.9
+# ── Cliente HTTP (Gemini) e testes ─────────────────────────────────────────
+httpx==0.27.2

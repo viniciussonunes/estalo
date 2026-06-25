@@ -1,22 +1,17 @@
-"""
-Ponto de entrada da API.
-
-Cria as tabelas no banco, expõe o endpoint de saúde e liga os routers
-(autenticação, pastas, decks, cards e estudo).
-"""
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import inspect, text
 
+from app.core.config import settings
 from app.core.database import Base, engine
-from app import models  # noqa: F401 — garante que os modelos sejam registrados
+from app import models  # noqa: F401
 from app.routers import auth, folders, decks, cards, study
 
-# Cria tabelas novas. Para colunas adicionadas a tabelas existentes,
-# fazemos uma migração leve via ALTER TABLE (SQLite não tem Alembic aqui).
 Base.metadata.create_all(bind=engine)
 
+
 def _migrar():
+    """Adiciona colunas novas em tabelas existentes (sem Alembic)."""
     inspector = inspect(engine)
     with engine.begin() as conn:
         colunas_cards = {c["name"] for c in inspector.get_columns("cards")}
@@ -25,21 +20,24 @@ def _migrar():
         if "explanation" not in colunas_cards:
             conn.execute(text("ALTER TABLE cards ADD COLUMN explanation TEXT"))
 
+
 _migrar()
 
-app = FastAPI(title="Estalo API", version="0.7.0")
+app = FastAPI(title="Estalo API", version="0.8.0")
 
-# CORS: libera o frontend (que roda noutra porta) a falar com a API.
-# O Vite sobe em localhost:5173 por padrão. Em produção, troque pela URL real do site.
+# CORS dinâmico: sempre permite localhost em dev; adiciona a URL da Vercel em prod.
+_origens = ["http://localhost:5173", "http://localhost:3000"]
+if settings.FRONTEND_URL:
+    _origens.append(settings.FRONTEND_URL.rstrip("/"))
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
+    allow_origins=_origens,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Liga os endpoints.
 app.include_router(auth.router)
 app.include_router(folders.router)
 app.include_router(decks.router)
@@ -49,4 +47,4 @@ app.include_router(study.router)
 
 @app.get("/")
 def health():
-    return {"status": "ok", "app": "Estalo", "version": "0.7.0"}
+    return {"status": "ok", "app": "Estalo", "version": "0.8.0"}

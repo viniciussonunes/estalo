@@ -1,11 +1,15 @@
 # Segredos — NUNCA versionar
 .env
 
-# Banco local
+# Banco local (usar PostgreSQL em produção)
 *.db
 
 # Python
 __pycache__/
 *.pyc
+*.pyo
 .venv/
 venv/
+dist/
+build/
+*.egg-info/
