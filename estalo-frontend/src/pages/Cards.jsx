@@ -145,15 +145,11 @@ export default function Cards({ deck, aoVoltar, aoEstudar, aoAprender, aoRevelar
               <span className="stat-badge-label">Novos</span>
             </div>
             <div className="stat-badge stat-aprendendo">
-              <span className="stat-badge-valor">
-                {Math.max(0, stats.due_now - stats.new_cards)}
-              </span>
-              <span className="stat-badge-label">Para revisar</span>
+              <span className="stat-badge-valor">{stats.validating ?? 0}</span>
+              <span className="stat-badge-label">Validando</span>
             </div>
             <div className="stat-badge stat-dominado">
-              <span className="stat-badge-valor">
-                {Math.max(0, stats.total_cards - stats.due_now)}
-              </span>
+              <span className="stat-badge-valor">{stats.dominated ?? 0}</span>
               <span className="stat-badge-label">Dominados</span>
             </div>
           </div>

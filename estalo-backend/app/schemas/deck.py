@@ -1,15 +1,11 @@
-"""
-Schemas de deck — o conjunto de cards (o "set" do Quizlet).
-"""
 from datetime import datetime
-
 from pydantic import BaseModel
 
 
 class DeckCreate(BaseModel):
     title: str
     description: str | None = None
-    folder_id: int | None = None  # pode morar numa pasta ou ficar solto
+    folder_id: int | None = None
 
 
 class DeckUpdate(BaseModel):
@@ -24,5 +20,7 @@ class DeckOut(BaseModel):
     description: str | None
     folder_id: int | None
     created_at: datetime
+    total_cards: int = 0
+    memorization_pct: float = 0.0   # 0–100; fases: 0=Novo, 50=Validando, 100=Dominado
 
     model_config = {"from_attributes": True}

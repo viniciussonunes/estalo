@@ -1,23 +1,39 @@
 import { useState, useEffect, useRef } from "react";
 import { api } from "../api.js";
 
+/*
+  Lógica de fases SM-2 para o Modo Aprender:
+
+  Fase 1 (repetitions == 0 / Novo)
+    → Resultado de qualquer sessão: avança para Fase 2 (quality 3)
+
+  Fase 2 (repetitions == 1 / Em Validação)
+    → Acertou na PRIMEIRA tentativa: avança para Fase 3 / Dominado (quality 5)
+    → Errou ao menos uma vez:        permanece na Fase 2 (não envia answer)
+
+  Fase 3+ (repetitions >= 2 / Dominado)
+    → Acertou na primeira: quality 5 (estende intervalo)
+    → Errou ao menos uma vez: quality 1 (volta para Fase 1)
+*/
+
 export default function Aprender({ deck, aoVoltar }) {
-  const [fila, setFila]     = useState([]);   // questões ainda a responder
+  const [fila, setFila]               = useState([]);  // questões restantes
   const [totalUnicos, setTotalUnicos] = useState(0);
   const [carregando, setCarregando]   = useState(true);
   const [erro, setErro]               = useState("");
+  const [concluido, setConcluido]     = useState(false);
+  const [salvando, setSalvando]       = useState(false);
 
   // Estado da questão atual
   const [resposta, setResposta]       = useState(null); // letra escolhida
-  const [concluido, setConcluido]     = useState(false);
 
-  // Tracking para SM-2 e placar
-  const errosPorCard = useRef(new Set());   // card_ids que erraram ao menos uma vez
+  // Tracking de sessão
+  const errosPorCard    = useRef(new Set());  // card_ids que erraram ao menos uma vez
+  const startingReps    = useRef({});         // card_id → repetitions ao INÍCIO da sessão
+  const questoesOriginais = useRef([]);
+
   const [acertosNaPrimeira, setAcertosNaPrimeira] = useState(0);
-
-  // Salvar progresso no backend ao final
-  const [salvando, setSalvando]       = useState(false);
-  const questoesOriginais = useRef([]); // todos os card_ids da sessão
+  const [cartasConcluidas, setCartasConcluidas]   = useState(0);
 
   useEffect(() => {
     api.gerarQuiz(deck.id)
@@ -25,6 +41,10 @@ export default function Aprender({ deck, aoVoltar }) {
         setFila(qs);
         setTotalUnicos(qs.length);
         questoesOriginais.current = qs;
+        // Guarda a fase inicial de cada card
+        const repsMap = {};
+        qs.forEach(q => { repsMap[q.card_id] = q.repetitions ?? 0; });
+        startingReps.current = repsMap;
       })
       .catch((err) => setErro(err.message))
       .finally(() => setCarregando(false));
@@ -32,64 +52,93 @@ export default function Aprender({ deck, aoVoltar }) {
 
   const questaoAtual = fila[0] ?? null;
   const respondeu    = resposta !== null;
-  const acertouAtual = respondeu && questaoAtual && resposta === questaoAtual.correct_letter;
-
-  // Quantos cards únicos já foram respondidos corretamente
-  const concluidos = totalUnicos - new Set(fila.map(q => q.card_id)).size
-    + (questaoAtual && !respondeu ? 0 : 0);
-  // Simpler: track separately
-  const [cartasCorretas, setCartasCorretas] = useState(0);
+  const acertouAtual = respondeu && questaoAtual
+    ? resposta === questaoAtual.correct_letter
+    : false;
 
   function escolher(letter) {
     if (respondeu) return;
     setResposta(letter);
-    const atual = fila[0];
-    const acertou = letter === atual.correct_letter;
-    if (!acertou) {
-      errosPorCard.current.add(atual.card_id);
+    if (letter !== fila[0].correct_letter) {
+      errosPorCard.current.add(fila[0].card_id);
     }
   }
 
   async function proximo() {
-    const atual = fila[0];
+    const atual   = fila[0];
     const acertou = resposta === atual.correct_letter;
 
     let novaFila;
     if (acertou) {
-      // Remove da fila — card concluído
       novaFila = fila.slice(1);
       if (!errosPorCard.current.has(atual.card_id)) {
         setAcertosNaPrimeira(n => n + 1);
       }
-      setCartasCorretas(n => n + 1);
+      setCartasConcluidas(n => n + 1);
     } else {
-      // Errou: move para o final da fila
+      // Errou: volta para o final da fila
       novaFila = [...fila.slice(1), atual];
     }
 
     setResposta(null);
 
     if (novaFila.length === 0) {
-      // Sessão concluída — salva progresso no backend
-      setSalvando(true);
-      try {
-        await Promise.all(
-          questoesOriginais.current.map(q =>
-            api.responderCard(q.card_id, errosPorCard.current.has(q.card_id) ? 1 : 4)
-          )
-        );
-      } catch {
-        // Progresso pode não ter salvo, mas não bloqueia a tela de resultado
-      } finally {
-        setSalvando(false);
-      }
+      await _salvarProgresso();
       setConcluido(true);
     } else {
       setFila(novaFila);
     }
   }
 
-  // ─── Cabeçalho ───────────────────────────────────────────────────────────
+  async function _salvarProgresso() {
+    setSalvando(true);
+    const chamadas = questoesOriginais.current.map(q => {
+      const fase     = startingReps.current[q.card_id] ?? 0;
+      const errou    = errosPorCard.current.has(q.card_id);
+
+      // Fase 2 + errou → não envia (mantém repetitions == 1 = Fase 2)
+      if (fase === 1 && errou) return Promise.resolve();
+
+      let quality;
+      if (fase === 0) {
+        quality = 3;  // Fase 1 → Fase 2 (independente de erros)
+      } else if (fase === 1 && !errou) {
+        quality = 5;  // Fase 2 + primeira tentativa → Fase 3 (Dominado)
+      } else if (fase >= 2 && !errou) {
+        quality = 5;  // Dominado + primeira → estende intervalo
+      } else {
+        quality = 1;  // Dominado + errou → volta para Fase 1
+      }
+      return api.responderCard(q.card_id, quality).catch(() => {});
+    });
+
+    try { await Promise.all(chamadas); } catch { /* silencioso */ }
+    setSalvando(false);
+  }
+
+  function reiniciarSessao() {
+    // Reseta tudo e recarrega o quiz
+    errosPorCard.current = new Set();
+    startingReps.current = {};
+    setAcertosNaPrimeira(0);
+    setCartasConcluidas(0);
+    setResposta(null);
+    setConcluido(false);
+    setCarregando(true);
+    api.gerarQuiz(deck.id)
+      .then((qs) => {
+        setFila(qs);
+        setTotalUnicos(qs.length);
+        questoesOriginais.current = qs;
+        const repsMap = {};
+        qs.forEach(q => { repsMap[q.card_id] = q.repetitions ?? 0; });
+        startingReps.current = repsMap;
+      })
+      .catch((err) => setErro(err.message))
+      .finally(() => setCarregando(false));
+  }
+
+  // ─── Header ────────────────────────────────────────────────────────────
   const cabecalho = (
     <header className="topo">
       <div className="topo-esquerda">
@@ -100,7 +149,7 @@ export default function Aprender({ deck, aoVoltar }) {
     </header>
   );
 
-  // ─── Estados de carregamento/erro ────────────────────────────────────────
+  // ─── Carregando ────────────────────────────────────────────────────────
   if (carregando) {
     return (
       <div className="pagina">
@@ -116,6 +165,7 @@ export default function Aprender({ deck, aoVoltar }) {
     );
   }
 
+  // ─── Erro ──────────────────────────────────────────────────────────────
   if (erro) {
     return (
       <div className="pagina">
@@ -132,38 +182,84 @@ export default function Aprender({ deck, aoVoltar }) {
     );
   }
 
-  // ─── Tela de resultado ───────────────────────────────────────────────────
+  // ─── Tela de resultado ─────────────────────────────────────────────────
   if (concluido) {
-    const pct = Math.round((acertosNaPrimeira / totalUnicos) * 100);
+    const pct = totalUnicos > 0
+      ? Math.round((acertosNaPrimeira / totalUnicos) * 100)
+      : 0;
+
+    // Detecta se há cards que subiram para Fase 2 (precisam de nova sessão)
+    const temCardsEmValidacao = questoesOriginais.current.some(
+      q => (startingReps.current[q.card_id] ?? 0) === 0   // era Fase 1
+    );
+    // Cards que subiram para Dominado (eram Fase 2 + acertaram de primeira)
+    const novosDoминados = questoesOriginais.current.filter(
+      q => (startingReps.current[q.card_id] ?? 0) === 1
+        && !errosPorCard.current.has(q.card_id)
+    ).length;
+
     return (
       <div className="pagina">
         {cabecalho}
         <main className="conteudo estudo-centro">
           <div className="estudo-concluido">
-            <div className="estudo-concluido-icone">{pct >= 70 ? "★" : "✓"}</div>
-            <h2 className="estudo-concluido-titulo">Quiz concluído!</h2>
+            <div className="estudo-concluido-icone">
+              {pct >= 80 ? "★" : pct >= 50 ? "✓" : "↺"}
+            </div>
+            <h2 className="estudo-concluido-titulo">Sessão concluída!</h2>
+
             <p className="quiz-resultado-placar">
-              {acertosNaPrimeira} de {totalUnicos} na primeira tentativa — {pct}%
+              {acertosNaPrimeira}/{totalUnicos} na primeira tentativa — {pct}%
             </p>
-            <p className="estudo-concluido-sub">
-              {salvando
-                ? "Salvando progresso…"
-                : "Progresso salvo no seu histórico de revisão."}
-            </p>
-            <button className="botao-principal estudo-concluido-botao" onClick={aoVoltar}>
-              Voltar ao deck
-            </button>
+
+            {novosDoминados > 0 && (
+              <p className="resultado-badge dominado">
+                🏆 {novosDoминados} card{novosDoминados > 1 ? "s" : ""} dominado{novosDoминados > 1 ? "s" : ""}!
+              </p>
+            )}
+
+            {temCardsEmValidacao && (
+              <div className="gamificado-aviso">
+                <p className="gamificado-aviso-titulo">🧠 Seus cards estão em Validação</p>
+                <p className="gamificado-aviso-texto">
+                  Cientificamente, seu cérebro precisa de um intervalo para consolidar
+                  a memória. Fazer uma nova sessão <em>agora</em> acelera a fixação —
+                  ou você pode descansar e revisar depois.
+                </p>
+                <div className="gamificado-botoes">
+                  <button
+                    className="botao-principal"
+                    onClick={reiniciarSessao}
+                    disabled={salvando}
+                  >
+                    Nova sessão agora
+                  </button>
+                  <button className="botao-texto" onClick={aoVoltar}>
+                    Voltar aos decks
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {!temCardsEmValidacao && (
+              <button
+                className="botao-principal estudo-concluido-botao"
+                onClick={aoVoltar}
+                disabled={salvando}
+              >
+                {salvando ? "Salvando…" : "Voltar ao deck"}
+              </button>
+            )}
           </div>
         </main>
       </div>
     );
   }
 
-  // ─── Questão atual ───────────────────────────────────────────────────────
-  // Progresso: quantos card_ids únicos ainda estão na fila
-  const cardIdsNaFila  = new Set(fila.map(q => q.card_id));
+  // ─── Questão ───────────────────────────────────────────────────────────
+  const cardIdsNaFila   = new Set(fila.map(q => q.card_id));
   const cardsConcluidos = totalUnicos - cardIdsNaFila.size;
-  const perguntasNaFila = fila.length; // pode ser > totalUnicos por causa das repetições
+  const repeticoes      = fila.length - cardIdsNaFila.size;
 
   return (
     <div className="pagina">
@@ -177,9 +273,9 @@ export default function Aprender({ deck, aoVoltar }) {
               style={{ width: `${(cardsConcluidos / totalUnicos) * 100}%` }}
             />
           </div>
-          {perguntasNaFila > (totalUnicos - cardsConcluidos) && (
-            <span className="quiz-repetindo" title="Questões repetidas por erro">
-              +{perguntasNaFila - (totalUnicos - cardsConcluidos)} repetição
+          {repeticoes > 0 && (
+            <span className="quiz-repetindo" title="Questões aguardando reacerto">
+              +{repeticoes}↺
             </span>
           )}
         </div>
@@ -217,7 +313,7 @@ export default function Aprender({ deck, aoVoltar }) {
               <p className="quiz-explicacao-status">
                 {acertouAtual
                   ? "Correto!"
-                  : `Incorreto — a resposta certa é ${questaoAtual.correct_letter}. A questão voltará.`}
+                  : `Incorreto — a certa é ${questaoAtual.correct_letter}. A questão volta ao final.`}
               </p>
               <p className="quiz-explicacao-texto">{questaoAtual.explanation}</p>
               <button className="botao-principal" onClick={proximo}>

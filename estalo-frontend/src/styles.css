@@ -913,6 +913,170 @@ body {
 }
 .botao-add-linha:hover { border-color: var(--violeta); color: var(--violeta); }
 
+/* ---------- Lista explorer (Dashboard) ---------- */
+.lista-explorer {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.lista-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  background: var(--superficie);
+  border: 1px solid var(--borda);
+  border-radius: 10px;
+  padding: 0.7rem 0.85rem;
+  transition: border-color 0.12s, box-shadow 0.1s;
+}
+.lista-item:hover { border-color: #d0cce0; box-shadow: 0 2px 6px rgba(23,22,31,0.05); }
+
+.lista-icone {
+  flex-shrink: 0;
+  width: 34px; height: 34px;
+  border-radius: 8px;
+  border: 1px solid var(--borda);
+  background: var(--papel);
+  display: grid; place-items: center;
+}
+.lista-icone.pasta { color: #f59e0b; }
+.lista-icone.deck  { color: var(--violeta); }
+
+.lista-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  border: none;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  padding: 0;
+  font: inherit;
+}
+.lista-nome {
+  font-weight: 600;
+  font-size: 0.93rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--tinta);
+}
+.lista-info:hover .lista-nome { color: var(--violeta); }
+.lista-meta {
+  font-size: 0.76rem;
+  color: var(--tinta-suave);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Barra de progresso inline */
+.lista-progresso {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-shrink: 0;
+  width: 90px;
+}
+.lista-progresso-trilho {
+  flex: 1;
+  height: 5px;
+  background: var(--borda);
+  border-radius: 4px;
+  overflow: hidden;
+}
+.lista-progresso-fill {
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.4s ease;
+}
+.lista-progresso-pct {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--tinta-suave);
+  width: 28px;
+  text-align: right;
+  flex-shrink: 0;
+}
+
+.lista-acoes {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  flex-shrink: 0;
+}
+.lista-btn-entrar {
+  border: none;
+  background: transparent;
+  font-size: 1.2rem;
+  color: var(--tinta-suave);
+  cursor: pointer;
+  padding: 0.3rem 0.45rem;
+  border-radius: 6px;
+  line-height: 1;
+  transition: background 0.12s, color 0.12s;
+}
+.lista-btn-entrar:hover { background: var(--papel); color: var(--tinta); }
+.lista-btn-excluir {
+  border: none;
+  background: transparent;
+  font-size: 1.1rem;
+  color: var(--tinta-suave);
+  cursor: pointer;
+  width: 26px; height: 26px;
+  border-radius: 50%;
+  display: grid; place-items: center;
+  transition: background 0.12s, color 0.12s;
+}
+.lista-btn-excluir:hover { background: #fdeaea; color: var(--perigo); }
+
+/* ---------- Gamificação (tela de resultado do Aprender) ---------- */
+.gamificado-aviso {
+  background: #f5f3ff;
+  border: 1.5px solid #c4b5fd;
+  border-radius: 12px;
+  padding: 1.1rem 1.2rem;
+  margin: 1rem 0;
+  text-align: left;
+}
+.gamificado-aviso-titulo {
+  font-weight: 700;
+  font-size: 0.95rem;
+  color: var(--violeta);
+  margin-bottom: 0.45rem;
+}
+.gamificado-aviso-texto {
+  font-size: 0.88rem;
+  line-height: 1.55;
+  color: var(--tinta);
+  margin-bottom: 0.9rem;
+}
+.gamificado-aviso-texto em { font-style: normal; font-weight: 600; }
+.gamificado-botoes {
+  display: flex;
+  gap: 0.6rem;
+  align-items: center;
+}
+.gamificado-botoes .botao-principal { flex: 1; }
+
+.resultado-badge {
+  display: inline-block;
+  padding: 0.35rem 0.85rem;
+  border-radius: 20px;
+  font-size: 0.88rem;
+  font-weight: 600;
+  margin-bottom: 0.5rem;
+}
+.resultado-badge.dominado {
+  background: #f0fdf4;
+  color: #166534;
+  border: 1px solid #bbf7d0;
+}
+
 /* ---------- Painel de progresso do deck ---------- */
 .stats-deck {
   display: flex;
@@ -1004,4 +1168,14 @@ body {
   .stat-badge { padding: 0.55rem 0.3rem; }
   .stat-badge-valor { font-size: 1.25rem; }
   .stat-badge-label { font-size: 0.68rem; }
+
+  /* Lista mobile */
+  .lista-progresso { width: 60px; }
+  .lista-progresso-pct { display: none; }
+  .lista-meta { display: none; }
+  .lista-btn-entrar { padding: 0.25rem 0.35rem; }
+  .botao-estudar { font-size: 0.78rem; padding: 0.3rem 0.55rem; }
+
+  .gamificado-botoes { flex-direction: column; }
+  .gamificado-botoes .botao-principal { flex: none; }
 }
