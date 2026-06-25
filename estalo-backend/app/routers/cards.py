@@ -1,21 +1,12 @@
-"""
-CRUD de cards.
-
-Cards moram dentro de decks. Por isso criar e listar usam a URL aninhada
-/decks/{deck_id}/cards — fica explícito de qual deck é o card. Mexer num
-card específico usa /cards/{card_id}.
-
-Em toda operação a gente confere que o deck (e portanto o card) é do usuário.
-"""
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.dependencies import get_current_user
-from app.models import Card, Deck, User
+from app.models import Card, Deck, Review, User
 from app.schemas.ai import GenerateRequest
 from app.schemas.card import CardCreate, CardOut, CardUpdate
-from app.services.ai import IAError, gerar_cards
+from app.services.ai import IAError, gerar_cards_completos
 
 router = APIRouter(tags=["Cards"])
 
@@ -32,7 +23,6 @@ def _deck_do_usuario(deck_id: int, user: User, db: Session) -> Deck:
 
 
 def _card_do_usuario(card_id: int, user: User, db: Session) -> Card:
-    # Junta card com deck e confere o dono pelo deck.
     card = (
         db.query(Card)
         .join(Deck, Card.deck_id == Deck.id)
@@ -42,6 +32,26 @@ def _card_do_usuario(card_id: int, user: User, db: Session) -> Card:
     if card is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Card não encontrado")
     return card
+
+
+def _card_out(card: Card, user_id: int, db: Session) -> CardOut:
+    """Constrói CardOut incluindo o estado SM-2 do usuário."""
+    review = (
+        db.query(Review)
+        .filter(Review.user_id == user_id, Review.card_id == card.id)
+        .first()
+    )
+    return CardOut(
+        id=card.id,
+        front=card.front,
+        back=card.back,
+        deck_id=card.deck_id,
+        source=card.source,
+        created_at=card.created_at,
+        options=card.options,
+        explanation=card.explanation,
+        repetitions=review.repetitions if review else 0,
+    )
 
 
 @router.post(
@@ -55,7 +65,7 @@ def criar_card(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    _deck_do_usuario(deck_id, user, db)  # confere o dono
+    _deck_do_usuario(deck_id, user, db)
     card = Card(
         front=dados.front,
         back=dados.back,
@@ -65,7 +75,7 @@ def criar_card(
     db.add(card)
     db.commit()
     db.refresh(card)
-    return card
+    return _card_out(card, user.id, db)
 
 
 @router.post(
@@ -80,26 +90,32 @@ def gerar_cards_ia(
     user: User = Depends(get_current_user),
 ):
     """
-    Gera cards a partir de um texto usando IA (Gemini) e salva no deck,
-    já marcados com source='ai'. Sua dor #1 resolvida.
+    Gera cards completos com IA: front, back, 3 distratores e explicação.
+    Tudo salvo no banco — o Modo Aprender carrega instantaneamente depois.
     """
-    _deck_do_usuario(deck_id, user, db)  # confere o dono
+    _deck_do_usuario(deck_id, user, db)
 
     try:
-        gerados = gerar_cards(dados.text, dados.quantity)
+        gerados = gerar_cards_completos(dados.text, dados.quantity)
     except IAError as e:
-        # 502 = "eu (a API) tentei falar com outro serviço e deu ruim".
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(e))
 
     novos = [
-        Card(front=g["front"], back=g["back"], source="ai", deck_id=deck_id)
+        Card(
+            front=g["front"],
+            back=g["back"],
+            options=g["distractors"],
+            explanation=g["explanation"],
+            source="ai",
+            deck_id=deck_id,
+        )
         for g in gerados
     ]
     db.add_all(novos)
     db.commit()
     for c in novos:
         db.refresh(c)
-    return novos
+    return [_card_out(c, user.id, db) for c in novos]
 
 
 @router.get("/decks/{deck_id}/cards", response_model=list[CardOut])
@@ -109,7 +125,8 @@ def listar_cards(
     user: User = Depends(get_current_user),
 ):
     _deck_do_usuario(deck_id, user, db)
-    return db.query(Card).filter(Card.deck_id == deck_id).all()
+    cards = db.query(Card).filter(Card.deck_id == deck_id).all()
+    return [_card_out(c, user.id, db) for c in cards]
 
 
 @router.get("/cards/{card_id}", response_model=CardOut)
@@ -118,7 +135,8 @@ def ver_card(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    return _card_do_usuario(card_id, user, db)
+    card = _card_do_usuario(card_id, user, db)
+    return _card_out(card, user.id, db)
 
 
 @router.patch("/cards/{card_id}", response_model=CardOut)
@@ -135,7 +153,7 @@ def atualizar_card(
         card.back = dados.back
     db.commit()
     db.refresh(card)
-    return card
+    return _card_out(card, user.id, db)
 
 
 @router.delete("/cards/{card_id}", status_code=status.HTTP_204_NO_CONTENT)

@@ -67,7 +67,7 @@ def _chamar_gemini(prompt: str, timeout: int = 90) -> str:
 
 
 def _montar_prompt(texto: str, quantidade: int) -> str:
-    """Instrui o Gemini a virar o texto em cards e responder SÓ com JSON."""
+    """Prompt legado: gera só front/back (para cards manuais sem quiz)."""
     return (
         f"Você é um gerador de flashcards de estudo. A partir do TEXTO abaixo, "
         f"crie exatamente {quantidade} flashcards no estilo pergunta e resposta.\n"
@@ -77,6 +77,27 @@ def _montar_prompt(texto: str, quantidade: int) -> str:
         f"- Responda APENAS com um array JSON válido, sem texto antes ou depois, "
         f"sem marcação de código.\n"
         f'- Formato: [{{"front": "...", "back": "..."}}]\n\n'
+        f"TEXTO:\n{texto}"
+    )
+
+
+def _montar_prompt_completo(texto: str, quantidade: int) -> str:
+    """Gera cards completos: front, back, 3 distratores exclusivos e explicação."""
+    return (
+        f"Você é um gerador de flashcards educativos completos. A partir do TEXTO abaixo, "
+        f"crie exatamente {quantidade} flashcards.\n\n"
+        f"Para cada flashcard gere:\n"
+        f"1. 'front': Pergunta clara e objetiva baseada no conteúdo.\n"
+        f"2. 'back': Resposta correta e concisa.\n"
+        f"3. 'distractors': Lista de EXATAMENTE 3 alternativas INCORRETAS que sejam:\n"
+        f"   - Plausíveis e relacionadas especificamente a ESTA pergunta\n"
+        f"   - Geradas de forma exclusiva para este card (NUNCA copie o 'back' de outros cards)\n"
+        f"   - Distintas entre si e da resposta correta\n"
+        f"4. 'explanation': Explicação de 2-3 frases explicando POR QUÊ a resposta correta está certa.\n\n"
+        f"Regras gerais:\n"
+        f"- Use o idioma do texto.\n"
+        f"- Responda APENAS com um array JSON válido, sem texto antes ou depois, sem markdown.\n"
+        f'- Formato exato: [{{"front":"...","back":"...","distractors":["...","...","..."],"explanation":"..."}}]\n\n'
         f"TEXTO:\n{texto}"
     )
 
@@ -192,6 +213,40 @@ def gerar_explicacoes(cards: list[dict]) -> list[dict]:
 
     if not validos:
         raise IAError("A IA não gerou explicações válidas")
+
+    return validos
+
+
+def gerar_cards_completos(texto: str, quantidade: int) -> list[dict]:
+    """
+    Gera cards com front, back, distractors e explanation em uma única chamada.
+    Retorna lista de dicts com todas as chaves preenchidas.
+    """
+    bruto = _chamar_gemini(_montar_prompt_completo(texto, quantidade), timeout=90)
+
+    try:
+        cards = json.loads(_limpar_json(bruto))
+    except json.JSONDecodeError as e:
+        raise IAError("A IA não devolveu um JSON válido") from e
+
+    validos = []
+    for c in cards:
+        if not isinstance(c, dict):
+            continue
+        if not all(k in c for k in ("front", "back", "distractors", "explanation")):
+            continue
+        distractors = c["distractors"]
+        if not isinstance(distractors, list) or len(distractors) < 3:
+            continue
+        validos.append({
+            "front":        str(c["front"]),
+            "back":         str(c["back"]),
+            "distractors":  [str(d) for d in distractors[:3]],
+            "explanation":  str(c["explanation"]),
+        })
+
+    if not validos:
+        raise IAError("A IA não gerou cards válidos com a estrutura completa")
 
     return validos
 

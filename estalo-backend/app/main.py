@@ -6,14 +6,26 @@ Cria as tabelas no banco, expõe o endpoint de saúde e liga os routers
 """
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import inspect, text
 
 from app.core.database import Base, engine
 from app import models  # noqa: F401 — garante que os modelos sejam registrados
 from app.routers import auth, folders, decks, cards, study
 
-# Cria as tabelas se ainda não existirem.
-# (No futuro a gente troca isso por Alembic, que controla versões do banco.)
+# Cria tabelas novas. Para colunas adicionadas a tabelas existentes,
+# fazemos uma migração leve via ALTER TABLE (SQLite não tem Alembic aqui).
 Base.metadata.create_all(bind=engine)
+
+def _migrar():
+    inspector = inspect(engine)
+    with engine.begin() as conn:
+        colunas_cards = {c["name"] for c in inspector.get_columns("cards")}
+        if "options" not in colunas_cards:
+            conn.execute(text("ALTER TABLE cards ADD COLUMN options TEXT"))
+        if "explanation" not in colunas_cards:
+            conn.execute(text("ALTER TABLE cards ADD COLUMN explanation TEXT"))
+
+_migrar()
 
 app = FastAPI(title="Estalo API", version="0.7.0")
 
