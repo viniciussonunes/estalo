@@ -330,7 +330,7 @@ export default function Aprender({ deck, aoVoltar }) {
           </div>
 
           <div className="quiz-opcoes">
-            {questaoAtual.options.map(op => {
+            {questaoAtual.options.map((op, i) => {
               let extra = "";
               if (respondeu) {
                 if (op.letter === questaoAtual.correct_letter) extra = " correta";
