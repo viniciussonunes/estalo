@@ -210,6 +210,11 @@ export default function Dashboard({ usuario, aoSair, aoVerCards, aoEstudar, aoCr
 
         {erro && <p className="erro">{erro}</p>}
 
+        {/* Visão Geral — só na raiz */}
+        {!pastaAtiva && !carregando && todosDecks.length > 0 && (
+          <VisaoGeral decks={todosDecks} />
+        )}
+
         {/* Formulário criar pasta */}
         {criandoPasta && (
           <form className="criar-pasta-form" onSubmit={criarPasta}>
@@ -247,56 +252,78 @@ export default function Dashboard({ usuario, aoSair, aoVerCards, aoEstudar, aoCr
             </p>
           </div>
         ) : (
-          <ul className="lista-explorer">
-            {/* Pastas */}
-            {pastasVisiveis.map(pasta => {
-              const pct      = progressoDaPasta(pasta, todosDecks);
-              const nDecks   = coletarDecks(pasta, todosDecks).length;
-              const nSubpast = (pasta.children || []).length;
-              const meta     = [
-                nDecks > 0    && `${nDecks} deck${nDecks !== 1 ? "s" : ""}`,
-                nSubpast > 0  && `${nSubpast} subpasta${nSubpast !== 1 ? "s" : ""}`,
-              ].filter(Boolean).join(" · ") || "Vazia";
-              return (
-                <li key={pasta.id} className="lista-item lista-pasta">
-                  <span className="lista-icone pasta"><IconePasta /></span>
-                  <button className="lista-info" onClick={() => entrarPasta(pasta)}>
-                    <span className="lista-nome">{pasta.name}</span>
-                    <span className="lista-meta">{meta}</span>
-                  </button>
-                  <BarraProgresso pct={pct} label={`${Math.round(pct ?? 0)}% memorizado`} />
-                  <div className="lista-acoes">
-                    <button className="lista-btn-entrar" onClick={() => entrarPasta(pasta)}
-                      title="Abrir pasta">›</button>
-                    <button className="lista-btn-excluir"
-                      onClick={e => excluirPasta(pasta, e)} title="Excluir">×</button>
-                  </div>
-                </li>
-              );
-            })}
-
-            {/* Decks */}
-            {decksVisiveis.map(deck => (
-              <li key={deck.id} className="lista-item lista-deck">
-                <span className="lista-icone deck"><IconeDeck /></span>
-                <button className="lista-info" onClick={() => aoVerCards(deck)}>
-                  <span className="lista-nome">{deck.title}</span>
-                  <span className="lista-meta">
-                    {deck.total_cards} card{deck.total_cards !== 1 ? "s" : ""}
-                    {deck.description ? ` · ${deck.description}` : ""}
-                  </span>
-                </button>
-                <BarraProgresso pct={deck.memorization_pct}
-                  label={`${Math.round(deck.memorization_pct ?? 0)}% memorizado`} />
-                <div className="lista-acoes">
-                  <button className="botao-estudar"
-                    onClick={() => aoEstudar(deck)}>Estudar</button>
-                  <button className="lista-btn-excluir"
-                    onClick={e => excluirDeck(deck, e)} title="Excluir">×</button>
+          <div className="explorer-secoes">
+            {/* ── Pastas em grid ── */}
+            {pastasVisiveis.length > 0 && (
+              <section className="explorer-secao">
+                <h2 className="explorer-secao-titulo">Pastas</h2>
+                <div className="pastas-grid">
+                  {pastasVisiveis.map(pasta => {
+                    const pct      = progressoDaPasta(pasta, todosDecks);
+                    const nDecks   = coletarDecks(pasta, todosDecks).length;
+                    const nSubpast = (pasta.children || []).length;
+                    const meta     = [
+                      nDecks > 0   && `${nDecks} deck${nDecks !== 1 ? "s" : ""}`,
+                      nSubpast > 0 && `${nSubpast} subpasta${nSubpast !== 1 ? "s" : ""}`,
+                    ].filter(Boolean).join(" · ") || "Vazia";
+                    return (
+                      <div key={pasta.id} className="pasta-card">
+                        <button className="pasta-card-corpo" onClick={() => entrarPasta(pasta)}>
+                          <span className="pasta-card-icone"><IconePasta /></span>
+                          <span className="pasta-card-nome">{pasta.name}</span>
+                          <span className="pasta-card-meta">{meta}</span>
+                          {pct !== null && (
+                            <div className="pasta-card-barra-trilho">
+                              <div className="pasta-card-barra-fill"
+                                style={{ width: `${pct}%`, background: pct >= 80 ? "var(--verde)" : pct >= 40 ? "var(--ambar)" : "var(--violeta)" }} />
+                            </div>
+                          )}
+                        </button>
+                        <button className="pasta-card-excluir icone-acao perigo"
+                          onClick={e => excluirPasta(pasta, e)} title="Excluir pasta">
+                          <IcoTrash />
+                        </button>
+                      </div>
+                    );
+                  })}
                 </div>
-              </li>
-            ))}
-          </ul>
+              </section>
+            )}
+
+            {/* ── Decks em lista ── */}
+            {decksVisiveis.length > 0 && (
+              <section className="explorer-secao">
+                {pastasVisiveis.length > 0 && (
+                  <h2 className="explorer-secao-titulo">Decks</h2>
+                )}
+                <ul className="lista-explorer">
+                  {decksVisiveis.map(deck => (
+                    <li key={deck.id} className="lista-item lista-deck">
+                      <span className="lista-icone deck"><IconeDeck /></span>
+                      <button className="lista-info" onClick={() => aoVerCards(deck)}>
+                        <span className="lista-nome">{deck.title}</span>
+                        <span className="lista-meta">
+                          {deck.total_cards} card{deck.total_cards !== 1 ? "s" : ""}
+                          {deck.description ? ` · ${deck.description}` : ""}
+                        </span>
+                      </button>
+                      <BarraProgresso pct={deck.memorization_pct}
+                        label={`${Math.round(deck.memorization_pct ?? 0)}% memorizado`} />
+                      <div className="lista-acoes">
+                        <button className="botao-estudar" onClick={() => aoEstudar(deck)}>
+                          Estudar
+                        </button>
+                        <button className="icone-acao perigo lista-deck-excluir"
+                          onClick={e => excluirDeck(deck, e)} title="Excluir deck">
+                          <IcoTrash />
+                        </button>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            )}
+          </div>
         )}
       </main>
       </div>{/* dashboard-corpo */}
@@ -360,6 +387,49 @@ function SidebarNo({ pasta, pastaAtiva, aoNavegar, nivel }) {
         </ul>
       )}
     </li>
+  );
+}
+
+function IcoTrash() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor"
+      strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M3 6h14M8 6V4h4v2M5 6l1 11a1 1 0 001 1h6a1 1 0 001-1l1-11" />
+    </svg>
+  );
+}
+
+function VisaoGeral({ decks }) {
+  const totalCards = decks.reduce((s, d) => s + (d.total_cards || 0), 0);
+  const dominados  = decks.reduce((s, d) =>
+    s + Math.round(((d.memorization_pct || 0) / 100) * (d.total_cards || 0)), 0);
+  const pendentes  = decks.reduce((s, d) =>
+    s + Math.round(((1 - (d.memorization_pct || 0) / 100)) * (d.total_cards || 0)), 0);
+
+  return (
+    <div className="visao-geral">
+      <div className="visao-card">
+        <span className="visao-card-icone">📚</span>
+        <div className="visao-card-info">
+          <span className="visao-card-valor">{totalCards}</span>
+          <span className="visao-card-label">Cards totais</span>
+        </div>
+      </div>
+      <div className="visao-card">
+        <span className="visao-card-icone">⏳</span>
+        <div className="visao-card-info">
+          <span className="visao-card-valor">{pendentes}</span>
+          <span className="visao-card-label">Pendentes</span>
+        </div>
+      </div>
+      <div className="visao-card">
+        <span className="visao-card-icone">🧠</span>
+        <div className="visao-card-info">
+          <span className="visao-card-valor">{dominados}</span>
+          <span className="visao-card-label">Dominados</span>
+        </div>
+      </div>
+    </div>
   );
 }
 

@@ -1316,6 +1316,124 @@ kbd {
 .sessao-stat.roxo   .sessao-stat-valor { color: var(--violeta); }
 .sessao-stat.ambar  .sessao-stat-valor { color: #92400e; }
 
+/* ---------- Dashboard V2 — Visão Geral ---------- */
+.visao-geral {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.75rem;
+  margin-bottom: 1.75rem;
+}
+.visao-card {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  background: var(--superficie);
+  border: 1px solid var(--borda);
+  border-radius: var(--raio);
+  padding: 1rem 1.1rem;
+  box-shadow: var(--sombra);
+}
+.visao-card-icone { font-size: 1.5rem; line-height: 1; flex-shrink: 0; }
+.visao-card-info  { display: flex; flex-direction: column; gap: 0.1rem; min-width: 0; }
+.visao-card-valor {
+  font-family: "Fraunces", serif;
+  font-size: 1.55rem;
+  font-weight: 600;
+  color: var(--tinta);
+  line-height: 1;
+}
+.visao-card-label {
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--tinta-suave);
+}
+
+/* ---------- Dashboard V2 — Seções separadas ---------- */
+.explorer-secoes { display: flex; flex-direction: column; gap: 1.5rem; }
+.explorer-secao-titulo {
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--tinta-suave);
+  margin-bottom: 0.6rem;
+}
+
+/* Grid de pastas */
+.pastas-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.6rem;
+}
+.pasta-card {
+  position: relative;
+  border-radius: var(--raio);
+  border: 1px solid var(--borda);
+  background: var(--superficie);
+  overflow: hidden;
+  transition: border-color var(--transicao), box-shadow var(--transicao);
+}
+.pasta-card:hover { border-color: #d0cde0; box-shadow: var(--sombra); }
+
+.pasta-card-corpo {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.25rem;
+  width: 100%;
+  padding: 0.85rem 0.9rem 0.75rem;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  transition: background var(--transicao);
+}
+.pasta-card:hover .pasta-card-corpo { background: var(--papel); }
+
+.pasta-card-icone { color: var(--tinta-suave); margin-bottom: 0.1rem; }
+.pasta-card-nome {
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--tinta);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  width: 100%;
+}
+.pasta-card-meta {
+  font-size: 0.74rem;
+  color: var(--tinta-suave);
+}
+.pasta-card-barra-trilho {
+  width: 100%;
+  height: 3px;
+  background: var(--borda);
+  border-radius: 99px;
+  margin-top: 0.5rem;
+  overflow: hidden;
+}
+.pasta-card-barra-fill {
+  height: 100%;
+  border-radius: 99px;
+  transition: width 0.5s ease;
+}
+
+/* Botão excluir pasta — oculto até hover */
+.pasta-card-excluir {
+  position: absolute;
+  top: 0.45rem;
+  right: 0.45rem;
+  opacity: 0;
+  transition: opacity var(--transicao);
+}
+.pasta-card:hover .pasta-card-excluir { opacity: 1; }
+
+/* Botão excluir deck — oculto até hover */
+.lista-deck-excluir { opacity: 0; transition: opacity var(--transicao); }
+.lista-item.lista-deck:hover .lista-deck-excluir { opacity: 1; }
+
 /* ---------- Cards V2 — botões do topo ---------- */
 .botao-modo-ghost {
   display: inline-flex;
@@ -1595,6 +1713,17 @@ kbd {
 
   .gamificado-botoes { flex-direction: column; }
   .gamificado-botoes .botao-principal { flex: none; }
+
+  .visao-geral { grid-template-columns: repeat(3, 1fr); gap: 0.5rem; }
+  .visao-card  { padding: 0.75rem 0.8rem; gap: 0.6rem; }
+  .visao-card-valor { font-size: 1.25rem; }
+
+  .pastas-grid { grid-template-columns: repeat(2, 1fr); }
+
+  /* Hover actions visíveis sempre no mobile (sem hover real) */
+  .lista-deck-excluir  { opacity: 1; }
+  .pasta-card-excluir  { opacity: 1; }
+  .item-card-acoes     { opacity: 1; }
 
   .sessao-stats { gap: 0.45rem; }
   .sessao-stat  { min-width: 68px; padding: 0.55rem 0.75rem; }
