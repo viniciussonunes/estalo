@@ -96,11 +96,11 @@ export default function Aprender({ deck, aoVoltar }) {
       if (!errosPorCard.current.has(atual.card_id)) {
         setAcertosNaPrimeira(n => n + 1);
       }
-      setResposta(null);
       if (novaFila.length === 0) {
-        await _salvarProgresso();
         setConcluido(true);
+        await _salvarProgresso();
       } else {
+        setResposta(null);
         setFila(novaFila);
       }
     } else {
