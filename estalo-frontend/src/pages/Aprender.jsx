@@ -77,6 +77,9 @@ export default function Aprender({ deck, aoVoltar }) {
       .finally(() => setCarregando(false));
   }, [deck.id]);
 
+  const questaoAtual = fila[0] ?? null;
+  const respondeu    = resposta !== null;
+
   // Mantém ref atualizada para o handler de teclado (evita stale closure)
   useEffect(() => { proximoRef.current = proximo; });
 
@@ -100,9 +103,6 @@ export default function Aprender({ deck, aoVoltar }) {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [concluido, semQuiz, carregando, fila, respondeu]);
-
-  const questaoAtual = fila[0] ?? null;
-  const respondeu    = resposta !== null;
   const acertouAtual = respondeu && questaoAtual
     ? resposta === questaoAtual.correct_letter
     : false;
