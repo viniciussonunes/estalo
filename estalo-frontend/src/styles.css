@@ -1316,6 +1316,235 @@ kbd {
 .sessao-stat.roxo   .sessao-stat-valor { color: var(--violeta); }
 .sessao-stat.ambar  .sessao-stat-valor { color: #92400e; }
 
+/* ---------- Cards V2 — botões do topo ---------- */
+.botao-modo-ghost {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.45rem 1rem;
+  border: 1.5px solid var(--borda);
+  border-radius: var(--raio);
+  background: transparent;
+  font: inherit;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--tinta-suave);
+  cursor: pointer;
+  transition: border-color var(--transicao), color var(--transicao), background var(--transicao);
+  white-space: nowrap;
+}
+.botao-modo-ghost:hover { border-color: var(--violeta); color: var(--violeta); background: var(--violeta-suave); }
+.botao-modo-ghost:active { transform: scale(0.97); }
+
+.botao-modo-primary {
+  padding: 0.45rem 1.1rem;
+  font-size: 0.875rem;
+  white-space: nowrap;
+}
+
+/* ---------- Cards V2 — layout principal ---------- */
+.cards-v2-main {
+  max-width: 800px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+/* ---------- Stats + barra de fases ---------- */
+.stats-bloco { margin-bottom: 1.5rem; }
+
+.fases-barra {
+  display: flex;
+  height: 5px;
+  border-radius: 99px;
+  overflow: hidden;
+  background: var(--borda);
+  margin-top: 0.75rem;
+}
+.fases-barra-seg {
+  height: 100%;
+  transition: width 0.6s cubic-bezier(.4,0,.2,1);
+}
+.fases-barra-seg.novo      { background: var(--violeta); }
+.fases-barra-seg.validando { background: var(--ambar); }
+.fases-barra-seg.dominado  { background: var(--verde); }
+
+/* ---------- Topo da lista ---------- */
+.cards-lista-topo {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.75rem;
+}
+.cards-contagem {
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--tinta-suave);
+}
+.botao-adicionar-card {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  border: 1.5px dashed var(--borda);
+  border-radius: var(--raio);
+  background: transparent;
+  padding: 0.42rem 0.9rem;
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--tinta-suave);
+  cursor: pointer;
+  transition: border-color var(--transicao), color var(--transicao), background var(--transicao);
+}
+.botao-adicionar-card:hover {
+  border-color: var(--violeta);
+  color: var(--violeta);
+  background: var(--violeta-suave);
+  border-style: solid;
+}
+.botao-adicionar-card:active { transform: scale(0.97); }
+.botao-adicionar-card kbd {
+  font-size: 0.65rem;
+  opacity: 0.7;
+}
+
+/* ---------- Lista de cards V2 ---------- */
+.item-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  background: var(--superficie);
+  border: 1px solid var(--borda);
+  border-radius: var(--raio);
+  padding: 0.9rem 1rem;
+  margin-bottom: 0.5rem;
+  transition: border-color var(--transicao), box-shadow var(--transicao);
+}
+.item-card:hover { border-color: #d0cde0; box-shadow: var(--sombra); }
+
+.item-card-frente {
+  font-weight: 600;
+  color: var(--tinta);
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
+.item-card-verso {
+  color: var(--tinta-suave);
+  font-size: 0.85rem;
+  line-height: 1.45;
+}
+
+.item-card-rodape {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.15rem;
+}
+
+/* Ações: ocultas por padrão, aparecem no hover do item-card */
+.item-card-acoes {
+  display: flex;
+  align-items: center;
+  gap: 0.2rem;
+  margin-left: auto;
+  opacity: 0;
+  transition: opacity var(--transicao);
+}
+.item-card:hover .item-card-acoes { opacity: 1; }
+
+.icone-acao {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--tinta-suave);
+  cursor: pointer;
+  transition: background var(--transicao), color var(--transicao);
+  flex-shrink: 0;
+}
+.icone-acao:hover         { background: var(--papel); color: var(--tinta); }
+.icone-acao.perigo:hover  { background: var(--perigo-suave); color: var(--perigo); }
+
+/* ---------- Badge IA premium ---------- */
+.badge-ia {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  padding: 0.18rem 0.55rem;
+  border-radius: 99px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  background: linear-gradient(135deg, #ede9ff 0%, #fce7ff 100%);
+  color: var(--violeta);
+  border: 1px solid #d8d0ff;
+  flex-shrink: 0;
+}
+
+/* ---------- Modal ---------- */
+@keyframes modalIn {
+  from { opacity: 0; transform: translateY(12px) scale(0.98); }
+  to   { opacity: 1; transform: translateY(0)     scale(1); }
+}
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(23, 22, 31, 0.45);
+  backdrop-filter: blur(3px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  z-index: 100;
+}
+.modal-painel {
+  background: var(--superficie);
+  border-radius: 16px;
+  box-shadow: var(--sombra-elevada);
+  width: 100%;
+  max-width: 520px;
+  max-height: 90vh;
+  overflow-y: auto;
+  padding: 1.5rem;
+  animation: modalIn 0.2s cubic-bezier(.4,0,.2,1);
+}
+.modal-cabecalho {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1.1rem;
+}
+.modal-titulo {
+  font-family: "Fraunces", serif;
+  font-size: 1.2rem;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  color: var(--tinta);
+}
+.modal-fechar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  font-size: 1.3rem;
+  color: var(--tinta-suave);
+  cursor: pointer;
+  transition: background var(--transicao);
+  line-height: 1;
+}
+.modal-fechar:hover { background: var(--papel); color: var(--tinta); }
+
 /* ===== MOBILE (≤ 640px) ===== */
 @media (max-width: 640px) {
   .topo { padding: 0.75rem 1rem; flex-wrap: wrap; gap: 0.4rem; }
