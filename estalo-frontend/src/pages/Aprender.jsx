@@ -360,9 +360,9 @@ export default function Aprender({ deck, aoVoltar }) {
                 {acertouAtual && cardsConcluidos + 1 >= totalUnicos
                   ? "Ver resultado" : "Próxima →"}
               </button>
+              <span className="revelar-kbd"><kbd>Space</kbd> / <kbd>Enter</kbd> para avançar</span>
             </div>
           )}
-              <span className="revelar-kbd"><kbd>Space</kbd> / <kbd>Enter</kbd> para avançar</span>
         </div>
       </main>
     </div>
