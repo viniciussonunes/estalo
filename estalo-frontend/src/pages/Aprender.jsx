@@ -53,7 +53,10 @@ export default function Aprender({ deck, aoVoltar }) {
   const errosPorCard      = useRef(new Set());
   const startingReps      = useRef({});
   const questoesOriginais = useRef([]);
+  const inicioSessao      = useRef(null);
+  const proximoRef        = useRef(null);
   const [acertosNaPrimeira, setAcertosNaPrimeira] = useState(0);
+  const [tempoSessao, setTempoSessao] = useState(0);
 
   function _iniciarComCards(cards) {
     const questoes = montarFila(cards);
@@ -64,6 +67,7 @@ export default function Aprender({ deck, aoVoltar }) {
     const repsMap = {};
     questoes.forEach(q => { repsMap[q.card_id] = q.repetitions; });
     startingReps.current = repsMap;
+    inicioSessao.current = Date.now();
   }
 
   useEffect(() => {
@@ -72,6 +76,30 @@ export default function Aprender({ deck, aoVoltar }) {
       .catch(err => setErro(err.message))
       .finally(() => setCarregando(false));
   }, [deck.id]);
+
+  // Mantém ref atualizada para o handler de teclado (evita stale closure)
+  useEffect(() => { proximoRef.current = proximo; });
+
+  useEffect(() => {
+    function onKey(e) {
+      if (concluido || semQuiz || carregando) return;
+      const atual = fila[0];
+      if (!atual) return;
+      if (!respondeu && ["1","2","3","4"].includes(e.key)) {
+        const opt = atual.options[parseInt(e.key) - 1];
+        if (opt) {
+          setResposta(opt.letter);
+          if (opt.letter !== atual.correct_letter) errosPorCard.current.add(atual.card_id);
+        }
+      }
+      if (respondeu && (e.key === " " || e.key === "Enter")) {
+        e.preventDefault();
+        proximoRef.current?.();
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [concluido, semQuiz, carregando, fila, respondeu]);
 
   const questaoAtual = fila[0] ?? null;
   const respondeu    = resposta !== null;
@@ -117,6 +145,7 @@ export default function Aprender({ deck, aoVoltar }) {
   }
 
   async function _salvarProgresso() {
+    setTempoSessao(Math.floor((Date.now() - (inicioSessao.current ?? Date.now())) / 1000));
     setSalvando(true);
     const chamadas = questoesOriginais.current.map(q => {
       const fase  = startingReps.current[q.card_id] ?? 0;
@@ -212,23 +241,42 @@ export default function Aprender({ deck, aoVoltar }) {
       q => (startingReps.current[q.card_id] ?? 0) === 1
         && !errosPorCard.current.has(q.card_id)
     ).length;
+    const avancadosParaValidacao = questoesOriginais.current.filter(
+      q => (startingReps.current[q.card_id] ?? 0) === 0
+    ).length;
 
     return (
       <div className="pagina">{cabecalho}
         <main className="conteudo estudo-centro">
-          <div className="estudo-concluido">
-            <div className="estudo-concluido-icone">
-              {pct >= 80 ? "★" : pct >= 50 ? "✓" : "↺"}
+          <div className="sessao-resumo">
+            <div className="anel-wrapper">
+              <AnelProgresso pct={pct} />
             </div>
-            <h2 className="estudo-concluido-titulo">Sessão concluída!</h2>
-            <p className="quiz-resultado-placar">
-              {acertosNaPrimeira}/{totalUnicos} na primeira tentativa — {pct}%
-            </p>
-            {novosDoминados > 0 && (
-              <p className="resultado-badge dominado">
-                🏆 {novosDoминados} card{novosDoминados > 1 ? "s" : ""} dominado{novosDoминados > 1 ? "s" : ""}!
-              </p>
-            )}
+            <h2 className="sessao-titulo">Sessão concluída!</h2>
+
+            <div className="sessao-stats">
+              <div className="sessao-stat">
+                <span className="sessao-stat-valor">{acertosNaPrimeira}/{totalUnicos}</span>
+                <span className="sessao-stat-label">1ª tentativa</span>
+              </div>
+              <div className="sessao-stat">
+                <span className="sessao-stat-valor">{formatarTempo(tempoSessao)}</span>
+                <span className="sessao-stat-label">Tempo</span>
+              </div>
+              {avancadosParaValidacao > 0 && (
+                <div className="sessao-stat ambar">
+                  <span className="sessao-stat-valor">+{avancadosParaValidacao}</span>
+                  <span className="sessao-stat-label">Validando</span>
+                </div>
+              )}
+              {novosDoминados > 0 && (
+                <div className="sessao-stat verde">
+                  <span className="sessao-stat-valor">+{novosDoминados}</span>
+                  <span className="sessao-stat-label">Dominados</span>
+                </div>
+              )}
+            </div>
+
             {temCardsEmValidacao ? (
               <div className="gamificado-aviso">
                 <p className="gamificado-aviso-titulo">🧠 Seus cards estão em Validação</p>
@@ -294,6 +342,7 @@ export default function Aprender({ deck, aoVoltar }) {
                   onClick={() => escolher(op.letter)} disabled={respondeu}>
                   <span className="quiz-opcao-letra">{op.letter}</span>
                   <span className="quiz-opcao-texto">{op.text}</span>
+                  {!respondeu && <kbd className="quiz-kbd">{i + 1}</kbd>}
                 </button>
               );
             })}
@@ -313,8 +362,39 @@ export default function Aprender({ deck, aoVoltar }) {
               </button>
             </div>
           )}
+              <span className="revelar-kbd"><kbd>Space</kbd> / <kbd>Enter</kbd> para avançar</span>
         </div>
       </main>
     </div>
+  );
+}
+
+function formatarTempo(seg) {
+  const m = Math.floor(seg / 60);
+  const s = seg % 60;
+  return m > 0 ? `${m}m ${String(s).padStart(2,"0")}s` : `${s}s`;
+}
+
+function AnelProgresso({ pct }) {
+  const r = 42;
+  const circ = 2 * Math.PI * r;
+  const fill = Math.min(pct / 100, 1) * circ;
+  const cor = pct >= 80 ? "#16a34a" : pct >= 50 ? "#f59e0b" : "#5c54e8";
+  return (
+    <svg className="anel-svg" viewBox="0 0 100 100" width="130" height="130">
+      <circle cx="50" cy="50" r={r} fill="none" stroke="#e5e3ee" strokeWidth="9" />
+      <circle cx="50" cy="50" r={r} fill="none" stroke={cor} strokeWidth="9"
+        strokeDasharray={`${fill} ${circ}`} strokeLinecap="round"
+        transform="rotate(-90 50 50)"
+        style={{ transition: "stroke-dasharray 0.9s cubic-bezier(.4,0,.2,1)" }}
+      />
+      <text x="50" y="47" textAnchor="middle" fontSize="19" fontWeight="700"
+        fill="#17161f" fontFamily="Fraunces, serif">
+        {Math.round(pct)}%
+      </text>
+      <text x="50" y="61" textAnchor="middle" fontSize="9" fill="#56535f">
+        precisão
+      </text>
+    </svg>
   );
 }

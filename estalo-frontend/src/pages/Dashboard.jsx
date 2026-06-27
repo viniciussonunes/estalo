@@ -1,6 +1,16 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { api } from "../api.js";
 
+/** Devolve o caminho (array de pastas) da raiz até `targetId` */
+function caminhoParaPasta(arvore, targetId, path = []) {
+  for (const p of arvore) {
+    if (p.id === targetId) return [...path, p];
+    const found = caminhoParaPasta(p.children || [], targetId, [...path, p]);
+    if (found) return found;
+  }
+  return null;
+}
+
 function encontrarPasta(arvore, id) {
   for (const p of arvore) {
     if (p.id === id) return p;
@@ -106,6 +116,15 @@ export default function Dashboard({ usuario, aoSair, aoVerCards, aoEstudar, aoCr
     setCaminho(novo);
   }
 
+  function irParaPastaSidebar(pasta) {
+    if (!pasta) { setPastaAtiva(null); setCaminho([]); return; }
+    const path = caminhoParaPasta(arvore, pasta.id) ?? [pasta];
+    setPastaAtiva(encontrarPasta(arvore, pasta.id) ?? pasta);
+    setCaminho(path);
+    setCriandoPasta(false);
+    setMenuAberto(false);
+  }
+
   async function criarPasta(e) {
     e.preventDefault();
     if (!nomePasta.trim()) return;
@@ -136,7 +155,7 @@ export default function Dashboard({ usuario, aoSair, aoVerCards, aoEstudar, aoCr
   const vazio = !carregando && pastasVisiveis.length === 0 && decksVisiveis.length === 0;
 
   return (
-    <div className="pagina">
+    <div className="pagina dashboard-layout">
       <header className="topo">
         <span className="marca-nome pequeno">Estalo</span>
         <div className="topo-direita">
@@ -145,7 +164,29 @@ export default function Dashboard({ usuario, aoSair, aoVerCards, aoEstudar, aoCr
         </div>
       </header>
 
-      <main className="conteudo">
+      <div className="dashboard-corpo">
+        {/* Sidebar — visível apenas em desktop */}
+        <aside className="dashboard-sidebar">
+          <span className="sidebar-label">Pastas</span>
+          <ul className="sidebar-arvore">
+            <li>
+              <div className="sidebar-no-row">
+                <button
+                  className={`sidebar-no-btn${!pastaAtiva ? " ativo" : ""}`}
+                  onClick={() => irParaPastaSidebar(null)}
+                >
+                  <IconeHome /> Início
+                </button>
+              </div>
+            </li>
+            {arvore.map(p => (
+              <SidebarNo key={p.id} pasta={p} pastaAtiva={pastaAtiva}
+                aoNavegar={irParaPastaSidebar} nivel={0} />
+            ))}
+          </ul>
+        </aside>
+
+      <main className="conteudo dashboard-main">
         {/* Breadcrumb */}
         <nav className="breadcrumb" aria-label="Localização">
           <button
@@ -191,11 +232,19 @@ export default function Dashboard({ usuario, aoSair, aoVerCards, aoEstudar, aoCr
 
         {/* Lista */}
         {carregando ? (
-          <p className="vazio">Carregando…</p>
+          <div>
+            <div className="skeleton skeleton-card" />
+            <div className="skeleton skeleton-card" />
+            <div className="skeleton skeleton-card" style={{ opacity: 0.6 }} />
+          </div>
         ) : vazio ? (
           <div className="vazio-bloco">
-            <p>Nada aqui ainda.</p>
-            <p className="vazio-dica">Use o botão + para criar uma pasta ou deck.</p>
+            <p style={{ fontWeight: 600, marginBottom: "0.35rem" }}>
+              {pastaAtiva ? `"${pastaAtiva.name}" está vazia` : "Nenhum conteúdo ainda"}
+            </p>
+            <p className="vazio-dica">
+              Use o botão <strong>+</strong> para criar {pastaAtiva && pastaAtiva.depth < 4 ? "uma subpasta ou " : ""}um deck de estudo.
+            </p>
           </div>
         ) : (
           <ul className="lista-explorer">
@@ -250,6 +299,7 @@ export default function Dashboard({ usuario, aoSair, aoVerCards, aoEstudar, aoCr
           </ul>
         )}
       </main>
+      </div>{/* dashboard-corpo */}
 
       {/* FAB */}
       <div className="fab-wrapper" ref={menuRef}>
@@ -277,6 +327,47 @@ export default function Dashboard({ usuario, aoSair, aoVerCards, aoEstudar, aoCr
         </button>
       </div>
     </div>
+  );
+}
+
+function SidebarNo({ pasta, pastaAtiva, aoNavegar, nivel }) {
+  const [aberta, setAberta] = useState(nivel < 1);
+  const eAtiva = pastaAtiva?.id === pasta.id;
+  const temFilhos = (pasta.children || []).length > 0;
+  const indent = (nivel + 1) * 12;
+
+  return (
+    <li>
+      <div className="sidebar-no-row" style={{ paddingLeft: `${indent}px` }}>
+        {temFilhos ? (
+          <button className={`sidebar-chevron${aberta ? " aberto" : ""}`}
+            onClick={e => { e.stopPropagation(); setAberta(v => !v); }}>
+            ▶
+          </button>
+        ) : <span style={{ width: 22, flexShrink: 0 }} />}
+        <button className={`sidebar-no-btn${eAtiva ? " ativo" : ""}`}
+          onClick={() => aoNavegar(pasta)}>
+          <IconePasta />
+          <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>{pasta.name}</span>
+        </button>
+      </div>
+      {aberta && temFilhos && (
+        <ul className="sidebar-arvore">
+          {pasta.children.map(filho => (
+            <SidebarNo key={filho.id} pasta={filho} pastaAtiva={pastaAtiva}
+              aoNavegar={aoNavegar} nivel={nivel + 1} />
+          ))}
+        </ul>
+      )}
+    </li>
+  );
+}
+
+function IconeHome() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" style={{ flexShrink: 0 }}>
+      <path d="M10.707 2.293a1 1 0 00-1.414 0l-7 7A1 1 0 003 11h1v6a1 1 0 001 1h4v-4h2v4h4a1 1 0 001-1v-6h1a1 1 0 00.707-1.707l-7-7z"/>
+    </svg>
   );
 }
 

@@ -15,6 +15,19 @@ export default function Revelar({ deck, aoVoltar }) {
       .finally(() => setCarregando(false));
   }, [deck.id]);
 
+  useEffect(() => {
+    function onKey(e) {
+      if (carregando || erro || indice >= cards.length) return;
+      if (e.key === " " || e.key === "ArrowRight") {
+        e.preventDefault();
+        if (!revelado) setRevelado(true);
+        else proximo();
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [carregando, erro, indice, cards.length, revelado]);
+
   function proximo() {
     setIndice((i) => i + 1);
     setRevelado(false);
@@ -104,12 +117,16 @@ export default function Revelar({ deck, aoVoltar }) {
           </div>
 
           {!revelado ? (
-            <button
-              className="botao-principal botao-mostrar"
-              onClick={() => setRevelado(true)}
-            >
-              Revelar resposta
-            </button>
+            <>
+              <button
+                className="botao-principal botao-mostrar"
+                onClick={() => setRevelado(true)}
+              >
+                Revelar resposta
+              </button>
+              <span className="revelar-kbd"><kbd>Space</kbd> para revelar</span>
+            </>
+
           ) : (
             <>
               <div className="cartao-divisor" />
