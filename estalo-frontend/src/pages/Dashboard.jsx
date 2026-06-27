@@ -55,12 +55,10 @@ export default function Dashboard({ usuario, aoSair, aoVerCards, aoEstudar, aoCr
   const [caminho, setCaminho]       = useState([]);
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro]             = useState("");
-  const [menuAberto, setMenuAberto] = useState(false);
   const [criandoPasta, setCriandoPasta]   = useState(false);
   const [nomePasta, setNomePasta]         = useState("");
   const [salvandoPasta, setSalvandoPasta] = useState(false);
-  const menuRef    = useRef(null);
-  const inputRef   = useRef(null);
+  const inputRef = useRef(null);
 
   const carregar = useCallback(async (pastaAtivaAtual = null) => {
     setErro("");
@@ -86,14 +84,6 @@ export default function Dashboard({ usuario, aoSair, aoVerCards, aoEstudar, aoCr
   useEffect(() => { carregar(); }, [carregar]);
 
   useEffect(() => {
-    function handler(e) {
-      if (menuRef.current && !menuRef.current.contains(e.target)) setMenuAberto(false);
-    }
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, []);
-
-  useEffect(() => {
     if (criandoPasta) inputRef.current?.focus();
   }, [criandoPasta]);
 
@@ -106,7 +96,6 @@ export default function Dashboard({ usuario, aoSair, aoVerCards, aoEstudar, aoCr
     setPastaAtiva(pasta);
     setCaminho(c => [...c, pasta]);
     setCriandoPasta(false);
-    setMenuAberto(false);
   }
 
   function navegarBreadcrumb(idx) {
@@ -122,7 +111,6 @@ export default function Dashboard({ usuario, aoSair, aoVerCards, aoEstudar, aoCr
     setPastaAtiva(encontrarPasta(arvore, pasta.id) ?? pasta);
     setCaminho(path);
     setCriandoPasta(false);
-    setMenuAberto(false);
   }
 
   async function criarPasta(e) {
@@ -187,6 +175,7 @@ export default function Dashboard({ usuario, aoSair, aoVerCards, aoEstudar, aoCr
         </aside>
 
       <main className="conteudo dashboard-main">
+      <div className="dash-container">
         {/* Breadcrumb */}
         <nav className="breadcrumb" aria-label="Localização">
           <button
@@ -217,6 +206,7 @@ export default function Dashboard({ usuario, aoSair, aoVerCards, aoEstudar, aoCr
 
         {/* Formulário criar pasta */}
         {criandoPasta && (
+
           <form className="criar-pasta-form" onSubmit={criarPasta}>
             <input
               ref={inputRef}
@@ -247,16 +237,36 @@ export default function Dashboard({ usuario, aoSair, aoVerCards, aoEstudar, aoCr
             <p style={{ fontWeight: 600, marginBottom: "0.35rem" }}>
               {pastaAtiva ? `"${pastaAtiva.name}" está vazia` : "Nenhum conteúdo ainda"}
             </p>
-            <p className="vazio-dica">
-              Use o botão <strong>+</strong> para criar {pastaAtiva && pastaAtiva.depth < 4 ? "uma subpasta ou " : ""}um deck de estudo.
+            <p className="vazio-dica" style={{ marginBottom: "1rem" }}>
+              Crie {pastaAtiva && pastaAtiva.depth < 4 ? "uma subpasta ou " : ""}um deck para começar.
             </p>
+            <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+              {podeAdicionarPasta && (
+                <button className="btn-secao-acao"
+                  onClick={() => { setCriandoPasta(true); setNomePasta(""); }}>
+                  + Nova Pasta
+                </button>
+              )}
+              <button className="btn-secao-acao primario"
+                onClick={() => aoCriarDeck(pastaAtiva?.id ?? null)}>
+                + Novo Deck
+              </button>
+            </div>
           </div>
         ) : (
           <div className="explorer-secoes">
             {/* ── Pastas em grid ── */}
             {pastasVisiveis.length > 0 && (
               <section className="explorer-secao">
-                <h2 className="explorer-secao-titulo">Pastas</h2>
+                <div className="explorer-secao-header">
+                  <h2 className="explorer-secao-titulo">Pastas</h2>
+                  {podeAdicionarPasta && (
+                    <button className="btn-secao-acao"
+                      onClick={() => { setCriandoPasta(true); setNomePasta(""); }}>
+                      + Nova Pasta
+                    </button>
+                  )}
+                </div>
                 <div className="pastas-grid">
                   {pastasVisiveis.map(pasta => {
                     const pct      = progressoDaPasta(pasta, todosDecks);
@@ -293,66 +303,50 @@ export default function Dashboard({ usuario, aoSair, aoVerCards, aoEstudar, aoCr
             {/* ── Decks em lista ── */}
             {decksVisiveis.length > 0 && (
               <section className="explorer-secao">
-                {pastasVisiveis.length > 0 && (
+                <div className="explorer-secao-header">
                   <h2 className="explorer-secao-titulo">Decks</h2>
-                )}
+                  <button className="btn-secao-acao primario"
+                    onClick={() => aoCriarDeck(pastaAtiva?.id ?? null)}>
+                    + Novo Deck
+                  </button>
+                </div>
                 <ul className="lista-explorer">
-                  {decksVisiveis.map(deck => (
-                    <li key={deck.id} className="lista-item lista-deck">
-                      <span className="lista-icone deck"><IconeDeck /></span>
-                      <button className="lista-info" onClick={() => aoVerCards(deck)}>
-                        <span className="lista-nome">{deck.title}</span>
-                        <span className="lista-meta">
-                          {deck.total_cards} card{deck.total_cards !== 1 ? "s" : ""}
-                          {deck.description ? ` · ${deck.description}` : ""}
-                        </span>
-                      </button>
-                      <BarraProgresso pct={deck.memorization_pct}
-                        label={`${Math.round(deck.memorization_pct ?? 0)}% memorizado`} />
-                      <div className="lista-acoes">
-                        <button className="botao-estudar" onClick={() => aoEstudar(deck)}>
-                          Estudar
+                  {decksVisiveis.map(deck => {
+                    const temPendentes = (deck.memorization_pct ?? 0) < 100 && deck.total_cards > 0;
+                    return (
+                      <li key={deck.id} className="lista-item lista-deck">
+                        <span className="lista-icone deck"><IconeDeck /></span>
+                        <button className="lista-info" onClick={() => aoVerCards(deck)}>
+                          <span className="lista-nome">{deck.title}</span>
+                          <span className="lista-meta">
+                            {deck.total_cards} card{deck.total_cards !== 1 ? "s" : ""}
+                            {deck.description ? ` · ${deck.description}` : ""}
+                          </span>
                         </button>
-                        <button className="icone-acao perigo lista-deck-excluir"
-                          onClick={e => excluirDeck(deck, e)} title="Excluir deck">
-                          <IcoTrash />
-                        </button>
-                      </div>
-                    </li>
-                  ))}
+                        <BarraProgresso pct={deck.memorization_pct}
+                          label={`${Math.round(deck.memorization_pct ?? 0)}% memorizado`} />
+                        <div className="lista-acoes">
+                          <button
+                            className={temPendentes ? "botao-estudar-primary" : "botao-estudar"}
+                            onClick={() => aoEstudar(deck)}>
+                            Estudar
+                          </button>
+                          <button className="icone-acao perigo lista-deck-excluir"
+                            onClick={e => excluirDeck(deck, e)} title="Excluir deck">
+                            <IcoTrash />
+                          </button>
+                        </div>
+                      </li>
+                    );
+                  })}
                 </ul>
               </section>
             )}
           </div>
         )}
+      </div>{/* dash-container */}
       </main>
       </div>{/* dashboard-corpo */}
-
-      {/* FAB */}
-      <div className="fab-wrapper" ref={menuRef}>
-        {menuAberto && (
-          <div className="fab-menu">
-            {podeAdicionarPasta && (
-              <button className="fab-menu-item" onClick={() => {
-                setMenuAberto(false); setCriandoPasta(true); setNomePasta("");
-              }}>
-                <span className="fab-menu-icone"><IconePasta /></span>
-                Criar pasta
-              </button>
-            )}
-            <button className="fab-menu-item" onClick={() => {
-              setMenuAberto(false); aoCriarDeck(pastaAtiva?.id ?? null);
-            }}>
-              <span className="fab-menu-icone"><IconeDeck /></span>
-              Criar deck
-            </button>
-          </div>
-        )}
-        <button className="fab" onClick={() => setMenuAberto(v => !v)}
-          aria-label="Adicionar">
-          <span className={`fab-icone${menuAberto ? " aberto" : ""}`}>+</span>
-        </button>
-      </div>
     </div>
   );
 }
@@ -399,6 +393,28 @@ function IcoTrash() {
   );
 }
 
+// Gera dados mock para o heatmap (30 dias). Substituir por dados reais quando o backend suportar.
+function gerarHeatmapMock() {
+  // Seed determinística baseada na semana atual para não mudar a cada render
+  const seed = Math.floor(Date.now() / (7 * 24 * 3600 * 1000));
+  return Array.from({ length: 30 }, (_, i) => {
+    const v = Math.sin(seed + i * 2.5) * 0.5 + 0.5; // 0-1
+    if (v < 0.35) return 0;
+    if (v < 0.55) return 1;
+    if (v < 0.75) return 2;
+    if (v < 0.90) return 3;
+    return 4;
+  });
+}
+
+const HEATMAP_NIVEIS = [
+  { bg: "var(--borda)",    title: "Sem atividade" },
+  { bg: "rgba(22,163,74,.25)", title: "Pouca atividade" },
+  { bg: "rgba(22,163,74,.50)", title: "Atividade moderada" },
+  { bg: "rgba(22,163,74,.75)", title: "Boa atividade" },
+  { bg: "var(--verde)",    title: "Muita atividade" },
+];
+
 function VisaoGeral({ decks }) {
   const totalCards = decks.reduce((s, d) => s + (d.total_cards || 0), 0);
   const dominados  = decks.reduce((s, d) =>
@@ -406,28 +422,51 @@ function VisaoGeral({ decks }) {
   const pendentes  = decks.reduce((s, d) =>
     s + Math.round(((1 - (d.memorization_pct || 0) / 100)) * (d.total_cards || 0)), 0);
 
+  const heatmap = gerarHeatmapMock();
+
   return (
-    <div className="visao-geral">
-      <div className="visao-card">
-        <span className="visao-card-icone">📚</span>
-        <div className="visao-card-info">
-          <span className="visao-card-valor">{totalCards}</span>
-          <span className="visao-card-label">Cards totais</span>
+    <div className="visao-geral-wrapper">
+      <div className="visao-geral">
+        <div className="visao-card">
+          <span className="visao-card-icone">📚</span>
+          <div className="visao-card-info">
+            <span className="visao-card-valor">{totalCards}</span>
+            <span className="visao-card-label">Cards totais</span>
+          </div>
+        </div>
+        <div className="visao-card">
+          <span className="visao-card-icone">⏳</span>
+          <div className="visao-card-info">
+            <span className="visao-card-valor">{pendentes}</span>
+            <span className="visao-card-label">Pendentes</span>
+          </div>
+        </div>
+        <div className="visao-card">
+          <span className="visao-card-icone">🧠</span>
+          <div className="visao-card-info">
+            <span className="visao-card-valor">{dominados}</span>
+            <span className="visao-card-label">Dominados</span>
+          </div>
         </div>
       </div>
-      <div className="visao-card">
-        <span className="visao-card-icone">⏳</span>
-        <div className="visao-card-info">
-          <span className="visao-card-valor">{pendentes}</span>
-          <span className="visao-card-label">Pendentes</span>
+
+      {/* Heatmap de atividade */}
+      <div className="heatmap-bloco">
+        <span className="heatmap-titulo">Atividade — últimos 30 dias</span>
+        <div className="heatmap-grid">
+          {heatmap.map((nivel, i) => (
+            <div key={i} className="heatmap-cel"
+              style={{ background: HEATMAP_NIVEIS[nivel].bg }}
+              title={HEATMAP_NIVEIS[nivel].title} />
+          ))}
         </div>
-      </div>
-      <div className="visao-card">
-        <span className="visao-card-icone">🧠</span>
-        <div className="visao-card-info">
-          <span className="visao-card-valor">{dominados}</span>
-          <span className="visao-card-label">Dominados</span>
-        </div>
+        <span className="heatmap-legenda">
+          Menos
+          {HEATMAP_NIVEIS.map((n, i) => (
+            <span key={i} className="heatmap-cel legenda" style={{ background: n.bg }} />
+          ))}
+          Mais
+        </span>
       </div>
     </div>
   );
