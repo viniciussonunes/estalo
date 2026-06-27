@@ -18,6 +18,20 @@
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
 
+/* ── Animações globais ─────────────────────────────────────────────────── */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  20%       { transform: translateX(-5px); }
+  40%       { transform: translateX(5px); }
+  60%       { transform: translateX(-4px); }
+  80%       { transform: translateX(3px); }
+}
+
 body {
   font-family: "Inter", system-ui, -apple-system, sans-serif;
   background: var(--papel);
@@ -152,7 +166,7 @@ body {
 }
 
 /* ---------- Página interna ---------- */
-.pagina { min-height: 100vh; }
+.pagina { min-height: 100vh; animation: fadeIn 0.18s ease both; }
 .topo {
   display: flex;
   align-items: center;
@@ -308,9 +322,9 @@ body {
 .quiz-opcao:not(:disabled):hover { border-color: var(--violeta); background: #f5f3ff; }
 .quiz-opcao:disabled { cursor: default; }
 
-.quiz-opcao.correta  { border-color: #2d8a4e; background: #f0faf4; }
-.quiz-opcao.errada   { border-color: var(--perigo); background: #fdeaea; }
-.quiz-opcao.neutra   { opacity: 0.45; }
+.quiz-opcao.correta { border-color: #2d8a4e; background: #f0faf4; }
+.quiz-opcao.errada  { border-color: var(--perigo); background: #fdeaea; animation: shake 0.2s ease; }
+.quiz-opcao.neutra  { opacity: 0.45; }
 
 .quiz-opcao-letra {
   flex-shrink: 0;

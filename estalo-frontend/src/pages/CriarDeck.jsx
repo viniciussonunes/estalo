@@ -1,5 +1,12 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { api } from "../api.js";
+
+const MSGS_IA = [
+  "Lendo o texto fornecido...",
+  "Decompondo conceitos essenciais...",
+  "Criando alternativas falsas inteligentes...",
+  "Finalizando a formatação dos cards...",
+];
 
 export default function CriarDeck({ pastaId, aoVoltar, aoVerCards }) {
   const [nome, setNome] = useState("");
@@ -15,6 +22,19 @@ export default function CriarDeck({ pastaId, aoVoltar, aoVerCards }) {
 
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState("");
+  const [msgIA, setMsgIA] = useState(MSGS_IA[0]);
+  const msgIAIdx = useRef(0);
+
+  useEffect(() => {
+    if (!salvando || modo !== "ia") return;
+    setMsgIA(MSGS_IA[0]);
+    msgIAIdx.current = 0;
+    const id = setInterval(() => {
+      msgIAIdx.current = (msgIAIdx.current + 1) % MSGS_IA.length;
+      setMsgIA(MSGS_IA[msgIAIdx.current]);
+    }, 2500);
+    return () => clearInterval(id);
+  }, [salvando, modo]);
 
   function addLinha() {
     setLinhas(l => [...l, { frente: "", verso: "" }]);
@@ -178,7 +198,7 @@ export default function CriarDeck({ pastaId, aoVoltar, aoVerCards }) {
             disabled={salvando || !nome.trim()}
           >
             {salvando
-              ? (modo === "ia" ? "Gerando cards com IA…" : "Criando…")
+              ? (modo === "ia" ? msgIA : "Criando…")
               : "Criar deck"}
           </button>
         </form>

@@ -104,8 +104,14 @@ export default function Aprender({ deck, aoVoltar }) {
         setFila(novaFila);
       }
     } else {
-      // Errou → vai para o final da fila
-      setFila(f => [...f.slice(1), atual]);
+      // Errou → reinsere com distância mínima de 2 cards
+      setFila(f => {
+        const resto = f.slice(1);
+        if (resto.length >= 3) {
+          return [...resto.slice(0, 2), atual, ...resto.slice(2)];
+        }
+        return [...resto, atual];
+      });
       setResposta(null);
     }
   }
