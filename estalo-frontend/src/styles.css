@@ -999,13 +999,21 @@ body {
   text-overflow: ellipsis;
 }
 
-/* Barra de progresso inline */
+/* Barra de progresso inline (legado — mantido por compatibilidade) */
 .lista-progresso {
   display: flex;
   align-items: center;
   gap: 0.4rem;
   flex-shrink: 0;
   width: 90px;
+}
+
+/* Barra segmentada dentro de lista-item: largura fixa, sem margin-top */
+.lista-item .barra-seg {
+  width: 100px;
+  flex-shrink: 0;
+  margin-top: 0;
+  align-self: center;
 }
 .lista-progresso-trilho {
   flex: 1;
