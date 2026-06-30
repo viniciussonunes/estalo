@@ -1,5 +1,5 @@
 import random
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import case, func
@@ -8,6 +8,8 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.dependencies import get_current_user
 from app.models import Card, Deck, Review, User
+from app.models.review_history import ReviewHistory
+from app.schemas.study import HistoryEntry  # noqa: F401 — usado abaixo
 from app.schemas.study import (
     QuizOption, QuizQuestion, RevealCard,
     ReviewAnswer, ReviewResult, StudyCard, StudyStats,
@@ -113,6 +115,16 @@ def proximo_card(
     )
 
 
+def _classificar_status(repetitions: int, due_date: datetime, hoje: "date") -> str:
+    if repetitions == 0:
+        return "novo"
+    if repetitions == 1:
+        return "validando"
+    if due_date.date() < hoje:
+        return "critico"
+    return "dominado"
+
+
 @router.post("/cards/{card_id}/answer", response_model=ReviewResult)
 def responder_card(
     card_id: int,
@@ -129,7 +141,16 @@ def responder_card(
     if card is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Card não encontrado")
 
+    try:
+        quality = resposta.quality_efetivo()
+    except ValueError as e:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(e))
+
+    # difficulty na escala 1-4 (para log e retorno)
+    difficulty = resposta.difficulty or {1: 1, 3: 2, 4: 3, 5: 4}.get(quality, 2)
+
     review = _pegar_ou_criar_review(card, user, db)
+    hoje = datetime.utcnow().date()
 
     estado_atual = SM2State(
         ease_factor=review.ease_factor,
@@ -137,21 +158,49 @@ def responder_card(
         repetitions=review.repetitions,
         due_date=review.due_date,
     )
-    novo = calcular_proxima_revisao(estado_atual, resposta.quality)
 
-    review.ease_factor = novo.ease_factor
-    review.interval = novo.interval
-    review.repetitions = novo.repetitions
-    review.due_date = novo.due_date
+    # "Esqueci" (difficulty=1 / quality≤2) → due_date = agora para virar Crítico imediato
+    novo = calcular_proxima_revisao(estado_atual, quality)
+    if quality <= 2:
+        novo = SM2State(
+            ease_factor=novo.ease_factor,
+            interval=1,
+            repetitions=0,
+            due_date=datetime.utcnow(),  # vence agora → Crítico na próxima query
+        )
+
+    # Grava log imutável antes de sobrescrever o estado
+    db.add(ReviewHistory(
+        user_id=user.id,
+        card_id=card.id,
+        difficulty=difficulty,
+        quality=quality,
+        reps_antes=review.repetitions,
+        intervalo_antes=review.interval,
+        reps_depois=novo.repetitions,
+        intervalo_depois=novo.interval,
+        ease_factor_depois=novo.ease_factor,
+        nova_due_date=novo.due_date,
+        status=_classificar_status(novo.repetitions, novo.due_date, hoje),
+    ))
+
+    # Atualiza estado SM-2
+    review.ease_factor  = novo.ease_factor
+    review.interval     = novo.interval
+    review.repetitions  = novo.repetitions
+    review.due_date     = novo.due_date
     review.last_reviewed = datetime.utcnow()
     db.commit()
 
+    status_novo = _classificar_status(novo.repetitions, novo.due_date, hoje)
     return ReviewResult(
         card_id=card.id,
         interval=novo.interval,
         ease_factor=novo.ease_factor,
         repetitions=novo.repetitions,
         next_due=novo.due_date,
+        status=status_novo,
+        difficulty_usada=difficulty,
     )
 
 
@@ -223,6 +272,32 @@ def estatisticas(
         new_cards=novos,
         validating=validando,
         dominated=dominados,
+    )
+
+
+@router.get("/cards/{card_id}/history", response_model=list[HistoryEntry])
+def historico_card(
+    card_id: int,
+    limit: int = Query(50, ge=1, le=200),
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Retorna o histórico de avaliações de um card, do mais recente ao mais antigo."""
+    card = (
+        db.query(Card)
+        .join(Deck, Card.deck_id == Deck.id)
+        .filter(Card.id == card_id, Deck.owner_id == user.id)
+        .first()
+    )
+    if card is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Card não encontrado")
+
+    return (
+        db.query(ReviewHistory)
+        .filter(ReviewHistory.user_id == user.id, ReviewHistory.card_id == card_id)
+        .order_by(ReviewHistory.avaliado_em.desc())
+        .limit(limit)
+        .all()
     )
 
 

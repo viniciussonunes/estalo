@@ -12,7 +12,16 @@ class StudyCard(BaseModel):
 
 
 class ReviewAnswer(BaseModel):
-    quality: int = Field(ge=0, le=5)
+    quality: int | None = Field(None, ge=0, le=5, description="Escala SM-2 legada (0-5)")
+    difficulty: int | None = Field(None, ge=1, le=4, description="Escala amigável: 1=Esqueci 2=Difícil 3=Bom 4=Fácil")
+
+    def quality_efetivo(self) -> int:
+        """Resolve quality a partir de difficulty se quality não vier."""
+        if self.quality is not None:
+            return self.quality
+        if self.difficulty is not None:
+            return {1: 1, 2: 3, 3: 4, 4: 5}[self.difficulty]
+        raise ValueError("Informe quality (0-5) ou difficulty (1-4)")
 
 
 class ReviewResult(BaseModel):
@@ -21,6 +30,8 @@ class ReviewResult(BaseModel):
     ease_factor: float
     repetitions: int
     next_due: datetime
+    status: str                 # novo | validando | dominado | critico
+    difficulty_usada: int       # 1-4, para o frontend mostrar feedback
 
 
 class StudyStats(BaseModel):
@@ -35,6 +46,19 @@ class StudyStats(BaseModel):
     new_cards: int
     validating: int
     dominated: int
+
+
+class HistoryEntry(BaseModel):
+    id: int
+    card_id: int
+    difficulty: int
+    quality: int
+    reps_antes: int
+    reps_depois: int
+    intervalo_depois: int
+    status: str
+    avaliado_em: datetime
+    model_config = {"from_attributes": True}
 
 
 # --- Modo Aprender (múltipla escolha gerada por IA) ---
