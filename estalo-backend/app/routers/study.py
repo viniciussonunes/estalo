@@ -1,8 +1,8 @@
 import random
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Union
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
 from sqlalchemy import case, func
 from sqlalchemy.orm import Session
 
@@ -30,19 +30,6 @@ def _deck_do_usuario(deck_id: int, user: User, db: Session) -> Deck:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Deck não encontrado")
     return deck
 
-
-def _pegar_ou_criar_review(card: Card, user: User, db: Session) -> Review:
-    review = (
-        db.query(Review)
-        .filter(Review.user_id == user.id, Review.card_id == card.id)
-        .first()
-    )
-    if review is None:
-        review = Review(user_id=user.id, card_id=card.id, due_date=datetime.utcnow())
-        db.add(review)
-        db.commit()
-        db.refresh(review)
-    return review
 
 
 @router.get("/decks/{deck_id}/next", response_model=Union[StudyCard, SessaoConcluida])
@@ -144,13 +131,45 @@ def _classificar_status(repetitions: int, due_date: datetime, hoje: "date") -> s
     return "dominado"
 
 
+def _history_para_result(h: ReviewHistory) -> ReviewResult:
+    """Reconstrói um ReviewResult a partir de uma entrada de histórico (resposta idempotente)."""
+    hoje = datetime.utcnow().date()
+    return ReviewResult(
+        card_id=h.card_id,
+        interval=h.intervalo_depois,
+        ease_factor=h.ease_factor_depois,
+        repetitions=h.reps_depois,
+        next_due=h.nova_due_date,
+        status=_classificar_status(h.reps_depois, h.nova_due_date, hoje),
+        difficulty_usada=h.difficulty,
+        idempotente=True,
+    )
+
+
 @router.post("/cards/{card_id}/answer", response_model=ReviewResult)
 def responder_card(
     card_id: int,
     resposta: ReviewAnswer,
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
+    x_request_id: str | None = Header(None, alias="X-Request-ID"),
 ):
+    # --- Tarefa 1: Idempotência via X-Request-ID ---
+    # Se o cliente enviar um ID único por requisição, uma segunda chamada com o
+    # mesmo ID retorna o resultado original sem reprocessar o card.
+    if x_request_id:
+        entrada_existente = (
+            db.query(ReviewHistory)
+            .filter(
+                ReviewHistory.user_id == user.id,
+                ReviewHistory.request_id == x_request_id,
+            )
+            .first()
+        )
+        if entrada_existente:
+            return _history_para_result(entrada_existente)
+
+    # --- Verifica existência e posse do card ---
     card = (
         db.query(Card)
         .join(Deck, Card.deck_id == Deck.id)
@@ -165,12 +184,44 @@ def responder_card(
     except ValueError as e:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(e))
 
-    # difficulty na escala 1-4 (para log e retorno)
     difficulty = resposta.difficulty or {1: 1, 3: 2, 4: 3, 5: 4}.get(quality, 2)
 
-    review = _pegar_ou_criar_review(card, user, db)
-    hoje = datetime.utcnow().date()
+    # --- Tarefa 2: Lock de linha para evitar race condition ---
+    # with_for_update() emite SELECT ... FOR UPDATE — garante que apenas uma
+    # transação por vez leia e modifique este Review. Outras requisições
+    # concorrentes aguardam o commit antes de prosseguir.
+    review = (
+        db.query(Review)
+        .filter(Review.user_id == user.id, Review.card_id == card_id)
+        .with_for_update()
+        .first()
+    )
 
+    agora = datetime.utcnow()
+    hoje = agora.date()
+
+    if review is None:
+        # Card nunca estudado — cria o estado inicial dentro da transação atual
+        review = Review(user_id=user.id, card_id=card_id, due_date=agora)
+        db.add(review)
+        db.flush()  # persiste no banco sem commit para que o lock cubra o INSERT
+
+    # --- Tarefa 3: Validação de estado ---
+    # Impede que cards com due_date no futuro sejam respondidos fora de sessão.
+    # Cards Novos (repetitions == 0) são sempre elegíveis.
+    # Tolerância de 1 hora cobre pequenas dessincronias de relógio cliente/servidor.
+    TOLERANCIA = timedelta(hours=1)
+    card_elegivel = (
+        review.repetitions == 0                              # Novo — sempre pode
+        or review.due_date <= agora + TOLERANCIA             # Due vencido ou hoje
+    )
+    if not card_elegivel:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            f"Card não está na fila de estudo. Próxima revisão: {review.due_date.date().isoformat()}",
+        )
+
+    # --- Cálculo SM-2 ---
     estado_atual = SM2State(
         ease_factor=review.ease_factor,
         interval=review.interval,
@@ -178,40 +229,42 @@ def responder_card(
         due_date=review.due_date,
     )
 
-    # "Esqueci" (difficulty=1 / quality≤2) → due_date = agora para virar Crítico imediato
     novo = calcular_proxima_revisao(estado_atual, quality)
     if quality <= 2:
+        # "Esqueci" → Crítico imediato
         novo = SM2State(
             ease_factor=novo.ease_factor,
             interval=1,
             repetitions=0,
-            due_date=datetime.utcnow(),  # vence agora → Crítico na próxima query
+            due_date=agora,
         )
 
-    # Grava log imutável antes de sobrescrever o estado
+    status_novo = _classificar_status(novo.repetitions, novo.due_date, hoje)
+
+    # --- Bloco atômico: histórico + atualização do estado ---
+    # Tudo no mesmo commit; se qualquer parte falhar, o banco reverte.
     db.add(ReviewHistory(
         user_id=user.id,
         card_id=card.id,
         difficulty=difficulty,
         quality=quality,
-        reps_antes=review.repetitions,
-        intervalo_antes=review.interval,
+        reps_antes=estado_atual.repetitions,
+        intervalo_antes=estado_atual.interval,
         reps_depois=novo.repetitions,
         intervalo_depois=novo.interval,
         ease_factor_depois=novo.ease_factor,
         nova_due_date=novo.due_date,
-        status=_classificar_status(novo.repetitions, novo.due_date, hoje),
+        status=status_novo,
+        request_id=x_request_id,   # None se header ausente (sem unicidade imposta)
     ))
 
-    # Atualiza estado SM-2
-    review.ease_factor  = novo.ease_factor
-    review.interval     = novo.interval
-    review.repetitions  = novo.repetitions
-    review.due_date     = novo.due_date
-    review.last_reviewed = datetime.utcnow()
+    review.ease_factor   = novo.ease_factor
+    review.interval      = novo.interval
+    review.repetitions   = novo.repetitions
+    review.due_date      = novo.due_date
+    review.last_reviewed = agora
     db.commit()
 
-    status_novo = _classificar_status(novo.repetitions, novo.due_date, hoje)
     return ReviewResult(
         card_id=card.id,
         interval=novo.interval,

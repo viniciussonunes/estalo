@@ -36,4 +36,8 @@ class ReviewHistory(Base):
     # Classificação resultante para leitura rápida
     status: Mapped[str] = mapped_column(String(16), nullable=False)  # novo|validando|dominado|critico
 
+    # Idempotência: UUID gerado pelo cliente (X-Request-ID). Nullable para
+    # compatibilidade com entradas antigas que não tinham o header.
+    request_id: Mapped[str | None] = mapped_column(String(64), nullable=True, unique=True, index=True)
+
     avaliado_em: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)

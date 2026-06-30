@@ -42,6 +42,7 @@ class ReviewResult(BaseModel):
     next_due: datetime
     status: str                 # novo | validando | dominado | critico
     difficulty_usada: int       # 1-4, para o frontend mostrar feedback
+    idempotente: bool = False   # True se esta resposta veio de cache (Request-ID duplicado)
 
 
 class StudyStats(BaseModel):
