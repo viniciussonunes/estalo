@@ -156,7 +156,9 @@ export default function Aprender({ deck, aoVoltar }) {
       else if (fase === 1 && !errou) quality = 5; // Fase 2 → 3
       else if (fase >= 2 && !errou)  quality = 5; // Dominado: estende
       else                           quality = 1; // Dominado: volta Fase 1
-      return api.responderCard(q.card_id, quality).catch(() => {});
+      return api.responderCard(q.card_id, quality).catch(err => {
+        console.error(`[Aprender] card ${q.card_id} fase=${fase} quality=${quality} erro:`, err.message);
+      });
     });
     try { await Promise.all(chamadas); } catch { /* silencioso */ }
     setSalvando(false);
