@@ -207,13 +207,13 @@ def responder_card(
         db.flush()  # persiste no banco sem commit para que o lock cubra o INSERT
 
     # --- Tarefa 3: Validação de estado ---
-    # Impede que cards com due_date no futuro sejam respondidos fora de sessão.
-    # Cards Novos (repetitions == 0) são sempre elegíveis.
-    # Tolerância de 1 hora cobre pequenas dessincronias de relógio cliente/servidor.
-    TOLERANCIA = timedelta(hours=1)
+    # Compara só a DATA (não o datetime) para não bloquear sessões feitas em
+    # horários diferentes do mesmo dia ou antes da hora exata do due_date.
+    # O modo Quiz (Aprender) seleciona cards independentemente de due_date,
+    # então a validação não deve usar granularidade de hora.
     card_elegivel = (
-        review.repetitions == 0                              # Novo — sempre pode
-        or review.due_date <= agora + TOLERANCIA             # Due vencido ou hoje
+        review.repetitions == 0              # Novo — sempre pode
+        or review.due_date.date() <= hoje    # due venceu hoje ou antes
     )
     if not card_elegivel:
         raise HTTPException(
