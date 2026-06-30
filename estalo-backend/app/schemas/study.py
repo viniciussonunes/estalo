@@ -25,10 +25,16 @@ class ReviewResult(BaseModel):
 
 class StudyStats(BaseModel):
     total_cards: int
-    due_now: int        # vencidos (inclui novos)
-    new_cards: int      # nunca estudados (Fase 1)
-    validating: int     # repetitions == 1 (Fase 2)
-    dominated: int      # repetitions >= 2 (Fase 3)
+    novos: int          # repetitions == 0 (nunca estudados)
+    validando: int      # repetitions == 1
+    dominados: int      # repetitions >= 2
+    criticos: int       # due_date < hoje AND repetitions > 0
+    hoje: int           # due_date == hoje (data, sem hora) AND repetitions > 0
+    # legado — mantidos para não quebrar clientes antigos
+    due_now: int
+    new_cards: int
+    validating: int
+    dominated: int
 
 
 # --- Modo Aprender (múltipla escolha gerada por IA) ---

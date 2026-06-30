@@ -127,36 +127,66 @@ def estatisticas(
 ):
     _deck_do_usuario(deck_id, user, db)
     agora = datetime.utcnow()
+    hoje_data = agora.date()
 
     cards = db.query(Card).filter(Card.deck_id == deck_id).all()
-    total = len(cards)
-    novos = vencidos = validating = dominated = 0
+
+    # Carrega todas as reviews do usuário para este deck em uma única query
+    card_ids = [c.id for c in cards]
+    reviews = {
+        r.card_id: r
+        for r in db.query(Review)
+        .filter(Review.user_id == user.id, Review.card_id.in_(card_ids))
+        .all()
+    } if card_ids else {}
+
+    novos = validando = dominados = criticos = hoje = due_now = 0
 
     for card in cards:
-        review = (
-            db.query(Review)
-            .filter(Review.user_id == user.id, Review.card_id == card.id)
-            .first()
-        )
+        review = reviews.get(card.id)
+
         if review is None:
+            # Nunca estudado → Novo
             novos += 1
-            vencidos += 1
+            due_now += 1
+            continue
+
+        reps = review.repetitions
+        due = review.due_date
+
+        # Fase
+        if reps == 0:
+            novos += 1
+        elif reps == 1:
+            validando += 1
         else:
-            reps = review.repetitions
-            if reps == 1:
-                validating += 1
-            elif reps >= 2:
-                dominated += 1
+            dominados += 1
 
-            if review.due_date <= agora:
-                vencidos += 1
+        # Status temporal (só para cards já estudados ao menos uma vez)
+        if reps > 0:
+            due_data = due.date()
+            if due_data < hoje_data:
+                # Venceu antes de hoje → Crítico (prioridade máxima)
+                criticos += 1
+                due_now += 1
+            elif due_data == hoje_data:
+                # Vence hoje → Revisão do Dia
+                hoje += 1
+                due_now += 1
 
+    total = len(cards)
     return StudyStats(
         total_cards=total,
-        due_now=vencidos,
+        novos=novos,
+        validando=validando,
+        dominados=dominados,
+        criticos=criticos,
+        hoje=hoje,
+        # campos legados para compatibilidade com frontend atual
+        due_now=due_now,
         new_cards=novos,
-        validating=validating,
-        dominated=dominated,
+        validating=validando,
+        dominated=dominados,
     )
 
 
