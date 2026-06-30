@@ -1,5 +1,6 @@
 import random
 from datetime import date, datetime, timezone
+from typing import Union
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import case, func
@@ -9,10 +10,9 @@ from app.core.database import get_db
 from app.dependencies import get_current_user
 from app.models import Card, Deck, Review, User
 from app.models.review_history import ReviewHistory
-from app.schemas.study import HistoryEntry  # noqa: F401 — usado abaixo
 from app.schemas.study import (
-    QuizOption, QuizQuestion, RevealCard,
-    ReviewAnswer, ReviewResult, StudyCard, StudyStats,
+    HistoryEntry, QuizOption, QuizQuestion, RevealCard,
+    ReviewAnswer, ReviewResult, SessaoConcluida, StudyCard, StudyStats,
 )
 from app.services.ai import IAError, gerar_explicacoes, gerar_quiz
 from app.services.sm2 import SM2State, calcular_proxima_revisao
@@ -45,29 +45,39 @@ def _pegar_ou_criar_review(card: Card, user: User, db: Session) -> Review:
     return review
 
 
-@router.get("/decks/{deck_id}/next", response_model=StudyCard | None)
+@router.get("/decks/{deck_id}/next", response_model=Union[StudyCard, SessaoConcluida])
 def proximo_card(
     deck_id: int,
     incluir_dominados: bool = Query(False, description="Se true, dominados (reps≥2) entram na fila"),
+    limite_diario: int = Query(50, ge=1, le=500, description="Máximo de cards revisados por dia"),
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
     _deck_do_usuario(deck_id, user, db)
     hoje = datetime.utcnow().date()
+    inicio_do_dia = datetime(hoje.year, hoje.month, hoje.day, 0, 0, 0)
 
-    # Prioridade via CASE WHEN no banco — uma única query ordenada
-    #   0 = Crítico  (due < hoje, já atrasado)
-    #   1 = Hoje     (due == hoje)
-    #   2 = Novo     (sem review)
-    #   3 = Validando (reps == 1, due > hoje)
-    #   9 = Dominado  (reps >= 2) — só incluído se `incluir_dominados`
-    prioridade = case(
-        (func.date(Review.due_date) < hoje,  0),  # Crítico
-        (func.date(Review.due_date) == hoje, 1),  # Hoje
-        else_=3,                                   # Validando (due futuro)
-    )
+    # --- Tarefa 3: conta revisões feitas hoje neste deck ---
+    revisoes_hoje = (
+        db.query(func.count(ReviewHistory.id))
+        .join(Card, ReviewHistory.card_id == Card.id)
+        .filter(
+            ReviewHistory.user_id == user.id,
+            Card.deck_id == deck_id,
+            ReviewHistory.avaliado_em >= inicio_do_dia,
+        )
+        .scalar()
+    ) or 0
 
-    # Cards SEM review têm prioridade 2 (Novos) — tratados via outer join
+    if revisoes_hoje >= limite_diario:
+        return SessaoConcluida(
+            motivo="limite_diario",
+            revisoes_hoje=revisoes_hoje,
+            limite_diario=limite_diario,
+        )
+
+    # --- Prioridade via CASE WHEN ---
+    # 0=Crítico, 1=Hoje, 2=Novo, 3=Validando
     prioridade_com_novo = case(
         (Review.id.is_(None),                2),  # Novo (sem review)
         (func.date(Review.due_date) < hoje,  0),  # Crítico
@@ -76,7 +86,7 @@ def proximo_card(
     )
 
     query = (
-        db.query(Card, Review)
+        db.query(Card, Review, prioridade_com_novo.label("prio"))
         .outerjoin(
             Review,
             (Review.card_id == Card.id) & (Review.user_id == user.id),
@@ -85,24 +95,31 @@ def proximo_card(
     )
 
     if not incluir_dominados:
-        # Exclui dominados (reps >= 2) com due_date no futuro
         query = query.filter(
-            (Review.id.is_(None))                          # nunca estudado
-            | (Review.repetitions < 2)                     # Novo ou Validando
-            | (func.date(Review.due_date) <= hoje)         # Dominado mas vencido (crítico)
+            (Review.id.is_(None))
+            | (Review.repetitions < 2)
+            | (func.date(Review.due_date) <= hoje)
         )
 
-    # Aplica ordenação de prioridade + due_date como desempate
-    resultado = (
-        query
-        .order_by(prioridade_com_novo, Review.due_date)
-        .first()
-    )
+    # --- Tarefa 2: randomização dentro da mesma prioridade ---
+    # Carrega todos os candidatos para descobrir a menor prioridade disponível,
+    # depois sorteia aleatoriamente entre os que estão nessa prioridade.
+    candidatos = query.all()
 
-    if resultado is None:
-        return None
+    if not candidatos:
+        return SessaoConcluida(
+            motivo="sem_cards",
+            revisoes_hoje=revisoes_hoje,
+            limite_diario=limite_diario,
+        )
 
-    card, review = resultado
+    # Menor valor de prioridade = mais urgente
+    prio_min = min(row[2] for row in candidatos)
+    top_tier = [row for row in candidatos if row[2] == prio_min]
+
+    # Shuffle pseudo-aleatório dentro do tier para evitar previsibilidade
+    card, review, _ = random.choice(top_tier)
+
     due = review.due_date if review else datetime.utcnow()
     reps = review.repetitions if review else 0
 
@@ -112,6 +129,8 @@ def proximo_card(
         back=card.back,
         due_date=due,
         repetitions=reps,
+        revisoes_hoje=revisoes_hoje,
+        limite_diario=limite_diario,
     )
 
 

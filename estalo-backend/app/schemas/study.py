@@ -8,7 +8,17 @@ class StudyCard(BaseModel):
     back: str
     due_date: datetime
     repetitions: int
+    # Metadados da sessão
+    revisoes_hoje: int = 0        # quantas revisões o usuário já fez hoje
+    limite_diario: int = 50       # limite configurado para esta sessão
     model_config = {"from_attributes": True}
+
+
+class SessaoConcluida(BaseModel):
+    concluida: bool = True
+    motivo: str                   # "limite_diario" | "sem_cards"
+    revisoes_hoje: int
+    limite_diario: int
 
 
 class ReviewAnswer(BaseModel):
