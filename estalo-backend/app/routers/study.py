@@ -1,7 +1,8 @@
 import random
-from datetime import datetime
+from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import case, func
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -45,36 +46,71 @@ def _pegar_ou_criar_review(card: Card, user: User, db: Session) -> Review:
 @router.get("/decks/{deck_id}/next", response_model=StudyCard | None)
 def proximo_card(
     deck_id: int,
+    incluir_dominados: bool = Query(False, description="Se true, dominados (reps≥2) entram na fila"),
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
     _deck_do_usuario(deck_id, user, db)
-    agora = datetime.utcnow()
-    cards = db.query(Card).filter(Card.deck_id == deck_id).all()
+    hoje = datetime.utcnow().date()
 
-    melhor_card = None
-    melhor_due = None
-    for card in cards:
-        review = (
-            db.query(Review)
-            .filter(Review.user_id == user.id, Review.card_id == card.id)
-            .first()
+    # Prioridade via CASE WHEN no banco — uma única query ordenada
+    #   0 = Crítico  (due < hoje, já atrasado)
+    #   1 = Hoje     (due == hoje)
+    #   2 = Novo     (sem review)
+    #   3 = Validando (reps == 1, due > hoje)
+    #   9 = Dominado  (reps >= 2) — só incluído se `incluir_dominados`
+    prioridade = case(
+        (func.date(Review.due_date) < hoje,  0),  # Crítico
+        (func.date(Review.due_date) == hoje, 1),  # Hoje
+        else_=3,                                   # Validando (due futuro)
+    )
+
+    # Cards SEM review têm prioridade 2 (Novos) — tratados via outer join
+    prioridade_com_novo = case(
+        (Review.id.is_(None),                2),  # Novo (sem review)
+        (func.date(Review.due_date) < hoje,  0),  # Crítico
+        (func.date(Review.due_date) == hoje, 1),  # Hoje
+        else_=3,                                   # Validando
+    )
+
+    query = (
+        db.query(Card, Review)
+        .outerjoin(
+            Review,
+            (Review.card_id == Card.id) & (Review.user_id == user.id),
         )
-        due = review.due_date if review else agora
-        reps = review.repetitions if review else 0
+        .filter(Card.deck_id == deck_id)
+    )
 
-        if due <= agora:
-            if melhor_due is None or due < melhor_due:
-                melhor_due = due
-                melhor_card = StudyCard(
-                    card_id=card.id,
-                    front=card.front,
-                    back=card.back,
-                    due_date=due,
-                    repetitions=reps,
-                )
+    if not incluir_dominados:
+        # Exclui dominados (reps >= 2) com due_date no futuro
+        query = query.filter(
+            (Review.id.is_(None))                          # nunca estudado
+            | (Review.repetitions < 2)                     # Novo ou Validando
+            | (func.date(Review.due_date) <= hoje)         # Dominado mas vencido (crítico)
+        )
 
-    return melhor_card
+    # Aplica ordenação de prioridade + due_date como desempate
+    resultado = (
+        query
+        .order_by(prioridade_com_novo, Review.due_date)
+        .first()
+    )
+
+    if resultado is None:
+        return None
+
+    card, review = resultado
+    due = review.due_date if review else datetime.utcnow()
+    reps = review.repetitions if review else 0
+
+    return StudyCard(
+        card_id=card.id,
+        front=card.front,
+        back=card.back,
+        due_date=due,
+        repetitions=reps,
+    )
 
 
 @router.post("/cards/{card_id}/answer", response_model=ReviewResult)
