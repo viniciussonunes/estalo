@@ -160,9 +160,23 @@ export default function Cards({ deck, aoVoltar, aoEstudar, aoAprender, aoRevelar
         </div>
         <div className="modos-estudo-topo">
           <button className="botao-modo-ghost" onClick={aoRevelar}>Revelar</button>
-          <button className="botao-principal botao-modo-primary" onClick={aoAprender}>
-            Aprender
-          </button>
+          {stats?.criticos > 0 ? (
+            <button className="botao-modo-critico" onClick={aoAprender}>
+              🔴 Estudar críticos ({stats.criticos})
+            </button>
+          ) : stats?.hoje > 0 ? (
+            <button className="botao-principal botao-modo-primary" onClick={aoAprender}>
+              Estudar hoje ({stats.hoje})
+            </button>
+          ) : stats && (stats.novos ?? stats.new_cards) === 0 && (stats.dominados ?? stats.dominated) === stats?.total_cards ? (
+            <button className="botao-modo-ghost botao-modo-primary" onClick={aoAprender} disabled>
+              ✓ Revisão em dia
+            </button>
+          ) : (
+            <button className="botao-principal botao-modo-primary" onClick={aoAprender}>
+              Aprender
+            </button>
+          )}
         </div>
       </header>
 
@@ -171,20 +185,49 @@ export default function Cards({ deck, aoVoltar, aoEstudar, aoAprender, aoRevelar
         {/* Stats */}
         {stats && (
           <div className="stats-bloco">
+            {/* Cards de status prioritários */}
+            {(stats.criticos > 0 || stats.hoje > 0) && (
+              <div className="status-cards">
+                {stats.criticos > 0 && (
+                  <div className="status-card critico">
+                    <span className="status-card-icone">🔴</span>
+                    <div className="status-card-info">
+                      <span className="status-card-valor">{stats.criticos}</span>
+                      <span className="status-card-label">Crítico{stats.criticos !== 1 ? "s" : ""}</span>
+                    </div>
+                    <span className="status-card-dica">Revisão atrasada</span>
+                  </div>
+                )}
+                {stats.hoje > 0 && (
+                  <div className="status-card hoje">
+                    <span className="status-card-icone">📅</span>
+                    <div className="status-card-info">
+                      <span className="status-card-valor">{stats.hoje}</span>
+                      <span className="status-card-label">Para hoje</span>
+                    </div>
+                    <span className="status-card-dica">Revisão do dia</span>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Badges de fase */}
             <div className="stats-deck">
               <div className="stat-badge stat-novo">
-                <span className="stat-badge-valor">{stats.new_cards}</span>
+                <span className="stat-badge-valor">{stats.novos ?? stats.new_cards}</span>
                 <span className="stat-badge-label">Novos</span>
               </div>
               <div className="stat-badge stat-aprendendo">
-                <span className="stat-badge-valor">{stats.validating ?? 0}</span>
+                <span className="stat-badge-valor">{stats.validando ?? stats.validating ?? 0}</span>
                 <span className="stat-badge-label">Validando</span>
               </div>
               <div className="stat-badge stat-dominado">
-                <span className="stat-badge-valor">{stats.dominated ?? 0}</span>
+                <span className="stat-badge-valor">{stats.dominados ?? stats.dominated ?? 0}</span>
                 <span className="stat-badge-label">Dominados</span>
               </div>
             </div>
+
+            {/* Barra de fases */}
             {total > 0 && (
               <div className="fases-barra" title={`${Math.round(pctNovo)}% Novos · ${Math.round(pctValid)}% Validando · ${Math.round(pctDom)}% Dominados`}>
                 {pctNovo  > 0 && <div className="fases-barra-seg novo"      style={{ width: `${pctNovo}%`  }} />}

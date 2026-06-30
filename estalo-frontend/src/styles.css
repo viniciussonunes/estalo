@@ -1540,6 +1540,70 @@ kbd {
 .lista-deck-excluir { opacity: 0; transition: opacity var(--transicao); }
 .lista-item.lista-deck:hover .lista-deck-excluir { opacity: 1; }
 
+/* ---------- Cards V2 — status cards (crítico / hoje) ---------- */
+.status-cards {
+  display: flex;
+  gap: 0.6rem;
+  margin-bottom: 0.75rem;
+}
+.status-card {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  flex: 1;
+  padding: 0.7rem 0.9rem;
+  border-radius: var(--raio);
+  border: 1.5px solid;
+}
+.status-card.critico {
+  background: var(--perigo-suave);
+  border-color: #fca5a5;
+}
+.status-card.hoje {
+  background: var(--ambar-suave);
+  border-color: #fcd34d;
+}
+.status-card-icone { font-size: 1.1rem; flex-shrink: 0; }
+.status-card-info  { display: flex; flex-direction: column; gap: 0.05rem; }
+.status-card-valor {
+  font-family: "Fraunces", serif;
+  font-size: 1.25rem;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--tinta);
+}
+.status-card-label {
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--tinta-suave);
+}
+.status-card-dica {
+  margin-left: auto;
+  font-size: 0.72rem;
+  color: var(--tinta-suave);
+  white-space: nowrap;
+}
+.botao-modo-critico {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.45rem 1rem;
+  border: none;
+  border-radius: var(--raio);
+  background: var(--perigo);
+  color: #fff;
+  font: inherit;
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background var(--transicao), transform var(--transicao);
+}
+.botao-modo-critico:hover  { background: #dc2626; }
+.botao-modo-critico:active { transform: scale(0.97); }
+
 /* ---------- Cards V2 — botões do topo ---------- */
 .botao-modo-ghost {
   display: inline-flex;
