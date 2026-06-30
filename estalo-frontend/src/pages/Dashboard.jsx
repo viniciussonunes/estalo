@@ -27,23 +27,55 @@ function coletarDecks(pasta, todosDecks) {
   return [...diretos, ...filhos];
 }
 
-/** Média de memorização dos decks de uma pasta (null = sem dados) */
-function progressoDaPasta(pasta, todosDecks) {
+/** Agrega stats de todos os decks contidos em uma pasta (recursivo) */
+function agregarStats(pasta, todosDecks, statsMap) {
   const decks = coletarDecks(pasta, todosDecks);
-  if (decks.length === 0) return null;
-  return decks.reduce((s, d) => s + (d.memorization_pct || 0), 0) / decks.length;
+  const zero = { total_cards: 0, criticos: 0, hoje: 0, novos: 0, validando: 0, dominados: 0 };
+  return decks.reduce((acc, d) => {
+    const s = statsMap[d.id];
+    if (!s) return acc;
+    return {
+      total_cards: acc.total_cards + (s.total_cards ?? 0),
+      criticos:    acc.criticos    + (s.criticos    ?? 0),
+      hoje:        acc.hoje        + (s.hoje        ?? 0),
+      novos:       acc.novos       + (s.novos       ?? s.new_cards ?? 0),
+      validando:   acc.validando   + (s.validando   ?? s.validating ?? 0),
+      dominados:   acc.dominados   + (s.dominados   ?? s.dominated  ?? 0),
+    };
+  }, zero);
 }
 
-/** Barra de progresso inline */
-function BarraProgresso({ pct, label }) {
-  if (pct === null || pct === undefined) return null;
-  const cor = pct >= 80 ? "#16a34a" : pct >= 40 ? "#d97706" : "#7c3aed";
+/**
+ * Barra segmentada em 4 faixas proporcionais ao total de cards.
+ * Segmentos: Críticos (vermelho) · Hoje (âmbar) · Novos+Validando (cinza) · Dominados (verde)
+ */
+function BarraSegmentada({ stats, carregando = false }) {
+  if (carregando) return <div className="barra-seg barra-seg-skeleton" />;
+
+  const total = stats?.total_cards || 0;
+  if (total === 0) return <div className="barra-seg barra-seg-vazia" />;
+
+  const pct = (v) => Math.max(0, Math.min(100, ((v || 0) / total) * 100));
+
+  const sCriticos  = pct(stats.criticos);
+  const sHoje      = pct(stats.hoje);
+  const sNeutros   = pct((stats.novos || 0) + (stats.validando || 0));
+  const sDominados = pct(stats.dominados);
+
+  const tooltip = [
+    stats.criticos  && `${stats.criticos} crítico${stats.criticos  !== 1 ? "s" : ""}`,
+    stats.hoje      && `${stats.hoje} hoje`,
+    (stats.novos || 0) + (stats.validando || 0) > 0
+      && `${(stats.novos||0)+(stats.validando||0)} em progresso`,
+    stats.dominados && `${stats.dominados} dominado${stats.dominados !== 1 ? "s" : ""}`,
+  ].filter(Boolean).join(" · ");
+
   return (
-    <div className="lista-progresso" title={label ?? `${Math.round(pct)}%`}>
-      <div className="lista-progresso-trilho">
-        <div className="lista-progresso-fill" style={{ width: `${pct}%`, background: cor }} />
-      </div>
-      <span className="lista-progresso-pct">{Math.round(pct)}%</span>
+    <div className="barra-seg" title={tooltip || `${total} cards`} aria-hidden="true">
+      {sCriticos  > 0 && <span className="barra-seg-fatia seg-critico"  style={{ width: `${sCriticos}%`  }} />}
+      {sHoje      > 0 && <span className="barra-seg-fatia seg-hoje"     style={{ width: `${sHoje}%`      }} />}
+      {sNeutros   > 0 && <span className="barra-seg-fatia seg-neutro"   style={{ width: `${sNeutros}%`   }} />}
+      {sDominados > 0 && <span className="barra-seg-fatia seg-dominado" style={{ width: `${sDominados}%` }} />}
     </div>
   );
 }
@@ -51,6 +83,8 @@ function BarraProgresso({ pct, label }) {
 export default function Dashboard({ usuario, aoSair, aoVerCards, aoEstudar, aoCriarDeck }) {
   const [arvore, setArvore]         = useState([]);
   const [todosDecks, setTodosDecks] = useState([]);
+  const [statsMap, setStatsMap]     = useState({});   // { [deckId]: StudyStats }
+  const [statsCarregando, setStatsCarregando] = useState(false);
   const [pastaAtiva, setPastaAtiva] = useState(null);
   const [caminho, setCaminho]       = useState([]);
   const [carregando, setCarregando] = useState(true);
@@ -73,6 +107,14 @@ export default function Dashboard({ usuario, aoSair, aoVerCards, aoEstudar, aoCr
         const atualizada = encontrarPasta(novaArvore, pastaAtivaAtual.id);
         setPastaAtiva(atualizada ?? null);
         if (!atualizada) setCaminho([]);
+      }
+
+      // Carrega stats de todos os decks em paralelo (sem bloquear a UI)
+      if (novosDecks.length > 0) {
+        setStatsCarregando(true);
+        api.statsMultiplos(novosDecks.map(d => d.id))
+          .then(mapa => setStatsMap(mapa))
+          .finally(() => setStatsCarregando(false));
       }
     } catch (err) {
       setErro(err.message);
@@ -269,25 +311,24 @@ export default function Dashboard({ usuario, aoSair, aoVerCards, aoEstudar, aoCr
                 </div>
                 <div className="pastas-grid">
                   {pastasVisiveis.map(pasta => {
-                    const pct      = progressoDaPasta(pasta, todosDecks);
                     const nDecks   = coletarDecks(pasta, todosDecks).length;
                     const nSubpast = (pasta.children || []).length;
                     const meta     = [
                       nDecks > 0   && `${nDecks} deck${nDecks !== 1 ? "s" : ""}`,
                       nSubpast > 0 && `${nSubpast} subpasta${nSubpast !== 1 ? "s" : ""}`,
                     ].filter(Boolean).join(" · ") || "Vazia";
+                    const statsAgregadas = agregarStats(pasta, todosDecks, statsMap);
+                    const temCriticos = statsAgregadas.criticos > 0;
                     return (
-                      <div key={pasta.id} className="pasta-card">
+                      <div key={pasta.id} className={`pasta-card${temCriticos ? " pasta-card-alerta" : ""}`}>
                         <button className="pasta-card-corpo" onClick={() => entrarPasta(pasta)}>
                           <span className="pasta-card-icone"><IconePasta /></span>
                           <span className="pasta-card-nome">{pasta.name}</span>
                           <span className="pasta-card-meta">{meta}</span>
-                          {pct !== null && (
-                            <div className="pasta-card-barra-trilho">
-                              <div className="pasta-card-barra-fill"
-                                style={{ width: `${pct}%`, background: pct >= 80 ? "var(--verde)" : pct >= 40 ? "var(--ambar)" : "var(--violeta)" }} />
-                            </div>
-                          )}
+                          <BarraSegmentada
+                            stats={statsAgregadas}
+                            carregando={statsCarregando && nDecks > 0 && statsAgregadas.total_cards === 0}
+                          />
                         </button>
                         <button className="pasta-card-excluir icone-acao perigo"
                           onClick={e => excluirPasta(pasta, e)} title="Excluir pasta">
@@ -312,7 +353,11 @@ export default function Dashboard({ usuario, aoSair, aoVerCards, aoEstudar, aoCr
                 </div>
                 <ul className="lista-explorer">
                   {decksVisiveis.map(deck => {
-                    const temPendentes = (deck.memorization_pct ?? 0) < 100 && deck.total_cards > 0;
+                    const s = statsMap[deck.id];
+                    const temCriticos  = (s?.criticos ?? 0) > 0;
+                    const temHoje      = (s?.hoje     ?? 0) > 0;
+                    const temPendentes = temCriticos || temHoje ||
+                      (s ? (s.novos ?? s.new_cards ?? 0) > 0 : (deck.memorization_pct ?? 0) < 100);
                     return (
                       <li key={deck.id} className="lista-item lista-deck">
                         <span className="lista-icone deck"><IconeDeck /></span>
@@ -321,15 +366,20 @@ export default function Dashboard({ usuario, aoSair, aoVerCards, aoEstudar, aoCr
                           <span className="lista-meta">
                             {deck.total_cards} card{deck.total_cards !== 1 ? "s" : ""}
                             {deck.description ? ` · ${deck.description}` : ""}
+                            {temCriticos && (
+                              <span className="badge-critico-mini">{s.criticos} crítico{s.criticos !== 1 ? "s" : ""}</span>
+                            )}
                           </span>
                         </button>
-                        <BarraProgresso pct={deck.memorization_pct}
-                          label={`${Math.round(deck.memorization_pct ?? 0)}% memorizado`} />
+                        <BarraSegmentada
+                          stats={s}
+                          carregando={statsCarregando && !s}
+                        />
                         <div className="lista-acoes">
                           <button
-                            className={temPendentes ? "botao-estudar-primary" : "botao-estudar"}
+                            className={temCriticos ? "botao-estudar-critico" : temPendentes ? "botao-estudar-primary" : "botao-estudar"}
                             onClick={() => aoEstudar(deck)}>
-                            Estudar
+                            {temCriticos ? `🔴 ${s.criticos}` : "Estudar"}
                           </button>
                           <button className="icone-acao perigo lista-deck-excluir"
                             onClick={e => excluirDeck(deck, e)} title="Excluir deck">

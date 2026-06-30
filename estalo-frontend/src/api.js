@@ -86,6 +86,18 @@ export const api = {
 
   statsEstudo: (deckId) => request(`/study/decks/${deckId}/stats`),
 
+  // Carrega stats de vários decks em paralelo; retorna Map<id, stats>
+  statsMultiplos: async (deckIds) => {
+    const resultados = await Promise.allSettled(
+      deckIds.map(id => request(`/study/decks/${id}/stats`).then(s => ({ id, s })))
+    );
+    const mapa = {};
+    for (const r of resultados) {
+      if (r.status === "fulfilled") mapa[r.value.id] = r.value.s;
+    }
+    return mapa;
+  },
+
   listarCards: (deckId) => request(`/decks/${deckId}/cards`),
 
   criarCard: (deckId, front, back) =>

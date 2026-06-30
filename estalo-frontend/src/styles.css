@@ -1656,6 +1656,67 @@ kbd {
 .fases-barra-seg.validando { background: var(--ambar); }
 .fases-barra-seg.dominado  { background: var(--verde); }
 
+/* ── Barra segmentada (Dashboard) ── */
+.barra-seg {
+  display: flex;
+  width: 100%;
+  height: 5px;
+  border-radius: 99px;
+  overflow: hidden;
+  background: var(--borda);
+  margin-top: 0.5rem;
+  flex-shrink: 0;
+}
+.barra-seg-fatia {
+  height: 100%;
+  transition: width 0.5s cubic-bezier(.4,0,.2,1);
+  flex-shrink: 0;
+}
+.seg-critico  { background: var(--erro, #dc2626); }
+.seg-hoje     { background: var(--ambar, #d97706); }
+.seg-neutro   { background: var(--borda-forte, #94a3b8); }
+.seg-dominado { background: var(--verde, #16a34a); }
+
+.barra-seg-skeleton {
+  background: linear-gradient(90deg, var(--borda) 25%, var(--superficie) 50%, var(--borda) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.4s infinite;
+}
+.barra-seg-vazia { background: var(--borda); }
+
+/* Pasta com críticos: destaque na borda esquerda */
+.pasta-card-alerta { border-left: 3px solid var(--erro, #dc2626); }
+.pasta-card-alerta .pasta-card-corpo { padding-left: calc(0.9rem - 3px); }
+
+/* Badge inline de críticos na meta do deck */
+.badge-critico-mini {
+  display: inline-flex;
+  align-items: center;
+  background: rgba(220,38,38,.12);
+  color: var(--erro, #dc2626);
+  font-size: 0.68rem;
+  font-weight: 700;
+  padding: 0.1rem 0.4rem;
+  border-radius: 99px;
+  margin-left: 0.4rem;
+  vertical-align: middle;
+}
+
+/* Botão estudar variante crítico */
+.botao-estudar-critico {
+  font-size: 0.78rem;
+  font-weight: 700;
+  padding: 0.3rem 0.6rem;
+  border-radius: 6px;
+  white-space: nowrap;
+  background: rgba(220,38,38,.12);
+  color: var(--erro, #dc2626);
+  border: 1.5px solid rgba(220,38,38,.3);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.botao-estudar-critico:hover { background: rgba(220,38,38,.22); }
+
 /* ---------- Topo da lista ---------- */
 .cards-lista-topo {
   display: flex;
