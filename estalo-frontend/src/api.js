@@ -86,6 +86,8 @@ export const api = {
 
   statsEstudo: (deckId) => request(`/study/decks/${deckId}/stats`),
 
+  heatmapStats: () => request("/study/heatmap-stats"),
+
   // Carrega stats de vários decks em paralelo; retorna Map<id, stats>
   statsMultiplos: async (deckIds) => {
     const resultados = await Promise.allSettled(

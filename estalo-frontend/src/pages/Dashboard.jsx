@@ -443,17 +443,21 @@ function IcoTrash() {
   );
 }
 
-// Gera dados mock para o heatmap (30 dias). Substituir por dados reais quando o backend suportar.
-function gerarHeatmapMock() {
-  // Seed determinística baseada na semana atual para não mudar a cada render
-  const seed = Math.floor(Date.now() / (7 * 24 * 3600 * 1000));
-  return Array.from({ length: 30 }, (_, i) => {
-    const v = Math.sin(seed + i * 2.5) * 0.5 + 0.5; // 0-1
-    if (v < 0.35) return 0;
-    if (v < 0.55) return 1;
-    if (v < 0.75) return 2;
-    if (v < 0.90) return 3;
-    return 4;
+// Nível de intensidade (0-4) a partir da quantidade de avaliações do dia.
+function nivelHeatmap(qtd) {
+  if (!qtd) return 0;
+  if (qtd <= 2) return 1;
+  if (qtd <= 5) return 2;
+  if (qtd <= 9) return 3;
+  return 4;
+}
+
+// Últimos `n` dias (YYYY-MM-DD), do mais antigo pro mais recente.
+function ultimosDias(n) {
+  return Array.from({ length: n }, (_, i) => {
+    const d = new Date();
+    d.setDate(d.getDate() - (n - 1 - i));
+    return d.toISOString().slice(0, 10);
   });
 }
 
@@ -472,7 +476,12 @@ function VisaoGeral({ decks }) {
   const pendentes  = decks.reduce((s, d) =>
     s + Math.round(((1 - (d.memorization_pct || 0) / 100)) * (d.total_cards || 0)), 0);
 
-  const heatmap = gerarHeatmapMock();
+  const [heatmapStats, setHeatmapStats] = useState({});
+  useEffect(() => {
+    api.heatmapStats().then(setHeatmapStats).catch(() => setHeatmapStats({}));
+  }, []);
+
+  const dias = ultimosDias(30);
 
   return (
     <div className="visao-geral-wrapper">
@@ -504,11 +513,14 @@ function VisaoGeral({ decks }) {
       <div className="heatmap-bloco">
         <span className="heatmap-titulo">Atividade — últimos 30 dias</span>
         <div className="heatmap-grid">
-          {heatmap.map((nivel, i) => (
-            <div key={i} className="heatmap-cel"
-              style={{ background: HEATMAP_NIVEIS[nivel].bg }}
-              title={HEATMAP_NIVEIS[nivel].title} />
-          ))}
+          {dias.map((data) => {
+            const nivel = nivelHeatmap(heatmapStats[data]);
+            return (
+              <div key={data} className="heatmap-cel"
+                style={{ background: HEATMAP_NIVEIS[nivel].bg }}
+                title={`${data} — ${HEATMAP_NIVEIS[nivel].title}`} />
+            );
+          })}
         </div>
         <span className="heatmap-legenda">
           Menos

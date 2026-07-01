@@ -347,6 +347,23 @@ def estatisticas(
     )
 
 
+@router.get("/heatmap-stats", response_model=dict[str, int])
+def heatmap_stats(
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Quantidade de avaliações do usuário por dia (YYYY-MM-DD), últimos 30 dias."""
+    desde = datetime.utcnow() - timedelta(days=30)
+    dia = func.date(ReviewHistory.avaliado_em)
+    linhas = (
+        db.query(dia.label("dia"), func.count(ReviewHistory.id))
+        .filter(ReviewHistory.user_id == user.id, ReviewHistory.avaliado_em >= desde)
+        .group_by(dia)
+        .all()
+    )
+    return {str(d): total for d, total in linhas}
+
+
 @router.get("/cards/{card_id}/history", response_model=list[HistoryEntry])
 def historico_card(
     card_id: int,
