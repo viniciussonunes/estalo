@@ -92,6 +92,7 @@ export default function Dashboard({ usuario, aoSair, aoVerCards, aoEstudar, aoCr
   const [criandoPasta, setCriandoPasta]   = useState(false);
   const [nomePasta, setNomePasta]         = useState("");
   const [salvandoPasta, setSalvandoPasta] = useState(false);
+  const [editando, setEditando] = useState(null); // { tipo: "pasta"|"deck", id, valor }
   const inputRef = useRef(null);
 
   const carregar = useCallback(async (pastaAtivaAtual = null) => {
@@ -179,6 +180,24 @@ export default function Dashboard({ usuario, aoSair, aoVerCards, aoEstudar, aoCr
     if (!confirm(`Excluir "${deck.title}" e todos os cards?`)) return;
     try { await api.excluirDeck(deck.id); await carregar(pastaAtiva); }
     catch (err) { setErro(err.message); }
+  }
+
+  function iniciarEdicao(tipo, id, valorAtual, e) {
+    e.stopPropagation();
+    setEditando({ tipo, id, valor: valorAtual });
+  }
+
+  async function confirmarEdicao() {
+    if (!editando) return;
+    const { tipo, id, valor } = editando;
+    setEditando(null);
+    const nomeNovo = valor.trim();
+    if (!nomeNovo) return;
+    try {
+      if (tipo === "pasta") await api.renomearPasta(id, nomeNovo);
+      else await api.renomearDeck(id, nomeNovo);
+      await carregar(pastaAtiva);
+    } catch (err) { setErro(err.message); }
   }
 
   const podeAdicionarPasta = !pastaAtiva || pastaAtiva.depth < 4;
@@ -319,16 +338,39 @@ export default function Dashboard({ usuario, aoSair, aoVerCards, aoEstudar, aoCr
                     ].filter(Boolean).join(" · ") || "Vazia";
                     const statsAgregadas = agregarStats(pasta, todosDecks, statsMap);
                     const temCriticos = statsAgregadas.criticos > 0;
+                    const editandoEsta = editando?.tipo === "pasta" && editando.id === pasta.id;
                     return (
                       <div key={pasta.id} className={`pasta-card${temCriticos ? " pasta-card-alerta" : ""}`}>
-                        <button className="pasta-card-corpo" onClick={() => entrarPasta(pasta)}>
-                          <span className="pasta-card-icone"><IconePasta /></span>
-                          <span className="pasta-card-nome">{pasta.name}</span>
-                          <span className="pasta-card-meta">{meta}</span>
-                          <BarraSegmentada
-                            stats={statsAgregadas}
-                            carregando={statsCarregando && nDecks > 0 && statsAgregadas.total_cards === 0}
-                          />
+                        {editandoEsta ? (
+                          <div className="pasta-card-corpo">
+                            <span className="pasta-card-icone"><IconePasta /></span>
+                            <input
+                              className="pasta-card-nome-input"
+                              value={editando.valor}
+                              autoFocus
+                              onFocus={e => e.target.select()}
+                              onChange={e => setEditando(ed => ({ ...ed, valor: e.target.value }))}
+                              onBlur={confirmarEdicao}
+                              onKeyDown={e => {
+                                if (e.key === "Enter") { e.preventDefault(); e.currentTarget.blur(); }
+                                if (e.key === "Escape") { e.preventDefault(); setEditando(null); }
+                              }}
+                            />
+                          </div>
+                        ) : (
+                          <button className="pasta-card-corpo" onClick={() => entrarPasta(pasta)}>
+                            <span className="pasta-card-icone"><IconePasta /></span>
+                            <span className="pasta-card-nome">{pasta.name}</span>
+                            <span className="pasta-card-meta">{meta}</span>
+                            <BarraSegmentada
+                              stats={statsAgregadas}
+                              carregando={statsCarregando && nDecks > 0 && statsAgregadas.total_cards === 0}
+                            />
+                          </button>
+                        )}
+                        <button className="pasta-card-editar icone-acao"
+                          onClick={e => iniciarEdicao("pasta", pasta.id, pasta.name, e)} title="Renomear pasta">
+                          <IcoLapis />
                         </button>
                         <button className="pasta-card-excluir icone-acao perigo"
                           onClick={e => excluirPasta(pasta, e)} title="Excluir pasta">
@@ -358,19 +400,37 @@ export default function Dashboard({ usuario, aoSair, aoVerCards, aoEstudar, aoCr
                     const temHoje      = (s?.hoje     ?? 0) > 0;
                     const temPendentes = temCriticos || temHoje ||
                       (s ? (s.novos ?? s.new_cards ?? 0) > 0 : (deck.memorization_pct ?? 0) < 100);
+                    const editandoEste = editando?.tipo === "deck" && editando.id === deck.id;
                     return (
                       <li key={deck.id} className="lista-item lista-deck">
                         <span className="lista-icone deck"><IconeDeck /></span>
-                        <button className="lista-info" onClick={() => aoVerCards(deck)}>
-                          <span className="lista-nome">{deck.title}</span>
-                          <span className="lista-meta">
-                            {deck.total_cards} card{deck.total_cards !== 1 ? "s" : ""}
-                            {deck.description ? ` · ${deck.description}` : ""}
-                            {temCriticos && (
-                              <span className="badge-critico-mini">{s.criticos} crítico{s.criticos !== 1 ? "s" : ""}</span>
-                            )}
-                          </span>
-                        </button>
+                        {editandoEste ? (
+                          <div className="lista-info">
+                            <input
+                              className="lista-nome-input"
+                              value={editando.valor}
+                              autoFocus
+                              onFocus={e => e.target.select()}
+                              onChange={e => setEditando(ed => ({ ...ed, valor: e.target.value }))}
+                              onBlur={confirmarEdicao}
+                              onKeyDown={e => {
+                                if (e.key === "Enter") { e.preventDefault(); e.currentTarget.blur(); }
+                                if (e.key === "Escape") { e.preventDefault(); setEditando(null); }
+                              }}
+                            />
+                          </div>
+                        ) : (
+                          <button className="lista-info" onClick={() => aoVerCards(deck)}>
+                            <span className="lista-nome">{deck.title}</span>
+                            <span className="lista-meta">
+                              {deck.total_cards} card{deck.total_cards !== 1 ? "s" : ""}
+                              {deck.description ? ` · ${deck.description}` : ""}
+                              {temCriticos && (
+                                <span className="badge-critico-mini">{s.criticos} crítico{s.criticos !== 1 ? "s" : ""}</span>
+                              )}
+                            </span>
+                          </button>
+                        )}
                         <BarraSegmentada
                           stats={s}
                           carregando={statsCarregando && !s}
@@ -380,6 +440,10 @@ export default function Dashboard({ usuario, aoSair, aoVerCards, aoEstudar, aoCr
                             className={temCriticos ? "botao-estudar-critico" : temPendentes ? "botao-estudar-primary" : "botao-estudar"}
                             onClick={() => aoEstudar(deck)}>
                             {temCriticos ? `🔴 ${s.criticos}` : "Estudar"}
+                          </button>
+                          <button className="icone-acao lista-deck-editar"
+                            onClick={e => iniciarEdicao("deck", deck.id, deck.title, e)} title="Renomear deck">
+                            <IcoLapis />
                           </button>
                           <button className="icone-acao perigo lista-deck-excluir"
                             onClick={e => excluirDeck(deck, e)} title="Excluir deck">
@@ -431,6 +495,15 @@ function SidebarNo({ pasta, pastaAtiva, aoNavegar, nivel }) {
         </ul>
       )}
     </li>
+  );
+}
+
+function IcoLapis() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor"
+      strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M13.5 3.5l3 3L7 16H4v-3L13.5 3.5z" />
+    </svg>
   );
 }
 

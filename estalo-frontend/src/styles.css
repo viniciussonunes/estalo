@@ -1534,19 +1534,39 @@ kbd {
   transition: width 0.5s ease;
 }
 
-/* Botão excluir pasta — oculto até hover */
+/* Botões editar/excluir pasta — ocultos até hover */
+.pasta-card-editar,
 .pasta-card-excluir {
   position: absolute;
   top: 0.45rem;
-  right: 0.45rem;
   opacity: 0;
   transition: opacity var(--transicao);
 }
+.pasta-card-editar  { right: 2.3rem; }
+.pasta-card-excluir { right: 0.45rem; }
+.pasta-card:hover .pasta-card-editar,
 .pasta-card:hover .pasta-card-excluir { opacity: 1; }
 
-/* Botão excluir deck — oculto até hover */
+/* Botões editar/excluir deck — ocultos até hover */
+.lista-deck-editar,
 .lista-deck-excluir { opacity: 0; transition: opacity var(--transicao); }
+.lista-item.lista-deck:hover .lista-deck-editar,
 .lista-item.lista-deck:hover .lista-deck-excluir { opacity: 1; }
+
+/* Inputs de renomeação inline */
+.pasta-card-nome-input,
+.lista-nome-input {
+  font: inherit;
+  color: var(--tinta);
+  background: var(--superficie);
+  border: 1.5px solid var(--violeta);
+  border-radius: 6px;
+  padding: 0.1rem 0.35rem;
+  width: 100%;
+  outline: none;
+}
+.pasta-card-nome-input { font-size: 0.88rem; font-weight: 600; }
+.lista-nome-input { font-size: 0.93rem; font-weight: 600; }
 
 /* ---------- Cards V2 — status cards (crítico / hoje) ---------- */
 .status-cards {
@@ -1961,7 +1981,9 @@ kbd {
 
   /* Hover actions visíveis sempre no mobile (sem hover real) */
   .lista-deck-excluir  { opacity: 1; }
+  .lista-deck-editar   { opacity: 1; }
   .pasta-card-excluir  { opacity: 1; }
+  .pasta-card-editar   { opacity: 1; }
   .item-card-acoes     { opacity: 1; }
 
   .sessao-stats { gap: 0.45rem; }
