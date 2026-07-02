@@ -1576,11 +1576,11 @@ kbd {
 .pasta-card:hover .pasta-card-editar,
 .pasta-card:hover .pasta-card-excluir { opacity: 1; }
 
-/* Botões editar/excluir deck — ocultos até hover */
+/* Botões editar/excluir de itens em lista (decks e pastas) — ocultos até hover */
 .lista-deck-editar,
 .lista-deck-excluir { opacity: 0; transition: opacity var(--transicao); }
-.lista-item.lista-deck:hover .lista-deck-editar,
-.lista-item.lista-deck:hover .lista-deck-excluir { opacity: 1; }
+.lista-item:hover .lista-deck-editar,
+.lista-item:hover .lista-deck-excluir { opacity: 1; }
 
 /* Inputs de renomeação inline */
 .pasta-card-nome-input,
