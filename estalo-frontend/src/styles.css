@@ -17,10 +17,113 @@
   --verde-suave: #f0fdf4;
   --perigo: #ef4444;
   --perigo-suave: #fef2f2;
+  --erro: #dc2626;
+  --borda-forte: #94a3b8;
   --raio: 12px;
   --sombra: 0 1px 3px rgba(23, 22, 31, 0.05), 0 8px 24px rgba(23, 22, 31, 0.07);
   --sombra-elevada: 0 4px 16px rgba(23, 22, 31, 0.1), 0 1px 4px rgba(23, 22, 31, 0.06);
   --transicao: 0.15s ease;
+}
+
+/* ===== Modo escuro =====
+   Aplicado via classe .tema-escuro em <html> (ver hooks/useTheme.js).
+   verde/âmbar/perigo ficam com o mesmo tom nos dois modos — já são
+   saturados o bastante para ler bem tanto no claro quanto no escuro;
+   só o que precisa mudar de fato é fundo/texto/borda e o violeta
+   (que como cor de texto/ícone precisa clarear sobre fundo escuro). */
+:root.tema-escuro {
+  --tinta: #f0eef6;
+  --tinta-suave: #a29dae;
+  --papel: #131218;
+  --superficie: #1d1c26;
+  --borda: #322f3d;
+  --borda-forte: #4c485a;
+  --violeta: #8b82f5;
+  --violeta-escuro: #7269e0;
+  --violeta-suave: rgba(139, 130, 245, 0.16);
+  --ambar-suave: rgba(245, 158, 11, 0.16);
+  --verde-suave: rgba(22, 163, 74, 0.18);
+  --perigo-suave: rgba(239, 68, 68, 0.16);
+  --sombra: 0 1px 3px rgba(0, 0, 0, 0.4), 0 8px 24px rgba(0, 0, 0, 0.5);
+  --sombra-elevada: 0 4px 20px rgba(0, 0, 0, 0.55), 0 1px 6px rgba(0, 0, 0, 0.45);
+}
+
+/* Seletores que usam cor fixa em vez de variável — precisam de uma
+   contraparte explícita no escuro, já que trocar só as variáveis
+   acima não alcança esses casos. */
+.tema-escuro .erro,
+.tema-escuro .nota-errei,
+.tema-escuro .quiz-explicacao.errou,
+.tema-escuro .lista-btn-excluir:hover,
+.tema-escuro .explorer-excluir:hover,
+.tema-escuro .linha-card-remover:hover {
+  background: var(--perigo-suave);
+}
+
+.tema-escuro .quiz-opcao.correta { border-color: var(--verde); }
+.tema-escuro .quiz-opcao.correta .quiz-opcao-letra {
+  background: var(--verde);
+  border-color: var(--verde);
+}
+.tema-escuro .quiz-explicacao.acertou { background: var(--verde-suave); border-color: var(--verde); }
+.tema-escuro .quiz-explicacao.acertou .quiz-explicacao-status,
+.tema-escuro .quiz-acertos,
+.tema-escuro .sessao-stat.verde .sessao-stat-valor {
+  color: var(--verde);
+}
+.tema-escuro .resultado-badge.dominado,
+.tema-escuro .stat-dominado {
+  background: var(--verde-suave);
+  border-color: var(--verde);
+  color: var(--verde);
+}
+
+.tema-escuro .stat-novo {
+  background: var(--violeta-suave);
+  border-color: var(--violeta);
+  color: var(--violeta);
+}
+
+.tema-escuro .nota-facil { background: var(--ambar-suave); color: var(--ambar); }
+.tema-escuro .stat-aprendendo,
+.tema-escuro .quiz-repetindo {
+  background: var(--ambar-suave);
+  border-color: var(--ambar);
+  color: var(--ambar);
+}
+.tema-escuro .sessao-stat.ambar .sessao-stat-valor { color: var(--ambar); }
+
+.tema-escuro .botao-modo:hover,
+.tema-escuro .quiz-opcao:not(:disabled):hover,
+.tema-escuro .fab-menu-item:hover {
+  background: var(--violeta-suave);
+}
+.tema-escuro .explorer-pasta:hover { background: var(--papel); }
+.tema-escuro .revelar-explicacao,
+.tema-escuro .gamificado-aviso {
+  background: var(--violeta-suave);
+  border-color: var(--violeta);
+}
+.tema-escuro .estudo-concluido-icone,
+.tema-escuro .nota-bom,
+.tema-escuro .badge-ia {
+  background: var(--violeta-suave);
+}
+.tema-escuro .nota-dificil { background: var(--violeta-suave); color: var(--violeta); }
+.tema-escuro .badge-ia { border-color: var(--violeta); }
+
+/* Hover de borda em cards/itens — usa um tom mais claro que --borda */
+.tema-escuro .card-deck:hover,
+.tema-escuro .item-card:hover,
+.tema-escuro .explorer-item:hover,
+.tema-escuro .pasta-card:hover,
+.tema-escuro .lista-item:hover {
+  border-color: var(--borda-forte);
+}
+
+.tema-escuro .item-card-editando { background: var(--papel); }
+.tema-escuro .skeleton {
+  background: linear-gradient(90deg, var(--borda) 25%, var(--superficie) 50%, var(--borda) 75%);
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -186,6 +289,21 @@ body {
 }
 .topo-direita { display: flex; align-items: center; gap: 0.75rem; }
 .usuario-email { color: var(--tinta-suave); font-size: 0.9rem; }
+
+.toggle-tema {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--borda);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--tinta-suave);
+  cursor: pointer;
+  transition: background var(--transicao), color var(--transicao), border-color var(--transicao);
+}
+.toggle-tema:hover { border-color: var(--violeta); color: var(--violeta); background: var(--violeta-suave); }
 
 .conteudo { max-width: 720px; margin: 0 auto; padding: 2rem 1.5rem; }
 .titulo-pagina {

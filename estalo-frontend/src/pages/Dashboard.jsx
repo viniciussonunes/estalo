@@ -80,7 +80,7 @@ function BarraSegmentada({ stats, carregando = false }) {
   );
 }
 
-export default function Dashboard({ usuario, aoSair, aoVerCards, aoEstudar, aoCriarDeck }) {
+export default function Dashboard({ usuario, aoSair, aoVerCards, aoEstudar, aoCriarDeck, tema, proximoTema }) {
   const [arvore, setArvore]         = useState([]);
   const [todosDecks, setTodosDecks] = useState([]);
   const [statsMap, setStatsMap]     = useState({});   // { [deckId]: StudyStats }
@@ -216,6 +216,7 @@ export default function Dashboard({ usuario, aoSair, aoVerCards, aoEstudar, aoCr
       <header className="topo">
         <span className="marca-nome pequeno">Estalo</span>
         <div className="topo-direita">
+          <ToggleTema tema={tema} proximoTema={proximoTema} />
           <span className="usuario-email">{usuario.email}</span>
           <button className="botao-texto" onClick={aoSair}>Sair</button>
         </div>
@@ -573,6 +574,48 @@ function SidebarNo({ pasta, pastaAtiva, aoNavegar, nivel }) {
         </ul>
       )}
     </li>
+  );
+}
+
+const TEMA_ICONES = { light: IconeSol, dark: IconeLua, system: IconeMonitor };
+const TEMA_LABELS = { light: "Claro", dark: "Escuro", system: "Sistema" };
+
+/** Botão único que cicla light → dark → system → light. */
+function ToggleTema({ tema, proximoTema }) {
+  const Icone = TEMA_ICONES[tema] ?? IconeMonitor;
+  return (
+    <button className="toggle-tema" onClick={proximoTema}
+      title={`Tema: ${TEMA_LABELS[tema] ?? "Sistema"} (clique para trocar)`}>
+      <Icone />
+    </button>
+  );
+}
+
+function IconeSol() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor"
+      strokeWidth="1.6" strokeLinecap="round" aria-hidden="true">
+      <circle cx="10" cy="10" r="3.5" />
+      <path d="M10 2v2M10 16v2M2 10h2M16 10h2M4.2 4.2l1.4 1.4M14.4 14.4l1.4 1.4M4.2 15.8l1.4-1.4M14.4 5.6l1.4-1.4" />
+    </svg>
+  );
+}
+
+function IconeLua() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+      <path d="M16.7 12.4A7 7 0 018.1 3.3a.6.6 0 00-.7-.8A8 8 0 1017.5 13a.6.6 0 00-.8-.6z" />
+    </svg>
+  );
+}
+
+function IconeMonitor() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor"
+      strokeWidth="1.6" strokeLinejoin="round" aria-hidden="true">
+      <rect x="2.5" y="4" width="15" height="10" rx="1.3" />
+      <path d="M7 17.5h6M10 14v3.5" strokeLinecap="round" />
+    </svg>
   );
 }
 
