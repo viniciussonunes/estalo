@@ -1564,6 +1564,22 @@ kbd {
   letter-spacing: 0.07em;
   color: var(--tinta-suave);
 }
+.heatmap-cabecalho {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+.streak-badge {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--ambar);
+  background: var(--ambar-suave);
+  border-radius: 20px;
+  padding: 0.2rem 0.65rem;
+  white-space: nowrap;
+}
 .heatmap-grid {
   display: grid;
   grid-template-columns: repeat(30, 1fr);

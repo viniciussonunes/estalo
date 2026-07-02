@@ -59,6 +59,11 @@ class StudyStats(BaseModel):
     dominated: int
 
 
+class StreakOut(BaseModel):
+    current_streak: int   # dias seguidos terminando hoje ou ontem (0 se quebrou)
+    longest_streak: int   # maior sequência já registrada
+
+
 class HistoryEntry(BaseModel):
     id: int
     card_id: int

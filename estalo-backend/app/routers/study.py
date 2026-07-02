@@ -12,7 +12,7 @@ from app.models import Card, Deck, Review, User
 from app.models.review_history import ReviewHistory
 from app.schemas.study import (
     HistoryEntry, QuizOption, QuizQuestion, RevealCard,
-    ReviewAnswer, ReviewResult, SessaoConcluida, StudyCard, StudyStats,
+    ReviewAnswer, ReviewResult, SessaoConcluida, StreakOut, StudyCard, StudyStats,
 )
 from app.services.ai import IAError, gerar_explicacoes, gerar_quiz
 from app.services.sm2 import SM2State, calcular_proxima_revisao
@@ -362,6 +362,45 @@ def heatmap_stats(
         .all()
     )
     return {str(d): total for d, total in linhas}
+
+
+@router.get("/streak", response_model=StreakOut)
+def streak(
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Sequência de dias seguidos com pelo menos uma avaliação (ReviewHistory)."""
+    dia = func.date(ReviewHistory.avaliado_em)
+    linhas = (
+        db.query(dia)
+        .filter(ReviewHistory.user_id == user.id)
+        .distinct()
+        .all()
+    )
+    dias = sorted(date.fromisoformat(str(d)) for (d,) in linhas)
+    if not dias:
+        return StreakOut(current_streak=0, longest_streak=0)
+
+    # Maior sequência já registrada, olhando o histórico inteiro
+    maior = sequencia = 1
+    for anterior, atual in zip(dias, dias[1:]):
+        sequencia = sequencia + 1 if (atual - anterior).days == 1 else 1
+        maior = max(maior, sequencia)
+
+    # Sequência atual: só conta se o último dia estudado foi hoje ou ontem;
+    # senão a sequência "quebrou" e current_streak é 0.
+    hoje = datetime.utcnow().date()
+    if dias[-1] < hoje - timedelta(days=1):
+        atual_streak = 0
+    else:
+        atual_streak = 1
+        for i in range(len(dias) - 1, 0, -1):
+            if (dias[i] - dias[i - 1]).days == 1:
+                atual_streak += 1
+            else:
+                break
+
+    return StreakOut(current_streak=atual_streak, longest_streak=maior)
 
 
 @router.get("/cards/{card_id}/history", response_model=list[HistoryEntry])

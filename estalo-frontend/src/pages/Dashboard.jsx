@@ -764,6 +764,11 @@ function VisaoGeral({ decks }) {
     api.heatmapStats().then(setHeatmapStats).catch(() => setHeatmapStats({}));
   }, []);
 
+  const [streak, setStreak] = useState(null);
+  useEffect(() => {
+    api.streak().then(setStreak).catch(() => setStreak(null));
+  }, []);
+
   const dias = ultimosDias(30);
 
   return (
@@ -794,7 +799,15 @@ function VisaoGeral({ decks }) {
 
       {/* Heatmap de atividade */}
       <div className="heatmap-bloco">
-        <span className="heatmap-titulo">Atividade — últimos 30 dias</span>
+        <div className="heatmap-cabecalho">
+          <span className="heatmap-titulo">Atividade — últimos 30 dias</span>
+          {streak && streak.current_streak > 0 && (
+            <span className="streak-badge"
+              title={`Recorde: ${streak.longest_streak} dia${streak.longest_streak !== 1 ? "s" : ""} seguido${streak.longest_streak !== 1 ? "s" : ""}`}>
+              🔥 Streak atual: {streak.current_streak} dia{streak.current_streak !== 1 ? "s" : ""}
+            </span>
+          )}
+        </div>
         <div className="heatmap-grid">
           {dias.map((data) => {
             const nivel = nivelHeatmap(heatmapStats[data]);

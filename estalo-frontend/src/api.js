@@ -94,6 +94,8 @@ export const api = {
 
   heatmapStats: () => request("/study/heatmap-stats"),
 
+  streak: () => request("/study/streak"),
+
   // Carrega stats de vários decks em paralelo; retorna Map<id, stats>
   statsMultiplos: async (deckIds) => {
     const resultados = await Promise.allSettled(
