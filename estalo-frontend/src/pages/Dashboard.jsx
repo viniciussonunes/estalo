@@ -93,7 +93,15 @@ export default function Dashboard({ usuario, aoSair, aoVerCards, aoEstudar, aoCr
   const [nomePasta, setNomePasta]         = useState("");
   const [salvandoPasta, setSalvandoPasta] = useState(false);
   const [editando, setEditando] = useState(null); // { tipo: "pasta"|"deck", id, valor }
+  const [viewMode, setViewMode] = useState(() => {
+    try { return localStorage.getItem("dashboard_view_mode") === "list" ? "list" : "grid"; }
+    catch { return "grid"; }
+  });
   const inputRef = useRef(null);
+
+  useEffect(() => {
+    try { localStorage.setItem("dashboard_view_mode", viewMode); } catch { /* localStorage indisponível */ }
+  }, [viewMode]);
 
   const carregar = useCallback(async (pastaAtivaAtual = null) => {
     setErro("");
@@ -316,70 +324,51 @@ export default function Dashboard({ usuario, aoSair, aoVerCards, aoEstudar, aoCr
           </div>
         ) : (
           <div className="explorer-secoes">
-            {/* ── Pastas em grid ── */}
+            {/* ── Pastas: grid ou lista, conforme viewMode ── */}
             {pastasVisiveis.length > 0 && (
               <section className="explorer-secao">
                 <div className="explorer-secao-header">
                   <h2 className="explorer-secao-titulo">Pastas</h2>
-                  {podeAdicionarPasta && (
-                    <button className="btn-secao-acao"
-                      onClick={() => { setCriandoPasta(true); setNomePasta(""); }}>
-                      + Nova Pasta
-                    </button>
-                  )}
+                  <div className="explorer-secao-acoes">
+                    <div className="view-toggle" role="group" aria-label="Modo de exibição das pastas">
+                      <button
+                        className={`view-toggle-btn${viewMode === "grid" ? " ativo" : ""}`}
+                        onClick={() => setViewMode("grid")} title="Ver em blocos">
+                        <IconeGrid />
+                      </button>
+                      <button
+                        className={`view-toggle-btn${viewMode === "list" ? " ativo" : ""}`}
+                        onClick={() => setViewMode("list")} title="Ver em lista">
+                        <IconeListaModo />
+                      </button>
+                    </div>
+                    {podeAdicionarPasta && (
+                      <button className="btn-secao-acao"
+                        onClick={() => { setCriandoPasta(true); setNomePasta(""); }}>
+                        + Nova Pasta
+                      </button>
+                    )}
+                  </div>
                 </div>
-                <div className="pastas-grid">
-                  {pastasVisiveis.map(pasta => {
-                    const nDecks   = coletarDecks(pasta, todosDecks).length;
-                    const nSubpast = (pasta.children || []).length;
-                    const meta     = [
-                      nDecks > 0   && `${nDecks} deck${nDecks !== 1 ? "s" : ""}`,
-                      nSubpast > 0 && `${nSubpast} subpasta${nSubpast !== 1 ? "s" : ""}`,
-                    ].filter(Boolean).join(" · ") || "Vazia";
-                    const statsAgregadas = agregarStats(pasta, todosDecks, statsMap);
-                    const temCriticos = statsAgregadas.criticos > 0;
-                    const editandoEsta = editando?.tipo === "pasta" && editando.id === pasta.id;
-                    return (
-                      <div key={pasta.id} className={`pasta-card${temCriticos ? " pasta-card-alerta" : ""}`}>
-                        {editandoEsta ? (
-                          <div className="pasta-card-corpo">
-                            <span className="pasta-card-icone"><IconePasta /></span>
-                            <input
-                              className="pasta-card-nome-input"
-                              value={editando.valor}
-                              autoFocus
-                              onFocus={e => e.target.select()}
-                              onChange={e => setEditando(ed => ({ ...ed, valor: e.target.value }))}
-                              onBlur={confirmarEdicao}
-                              onKeyDown={e => {
-                                if (e.key === "Enter") { e.preventDefault(); e.currentTarget.blur(); }
-                                if (e.key === "Escape") { e.preventDefault(); setEditando(null); }
-                              }}
-                            />
-                          </div>
-                        ) : (
-                          <button className="pasta-card-corpo" onClick={() => entrarPasta(pasta)}>
-                            <span className="pasta-card-icone"><IconePasta /></span>
-                            <span className="pasta-card-nome">{pasta.name}</span>
-                            <span className="pasta-card-meta">{meta}</span>
-                            <BarraSegmentada
-                              stats={statsAgregadas}
-                              carregando={statsCarregando && nDecks > 0 && statsAgregadas.total_cards === 0}
-                            />
-                          </button>
-                        )}
-                        <button className="pasta-card-editar icone-acao"
-                          onClick={e => iniciarEdicao("pasta", pasta.id, pasta.name, e)} title="Renomear pasta">
-                          <IcoLapis />
-                        </button>
-                        <button className="pasta-card-excluir icone-acao perigo"
-                          onClick={e => excluirPasta(pasta, e)} title="Excluir pasta">
-                          <IcoTrash />
-                        </button>
-                      </div>
-                    );
-                  })}
-                </div>
+                {viewMode === "grid" ? (
+                  <div className="pastas-grid">
+                    {pastasVisiveis.map(pasta => (
+                      <PastaItem key={pasta.id} viewMode="grid" pasta={pasta} todosDecks={todosDecks}
+                        statsMap={statsMap} statsCarregando={statsCarregando} editando={editando}
+                        setEditando={setEditando} confirmarEdicao={confirmarEdicao}
+                        iniciarEdicao={iniciarEdicao} entrarPasta={entrarPasta} excluirPasta={excluirPasta} />
+                    ))}
+                  </div>
+                ) : (
+                  <ul className="pastas-lista lista-explorer">
+                    {pastasVisiveis.map(pasta => (
+                      <PastaItem key={pasta.id} viewMode="list" pasta={pasta} todosDecks={todosDecks}
+                        statsMap={statsMap} statsCarregando={statsCarregando} editando={editando}
+                        setEditando={setEditando} confirmarEdicao={confirmarEdicao}
+                        iniciarEdicao={iniciarEdicao} entrarPasta={entrarPasta} excluirPasta={excluirPasta} />
+                    ))}
+                  </ul>
+                )}
               </section>
             )}
 
@@ -465,6 +454,95 @@ export default function Dashboard({ usuario, aoSair, aoVerCards, aoEstudar, aoCr
   );
 }
 
+/** Uma pasta, renderizada como bloco (grid) ou linha (lista) conforme `viewMode`. */
+function PastaItem({
+  pasta, viewMode, todosDecks, statsMap, statsCarregando,
+  editando, setEditando, confirmarEdicao, iniciarEdicao, entrarPasta, excluirPasta,
+}) {
+  const nDecks   = coletarDecks(pasta, todosDecks).length;
+  const nSubpast = (pasta.children || []).length;
+  const meta     = [
+    nDecks > 0   && `${nDecks} deck${nDecks !== 1 ? "s" : ""}`,
+    nSubpast > 0 && `${nSubpast} subpasta${nSubpast !== 1 ? "s" : ""}`,
+  ].filter(Boolean).join(" · ") || "Vazia";
+  const statsAgregadas = agregarStats(pasta, todosDecks, statsMap);
+  const temCriticos = statsAgregadas.criticos > 0;
+  const editandoEsta = editando?.tipo === "pasta" && editando.id === pasta.id;
+  const barra = (
+    <BarraSegmentada
+      stats={statsAgregadas}
+      carregando={statsCarregando && nDecks > 0 && statsAgregadas.total_cards === 0}
+    />
+  );
+  const inputNome = (
+    <input
+      className={viewMode === "grid" ? "pasta-card-nome-input" : "lista-nome-input"}
+      value={editando?.valor ?? ""}
+      autoFocus
+      onFocus={e => e.target.select()}
+      onChange={e => setEditando(ed => ({ ...ed, valor: e.target.value }))}
+      onBlur={confirmarEdicao}
+      onKeyDown={e => {
+        if (e.key === "Enter") { e.preventDefault(); e.currentTarget.blur(); }
+        if (e.key === "Escape") { e.preventDefault(); setEditando(null); }
+      }}
+    />
+  );
+
+  if (viewMode === "list") {
+    return (
+      <li className="lista-item lista-pasta">
+        <span className="lista-icone pasta"><IconePasta /></span>
+        {editandoEsta ? (
+          <div className="lista-info">{inputNome}</div>
+        ) : (
+          <button className="lista-info" onClick={() => entrarPasta(pasta)}>
+            <span className="lista-nome">{pasta.name}</span>
+            <span className="lista-meta">{meta}</span>
+          </button>
+        )}
+        {barra}
+        <div className="lista-acoes">
+          <button className="icone-acao lista-deck-editar"
+            onClick={e => iniciarEdicao("pasta", pasta.id, pasta.name, e)} title="Renomear pasta">
+            <IcoLapis />
+          </button>
+          <button className="icone-acao perigo lista-deck-excluir"
+            onClick={e => excluirPasta(pasta, e)} title="Excluir pasta">
+            <IcoTrash />
+          </button>
+        </div>
+      </li>
+    );
+  }
+
+  return (
+    <div className={`pasta-card${temCriticos ? " pasta-card-alerta" : ""}`}>
+      {editandoEsta ? (
+        <div className="pasta-card-corpo">
+          <span className="pasta-card-icone"><IconePasta /></span>
+          {inputNome}
+        </div>
+      ) : (
+        <button className="pasta-card-corpo" onClick={() => entrarPasta(pasta)}>
+          <span className="pasta-card-icone"><IconePasta /></span>
+          <span className="pasta-card-nome">{pasta.name}</span>
+          <span className="pasta-card-meta">{meta}</span>
+          {barra}
+        </button>
+      )}
+      <button className="pasta-card-editar icone-acao"
+        onClick={e => iniciarEdicao("pasta", pasta.id, pasta.name, e)} title="Renomear pasta">
+        <IcoLapis />
+      </button>
+      <button className="pasta-card-excluir icone-acao perigo"
+        onClick={e => excluirPasta(pasta, e)} title="Excluir pasta">
+        <IcoTrash />
+      </button>
+    </div>
+  );
+}
+
 function SidebarNo({ pasta, pastaAtiva, aoNavegar, nivel }) {
   const [aberta, setAberta] = useState(nivel < 1);
   const eAtiva = pastaAtiva?.id === pasta.id;
@@ -495,6 +573,27 @@ function SidebarNo({ pasta, pastaAtiva, aoNavegar, nivel }) {
         </ul>
       )}
     </li>
+  );
+}
+
+function IconeGrid() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor"
+      strokeWidth="1.7" strokeLinejoin="round" aria-hidden="true">
+      <rect x="2.5" y="2.5" width="6.5" height="6.5" rx="1.2" />
+      <rect x="11" y="2.5" width="6.5" height="6.5" rx="1.2" />
+      <rect x="2.5" y="11" width="6.5" height="6.5" rx="1.2" />
+      <rect x="11" y="11" width="6.5" height="6.5" rx="1.2" />
+    </svg>
+  );
+}
+
+function IconeListaModo() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor"
+      strokeWidth="1.7" strokeLinecap="round" aria-hidden="true">
+      <path d="M3 5h14M3 10h14M3 15h14" />
+    </svg>
   );
 }
 

@@ -1361,6 +1361,35 @@ kbd {
 }
 .explorer-secao-header .explorer-secao-titulo { margin-bottom: 0; }
 
+.explorer-secao-acoes {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+/* Toggle grid/lista */
+.view-toggle {
+  display: inline-flex;
+  border: 1.5px solid var(--borda);
+  border-radius: 7px;
+  overflow: hidden;
+}
+.view-toggle-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 26px;
+  border: none;
+  background: transparent;
+  color: var(--tinta-suave);
+  cursor: pointer;
+  transition: background var(--transicao), color var(--transicao);
+}
+.view-toggle-btn + .view-toggle-btn { border-left: 1.5px solid var(--borda); }
+.view-toggle-btn:hover { background: var(--papel); color: var(--tinta); }
+.view-toggle-btn.ativo { background: var(--violeta-suave); color: var(--violeta); }
+
 .btn-secao-acao {
   display: inline-flex;
   align-items: center;
