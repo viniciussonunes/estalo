@@ -41,7 +41,8 @@
   --violeta: #8b82f5;
   --violeta-escuro: #7269e0;
   --violeta-suave: rgba(139, 130, 245, 0.16);
-  --ambar-suave: rgba(245, 158, 11, 0.16);
+  --ambar: #fbbf24;
+  --ambar-suave: rgba(251, 191, 36, 0.16);
   --verde-suave: rgba(22, 163, 74, 0.18);
   --perigo-suave: rgba(239, 68, 68, 0.16);
   --sombra: 0 1px 3px rgba(0, 0, 0, 0.4), 0 8px 24px rgba(0, 0, 0, 0.5);
@@ -93,6 +94,13 @@
 }
 .tema-escuro .sessao-stat.ambar .sessao-stat-valor { color: var(--ambar); }
 
+/* Caixa do ícone em itens de lista (pasta/deck): var(--papel) fica mais
+   escuro que o próprio card no tema escuro, "engolindo" o ícone. Troca
+   pra um tom translúcido na cor do próprio ícone — destaca em vez de
+   esconder. */
+.tema-escuro .lista-icone.pasta { background: var(--ambar-suave); color: var(--ambar); }
+.tema-escuro .lista-icone.deck  { background: var(--violeta-suave); }
+
 .tema-escuro .botao-modo:hover,
 .tema-escuro .quiz-opcao:not(:disabled):hover,
 .tema-escuro .fab-menu-item:hover {
@@ -127,6 +135,10 @@
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
+
+/* Navegadores não herdam `color` em inputs/textareas por padrão — sem isso,
+   o texto digitado fica preto do jeito do navegador mesmo no tema escuro. */
+input, textarea, select { color: var(--tinta); }
 
 /* ── Animações globais ─────────────────────────────────────────────────── */
 @keyframes fadeIn {
