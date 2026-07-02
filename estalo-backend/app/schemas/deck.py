@@ -14,6 +14,13 @@ class DeckUpdate(BaseModel):
     folder_id: int | None = None
 
 
+class DeckMove(BaseModel):
+    """Payload de /decks/{id}/move. Diferente de DeckUpdate: folder_id aqui é
+    sempre aplicado (inclusive None, pra mover o deck de volta pra raiz) —
+    em DeckUpdate um None é ambíguo com "campo não enviado"."""
+    folder_id: int | None
+
+
 class DeckOut(BaseModel):
     id: int
     title: str

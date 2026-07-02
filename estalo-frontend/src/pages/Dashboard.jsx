@@ -20,6 +20,14 @@ function encontrarPasta(arvore, id) {
   return null;
 }
 
+/** Achata a árvore de pastas numa lista plana, com nível (pra indentar no seletor de mover) */
+function achatarPastas(arvore, nivel = 0) {
+  return arvore.flatMap(p => [
+    { id: p.id, name: p.name, nivel },
+    ...achatarPastas(p.children || [], nivel + 1),
+  ]);
+}
+
 /** Coleta todos os decks dentro de uma pasta (recursivo) */
 function coletarDecks(pasta, todosDecks) {
   const diretos = todosDecks.filter(d => d.folder_id === pasta.id);
@@ -93,6 +101,7 @@ export default function Dashboard({ usuario, aoSair, aoVerCards, aoEstudar, aoCr
   const [nomePasta, setNomePasta]         = useState("");
   const [salvandoPasta, setSalvandoPasta] = useState(false);
   const [editando, setEditando] = useState(null); // { tipo: "pasta"|"deck", id, valor }
+  const [movendo, setMovendo]   = useState(null); // deck sendo movido, ou null
   const [viewMode, setViewMode] = useState(() => {
     try { return localStorage.getItem("dashboard_view_mode") === "list" ? "list" : "grid"; }
     catch { return "grid"; }
@@ -188,6 +197,21 @@ export default function Dashboard({ usuario, aoSair, aoVerCards, aoEstudar, aoCr
     if (!confirm(`Excluir "${deck.title}" e todos os cards?`)) return;
     try { await api.excluirDeck(deck.id); await carregar(pastaAtiva); }
     catch (err) { setErro(err.message); }
+  }
+
+  function abrirMover(deck, e) {
+    e.stopPropagation();
+    setMovendo(deck);
+  }
+
+  async function moverPara(folderId) {
+    if (!movendo) return;
+    const deck = movendo;
+    setMovendo(null);
+    try {
+      await api.moverDeck(deck.id, folderId);
+      await carregar(pastaAtiva);
+    } catch (err) { setErro(err.message); }
   }
 
   function iniciarEdicao(tipo, id, valorAtual, e) {
@@ -435,6 +459,10 @@ export default function Dashboard({ usuario, aoSair, aoVerCards, aoEstudar, aoCr
                             onClick={e => iniciarEdicao("deck", deck.id, deck.title, e)} title="Renomear deck">
                             <IcoLapis />
                           </button>
+                          <button className="icone-acao lista-deck-editar"
+                            onClick={e => abrirMover(deck, e)} title="Mover deck">
+                            <IcoMover />
+                          </button>
                           <button className="icone-acao perigo lista-deck-excluir"
                             onClick={e => excluirDeck(deck, e)} title="Excluir deck">
                             <IcoTrash />
@@ -451,6 +479,36 @@ export default function Dashboard({ usuario, aoSair, aoVerCards, aoEstudar, aoCr
       </div>{/* dash-container */}
       </main>
       </div>{/* dashboard-corpo */}
+
+      {movendo && (
+        <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) setMovendo(null); }}>
+          <div className="modal-painel modal-mover">
+            <div className="modal-cabecalho">
+              <h2 className="modal-titulo">Mover "{movendo.title}"</h2>
+              <button className="modal-fechar" onClick={() => setMovendo(null)} aria-label="Fechar">×</button>
+            </div>
+            <ul className="mover-lista-pastas">
+              <li>
+                <button
+                  className={`mover-opcao-pasta${movendo.folder_id === null ? " ativa" : ""}`}
+                  onClick={() => moverPara(null)}>
+                  <IconeHome /> Raiz
+                </button>
+              </li>
+              {achatarPastas(arvore).map(p => (
+                <li key={p.id}>
+                  <button
+                    className={`mover-opcao-pasta${movendo.folder_id === p.id ? " ativa" : ""}`}
+                    style={{ paddingLeft: `${0.9 + p.nivel * 1.1}rem` }}
+                    onClick={() => moverPara(p.id)}>
+                    <IconePasta /> {p.name}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -636,6 +694,16 @@ function IconeListaModo() {
     <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor"
       strokeWidth="1.7" strokeLinecap="round" aria-hidden="true">
       <path d="M3 5h14M3 10h14M3 15h14" />
+    </svg>
+  );
+}
+
+function IcoMover() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor"
+      strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M2 6a2 2 0 012-2h3.172a2 2 0 011.414.586l.828.828A2 2 0 0010.828 6H16a2 2 0 012 2v7a2 2 0 01-2 2H4a2 2 0 01-2-2V6z" />
+      <path d="M8 12h5M10.5 9.5L13 12l-2.5 2.5" />
     </svg>
   );
 }

@@ -77,6 +77,9 @@ export const api = {
   renomearDeck: (id, title) =>
     request(`/decks/${id}`, { method: "PATCH", body: { title } }),
 
+  moverDeck: (id, folder_id) =>
+    request(`/decks/${id}/move`, { method: "PATCH", body: { folder_id } }),
+
   excluirDeck: (id) => request(`/decks/${id}`, { method: "DELETE" }),
 
   atualizarCard: (id, front, back) =>

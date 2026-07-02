@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.dependencies import get_current_user
 from app.models import Card, Deck, Folder, Review, User
-from app.schemas.deck import DeckCreate, DeckOut, DeckUpdate
+from app.schemas.deck import DeckCreate, DeckMove, DeckOut, DeckUpdate
 
 router = APIRouter(prefix="/decks", tags=["Decks"])
 
@@ -147,6 +147,31 @@ def atualizar_deck(
         deck.description = dados.description
     if dados.folder_id is not None:
         deck.folder_id = dados.folder_id
+    db.commit()
+    db.refresh(deck)
+    total, pct = _memorization_pct(deck.id, user.id, db)
+    return DeckOut(
+        id=deck.id,
+        title=deck.title,
+        description=deck.description,
+        folder_id=deck.folder_id,
+        created_at=deck.created_at,
+        total_cards=total,
+        memorization_pct=pct,
+    )
+
+
+@router.patch("/{deck_id}/move", response_model=DeckOut)
+def mover_deck(
+    deck_id: int,
+    dados: DeckMove,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Move o deck pra outra pasta (ou pra raiz, com folder_id=null)."""
+    deck = _buscar_deck_do_usuario(deck_id, user, db)
+    _validar_pasta(dados.folder_id, user, db)
+    deck.folder_id = dados.folder_id
     db.commit()
     db.refresh(deck)
     total, pct = _memorization_pct(deck.id, user.id, db)

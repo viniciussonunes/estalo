@@ -2081,6 +2081,35 @@ kbd {
 }
 .modal-fechar:hover { background: var(--papel); color: var(--tinta); }
 
+/* ---------- Modal de mover deck ---------- */
+.modal-mover { max-width: 380px; }
+.mover-lista-pastas {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  max-height: 320px;
+  overflow-y: auto;
+}
+.mover-opcao-pasta {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  width: 100%;
+  padding: 0.55rem 0.9rem;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  font: inherit;
+  font-size: 0.9rem;
+  color: var(--tinta);
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--transicao);
+}
+.mover-opcao-pasta:hover { background: var(--papel); }
+.mover-opcao-pasta.ativa { background: var(--violeta-suave); color: var(--violeta); font-weight: 600; }
+
 /* ===== MOBILE (≤ 640px) ===== */
 @media (max-width: 640px) {
   .topo { padding: 0.75rem 1rem; flex-wrap: wrap; gap: 0.4rem; }
