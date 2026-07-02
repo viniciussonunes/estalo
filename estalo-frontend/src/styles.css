@@ -98,15 +98,8 @@
    escuro que o próprio card no tema escuro, "engolindo" o ícone. Troca
    pra um tom translúcido na cor do próprio ícone — destaca em vez de
    esconder. */
+.tema-escuro .lista-icone.pasta { background: var(--ambar-suave); color: var(--ambar); }
 .tema-escuro .lista-icone.deck  { background: var(--violeta-suave); }
-
-/* Marca "Estalo" e o ícone de pasta são identidade fixa — não acompanham
-   o tema, sempre no visual do modo claro. O sublinhado usava rgba
-   translúcido (some no fundo escuro); aqui é a mesma cor já composta
-   sobre um fundo branco, como sólida. */
-.tema-escuro .marca-nome {
-  background-image: linear-gradient(transparent 70%, rgb(255, 227, 177) 0);
-}
 
 .tema-escuro .botao-modo:hover,
 .tema-escuro .quiz-opcao:not(:disabled):hover,
@@ -1103,7 +1096,7 @@ body {
   background: var(--papel);
   display: grid; place-items: center;
 }
-.lista-icone.pasta { color: #f59e0b; background: #f7f6fb; border-color: #e5e3ee; }
+.lista-icone.pasta { color: #f59e0b; }
 .lista-icone.deck  { color: var(--violeta); }
 
 .lista-info {
