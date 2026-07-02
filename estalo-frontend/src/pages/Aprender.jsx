@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { api } from "../api.js";
+import useStudySession from "../hooks/useStudySession.js";
 
 /*
   Lógica de fases SM-2:
@@ -41,9 +42,12 @@ function montarFila(cards) {
 }
 
 export default function Aprender({ deck, aoVoltar }) {
+  const { snapshotPendente, salvar, limpar, descartarPendente } = useStudySession(deck.id);
+
   const [fila, setFila]               = useState([]);
   const [totalUnicos, setTotalUnicos] = useState(0);
-  const [carregando, setCarregando]   = useState(true);
+  const [carregando, setCarregando]   = useState(!snapshotPendente);
+  const [mostrarPrompt, setMostrarPrompt] = useState(!!snapshotPendente);
   const [erro, setErro]               = useState("");
   const [semQuiz, setSemQuiz]         = useState(false);
   const [concluido, setConcluido]     = useState(false);
@@ -70,12 +74,69 @@ export default function Aprender({ deck, aoVoltar }) {
     inicioSessao.current = Date.now();
   }
 
-  useEffect(() => {
+  function _restaurarDeSnapshot(snap) {
+    setFila(snap.fila);
+    setTotalUnicos(snap.totalUnicos);
+    questoesOriginais.current = snap.questoesOriginais;
+    startingReps.current = snap.startingReps;
+    errosPorCard.current = new Set(snap.errosPorCard);
+    setAcertosNaPrimeira(snap.acertosNaPrimeira);
+    inicioSessao.current = snap.inicioSessao;
+  }
+
+  function _carregarDoServidor() {
+    setCarregando(true);
     api.listarCards(deck.id)
       .then(_iniciarComCards)
       .catch(err => setErro(err.message))
       .finally(() => setCarregando(false));
+  }
+
+  useEffect(() => {
+    if (mostrarPrompt) return; // aguarda decisão do usuário sobre a sessão salva
+    _carregarDoServidor();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [deck.id]);
+
+  function continuarSessaoSalva() {
+    _restaurarDeSnapshot(snapshotPendente);
+    descartarPendente();
+    setMostrarPrompt(false);
+    setCarregando(false);
+  }
+
+  function comecarDoZero() {
+    limpar();
+    descartarPendente();
+    setMostrarPrompt(false);
+    _carregarDoServidor();
+  }
+
+  function sair() {
+    limpar();
+    aoVoltar();
+  }
+
+  // Salva o progresso da fila a cada mudança, pra sobreviver a reload/saída.
+  useEffect(() => {
+    if (mostrarPrompt || concluido || fila.length === 0) return;
+    salvar({
+      fila,
+      totalUnicos,
+      questoesOriginais: questoesOriginais.current,
+      startingReps: startingReps.current,
+      errosPorCard: [...errosPorCard.current],
+      acertosNaPrimeira,
+      inicioSessao: inicioSessao.current,
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fila, acertosNaPrimeira, concluido, mostrarPrompt]);
+
+  // Sessão chegou ao fim (equivalente a SessaoConcluida) → limpa o snapshot.
+  useEffect(() => {
+    if (concluido) limpar();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [concluido]);
 
   const questaoAtual = fila[0] ?? null;
   const respondeu    = resposta !== null;
@@ -181,12 +242,33 @@ export default function Aprender({ deck, aoVoltar }) {
   const cabecalho = (
     <header className="topo">
       <div className="topo-esquerda">
-        <button className="botao-texto" onClick={aoVoltar}>← Voltar</button>
+        <button className="botao-texto" onClick={sair}>← Voltar</button>
         <span className="estudo-deck-nome">{deck.title}</span>
       </div>
       <span className="modo-label">Múltipla escolha</span>
     </header>
   );
+
+  if (mostrarPrompt && snapshotPendente) {
+    const minutosAtras = Math.max(1, Math.round((Date.now() - snapshotPendente.timestamp) / 60000));
+    return (
+      <div className="pagina">{cabecalho}
+        <main className="conteudo estudo-centro">
+          <div className="gamificado-aviso">
+            <p className="gamificado-aviso-titulo">↺ Sessão em andamento encontrada</p>
+            <p className="gamificado-aviso-texto">
+              Você tem uma sessão iniciada há {minutosAtras} min neste deck, com{" "}
+              <em>{snapshotPendente.fila.length} questão(ões)</em> restante(s). Deseja continuar de onde parou?
+            </p>
+            <div className="gamificado-botoes">
+              <button className="botao-principal" onClick={continuarSessaoSalva}>Continuar sessão</button>
+              <button className="botao-texto" onClick={comecarDoZero}>Começar do zero</button>
+            </div>
+          </div>
+        </main>
+      </div>
+    );
+  }
 
   if (carregando) {
     return (
@@ -204,7 +286,7 @@ export default function Aprender({ deck, aoVoltar }) {
         <main className="conteudo estudo-centro">
           <div className="estudo-concluido">
             <p className="erro">{erro}</p>
-            <button className="botao-principal estudo-concluido-botao" onClick={aoVoltar}>Voltar</button>
+            <button className="botao-principal estudo-concluido-botao" onClick={sair}>Voltar</button>
           </div>
         </main>
       </div>
@@ -222,7 +304,7 @@ export default function Aprender({ deck, aoVoltar }) {
               Este deck não tem cards gerados com IA. Vá até a tela de Cards
               e use a aba "Gerar com IA" para criar questões com alternativas.
             </p>
-            <button className="botao-principal estudo-concluido-botao" onClick={aoVoltar}>
+            <button className="botao-principal estudo-concluido-botao" onClick={sair}>
               Voltar ao deck
             </button>
           </div>
@@ -291,12 +373,12 @@ export default function Aprender({ deck, aoVoltar }) {
                   <button className="botao-principal" onClick={reiniciarSessao} disabled={salvando}>
                     Nova sessão agora
                   </button>
-                  <button className="botao-texto" onClick={aoVoltar}>Voltar aos decks</button>
+                  <button className="botao-texto" onClick={sair}>Voltar aos decks</button>
                 </div>
               </div>
             ) : (
               <button className="botao-principal estudo-concluido-botao"
-                onClick={aoVoltar} disabled={salvando}>
+                onClick={sair} disabled={salvando}>
                 {salvando ? "Salvando…" : "Voltar ao deck"}
               </button>
             )}
