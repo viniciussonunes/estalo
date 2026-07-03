@@ -209,10 +209,15 @@ def responder_card(
     # --- Tarefa 3: Validação de estado ---
     # Compara só a DATA (não o datetime) para não bloquear sessões feitas em
     # horários diferentes do mesmo dia ou antes da hora exata do due_date.
-    # O modo Quiz (Aprender) seleciona cards independentemente de due_date,
-    # então a validação não deve usar granularidade de hora.
+    # Só vale pro Modo Estudo (SM-2 clássico) — ele seleciona cards por due_date
+    # via /next, então essa trava protege a cadência da repetição espaçada.
+    # O Modo Aprender quiza TODOS os cards do deck de uma vez, sem filtrar por
+    # due_date (ver montarFila() no frontend) — pra ele, essa trava não faz
+    # sentido e só bloqueava silenciosamente o avanço de fase numa segunda
+    # sessão no mesmo dia. Por isso ignorar_elegibilidade existe.
     card_elegivel = (
-        review.repetitions == 0              # Novo — sempre pode
+        resposta.ignorar_elegibilidade
+        or review.repetitions == 0           # Novo — sempre pode
         or review.due_date.date() <= hoje    # due venceu hoje ou antes
     )
     if not card_elegivel:

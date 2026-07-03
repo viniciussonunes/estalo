@@ -87,8 +87,11 @@ export const api = {
 
   proximoCard: (deckId) => request(`/study/decks/${deckId}/next`),
 
-  responderCard: (cardId, quality) =>
-    request(`/study/cards/${cardId}/answer`, { method: "POST", body: { quality } }),
+  responderCard: (cardId, quality, ignorarElegibilidade = false) =>
+    request(`/study/cards/${cardId}/answer`, {
+      method: "POST",
+      body: { quality, ignorar_elegibilidade: ignorarElegibilidade },
+    }),
 
   statsEstudo: (deckId) => request(`/study/decks/${deckId}/stats`),
 

@@ -24,6 +24,12 @@ class SessaoConcluida(BaseModel):
 class ReviewAnswer(BaseModel):
     quality: int | None = Field(None, ge=0, le=5, description="Escala SM-2 legada (0-5)")
     difficulty: int | None = Field(None, ge=1, le=4, description="Escala amigável: 1=Esqueci 2=Difícil 3=Bom 4=Fácil")
+    ignorar_elegibilidade: bool = Field(
+        False,
+        description="Modo Aprender quiza todos os cards do deck de uma vez, sem respeitar "
+                     "due_date — precisa poder responder mesmo fora da janela de elegibilidade "
+                     "do SM-2 clássico (usada pelo Modo Estudo).",
+    )
 
     def quality_efetivo(self) -> int:
         """Resolve quality a partir de difficulty se quality não vier."""
