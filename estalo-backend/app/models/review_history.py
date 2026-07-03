@@ -41,3 +41,5 @@ class ReviewHistory(Base):
     request_id: Mapped[str | None] = mapped_column(String(64), nullable=True, unique=True, index=True)
 
     avaliado_em: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    card: Mapped["Card"] = relationship(back_populates="review_history")
