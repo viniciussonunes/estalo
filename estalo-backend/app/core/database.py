@@ -11,7 +11,15 @@ from sqlalchemy.orm import declarative_base, sessionmaker
 
 from app.core.config import settings
 
-_is_sqlite = settings.DATABASE_URL.startswith("sqlite")
+# DATABASE_URL_POOL (endpoint "-pooler" do Neon, via PgBouncer) tem prioridade
+# se estiver setada; senão cai pra DATABASE_URL de sempre — sem mudar nada
+# pra quem não configurar a variável nova. Nota: _migrar() (main.py) usa esse
+# mesmo engine, então migrações também passam pelo pooler quando ativo; o
+# PgBouncer do Neon em modo transaction lida bem com o DDL simples usado lá
+# (ALTER TABLE, CREATE INDEX IF NOT EXISTS).
+DATABASE_URL = settings.DATABASE_URL_POOL or settings.DATABASE_URL
+
+_is_sqlite = DATABASE_URL.startswith("sqlite")
 
 # O connect_args só é necessário pro SQLite. Em PostgreSQL ele é ignorado.
 connect_args = {"check_same_thread": False} if _is_sqlite else {}
@@ -32,7 +40,7 @@ _pool_kwargs = {} if _is_sqlite else {
     "pool_recycle": 300,
 }
 
-engine = create_engine(settings.DATABASE_URL, connect_args=connect_args, **_pool_kwargs)
+engine = create_engine(DATABASE_URL, connect_args=connect_args, **_pool_kwargs)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
