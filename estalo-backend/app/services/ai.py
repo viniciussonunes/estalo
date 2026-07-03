@@ -30,8 +30,15 @@ class IAError(Exception):
 _RETRY_STATUS = {429, 500, 502, 503, 504}
 
 
-def _chamar_gemini(prompt: str, timeout: int = 90) -> str:
-    """Chama o Gemini e retorna o texto gerado. Tenta até 3 vezes em erros transitórios."""
+def _chamar_gemini(prompt: str, timeout: int = 25) -> str:
+    """Chama o Gemini e retorna o texto gerado. Tenta até 2 vezes em erros transitórios.
+
+    Orçamento de tempo pensado pra caber numa função serverless: 2 tentativas
+    de até `timeout`s cada, com 2s de espera entre elas — pior caso
+    ~2*timeout + 2s. Antes eram 3 tentativas de até 90s com backoff 2s/4s
+    (pior caso ~276s), o que estourava qualquer limite de duração de função
+    plausível bem antes da 3ª tentativa terminar.
+    """
     if not settings.GEMINI_API_KEY:
         raise IAError("Chave do Gemini não configurada. Preencha GEMINI_API_KEY no arquivo .env")
 
@@ -43,19 +50,24 @@ def _chamar_gemini(prompt: str, timeout: int = 90) -> str:
     }
 
     ultimo_erro: Exception | None = None
-    for tentativa in range(3):
+    for tentativa in range(2):
         if tentativa > 0:
-            time.sleep(2 ** tentativa)  # 2s, 4s
+            time.sleep(2)
         try:
             resp = httpx.post(url, json=payload, headers=headers, timeout=timeout)
-            if resp.status_code in _RETRY_STATUS and tentativa < 2:
-                ultimo_erro = Exception(f"status {resp.status_code}")
+        except httpx.RequestError as e:
+            raise IAError(f"Falha ao conectar no Gemini: {e}") from e
+
+        if resp.status_code in _RETRY_STATUS:
+            ultimo_erro = Exception(f"status {resp.status_code}")
+            if tentativa < 1:
                 continue
+            break  # também falhou na última tentativa -> cai no raise genérico abaixo
+
+        try:
             resp.raise_for_status()
         except httpx.HTTPStatusError as e:
             raise IAError(f"Gemini respondeu com erro {e.response.status_code}") from e
-        except httpx.RequestError as e:
-            raise IAError(f"Falha ao conectar no Gemini: {e}") from e
 
         try:
             dados = resp.json()
@@ -63,7 +75,7 @@ def _chamar_gemini(prompt: str, timeout: int = 90) -> str:
         except (KeyError, IndexError) as e:
             raise IAError("Resposta do Gemini veio em formato inesperado") from e
 
-    raise IAError(f"Gemini indisponível após 3 tentativas ({ultimo_erro})")
+    raise IAError(f"Gemini indisponível após 2 tentativas ({ultimo_erro})")
 
 
 def _montar_prompt(texto: str, quantidade: int) -> str:
@@ -222,7 +234,7 @@ def gerar_cards_completos(texto: str, quantidade: int) -> list[dict]:
     Gera cards com front, back, distractors e explanation em uma única chamada.
     Retorna lista de dicts com todas as chaves preenchidas.
     """
-    bruto = _chamar_gemini(_montar_prompt_completo(texto, quantidade), timeout=90)
+    bruto = _chamar_gemini(_montar_prompt_completo(texto, quantidade), timeout=30)
 
     try:
         cards = json.loads(_limpar_json(bruto))
@@ -256,7 +268,7 @@ def gerar_cards(texto: str, quantidade: int) -> list[dict]:
     Chama o Gemini e devolve uma lista de dicts: [{"front": ..., "back": ...}].
     Lança IAError se algo der errado.
     """
-    bruto = _chamar_gemini(_montar_prompt(texto, quantidade), timeout=60)
+    bruto = _chamar_gemini(_montar_prompt(texto, quantidade), timeout=20)
 
     try:
         cards = json.loads(_limpar_json(bruto))
