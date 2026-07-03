@@ -118,6 +118,84 @@ function BarraSegmentada({ stats, carregando = false }) {
   );
 }
 
+/** Skeleton de um card de pasta (grid) — mesma estrutura do card real, só com barras de brilho no lugar do texto. */
+function PastaCardSkeleton() {
+  return (
+    <div className="pasta-card">
+      <div className="pasta-card-corpo" style={{ cursor: "default" }}>
+        <span className="pasta-card-icone skeleton" style={{ width: 18, height: 18, display: "inline-block" }} />
+        <span className="pasta-card-nome skeleton skeleton-linha" style={{ width: "70%" }} />
+        <span className="pasta-card-meta skeleton skeleton-linha" style={{ width: "40%", marginBottom: 0 }} />
+        <BarraSegmentada carregando />
+      </div>
+    </div>
+  );
+}
+
+/** Skeleton de uma linha de pasta (lista) */
+function PastaListaSkeleton() {
+  return (
+    <li className="lista-item lista-pasta">
+      <span className="lista-icone pasta skeleton" />
+      <div className="lista-info">
+        <span className="skeleton skeleton-linha" style={{ width: "45%", marginBottom: 0 }} />
+      </div>
+      <BarraSegmentada carregando />
+      <div className="lista-acoes" style={{ width: 60 }} />
+    </li>
+  );
+}
+
+/** Skeleton de uma linha de deck (mesma estrutura em ambos os modos de visualização) */
+function DeckListaSkeleton() {
+  return (
+    <li className="lista-item lista-deck">
+      <span className="lista-icone deck skeleton" />
+      <div className="lista-info">
+        <span className="skeleton skeleton-linha" style={{ width: "55%" }} />
+        <span className="skeleton skeleton-linha" style={{ width: "30%", height: "0.7em", marginBottom: 0 }} />
+      </div>
+      <BarraSegmentada carregando />
+      <div className="lista-acoes" style={{ width: 120 }} />
+    </li>
+  );
+}
+
+/**
+ * Skeleton do explorador inteiro, no carregamento inicial do Dashboard.
+ * Reproduz a mesma estrutura (seções, grid/lista conforme viewMode) que o
+ * conteúdo real vai assumir — a transição de skeleton pra dados de verdade
+ * não pula o layout, só troca as barras de brilho pelo conteúdo.
+ */
+function ExplorerSkeleton({ viewMode }) {
+  return (
+    <div className="explorer-secoes">
+      <section className="explorer-secao">
+        <div className="explorer-secao-header">
+          <h2 className="explorer-secao-titulo">Pastas</h2>
+        </div>
+        {viewMode === "grid" ? (
+          <div className="pastas-grid">
+            <PastaCardSkeleton /><PastaCardSkeleton /><PastaCardSkeleton />
+          </div>
+        ) : (
+          <ul className="pastas-lista lista-explorer">
+            <PastaListaSkeleton /><PastaListaSkeleton /><PastaListaSkeleton />
+          </ul>
+        )}
+      </section>
+      <section className="explorer-secao">
+        <div className="explorer-secao-header">
+          <h2 className="explorer-secao-titulo">Decks</h2>
+        </div>
+        <ul className="lista-explorer">
+          <DeckListaSkeleton /><DeckListaSkeleton /><DeckListaSkeleton />
+        </ul>
+      </section>
+    </div>
+  );
+}
+
 export default function Dashboard({ usuario, aoSair, aoVerCards, aoEstudar, aoCriarDeck, tema, proximoTema }) {
   const [arvore, setArvore]         = useState([]);
   const [todosDecks, setTodosDecks] = useState([]);
@@ -378,13 +456,9 @@ export default function Dashboard({ usuario, aoSair, aoVerCards, aoEstudar, aoCr
 
         {/* Lista */}
         {carregando ? (
-          <div>
-            <div className="skeleton skeleton-card" />
-            <div className="skeleton skeleton-card" />
-            <div className="skeleton skeleton-card" style={{ opacity: 0.6 }} />
-          </div>
+          <ExplorerSkeleton viewMode={viewMode} />
         ) : vazio ? (
-          <div className="vazio-bloco">
+          <div className="vazio-bloco fade-in">
             <p style={{ fontWeight: 600, marginBottom: "0.35rem" }}>
               {pastaAtiva ? `"${pastaAtiva.name}" está vazia` : "Nenhum conteúdo ainda"}
             </p>
@@ -405,7 +479,7 @@ export default function Dashboard({ usuario, aoSair, aoVerCards, aoEstudar, aoCr
             </div>
           </div>
         ) : (
-          <div className="explorer-secoes">
+          <div className="explorer-secoes fade-in">
             {/* ── Pastas: grid ou lista, conforme viewMode ── */}
             {pastasVisiveis.length > 0 && (
               <section className="explorer-secao">
@@ -831,8 +905,12 @@ function VisaoGeral({ decks }) {
     s + Math.round(((1 - (d.memorization_pct || 0) / 100)) * (d.total_cards || 0)), 0);
 
   const [heatmapStats, setHeatmapStats] = useState({});
+  const [heatmapCarregando, setHeatmapCarregando] = useState(true);
   useEffect(() => {
-    api.heatmapStats().then(setHeatmapStats).catch(() => setHeatmapStats({}));
+    api.heatmapStats()
+      .then(setHeatmapStats)
+      .catch(() => setHeatmapStats({}))
+      .finally(() => setHeatmapCarregando(false));
   }, []);
 
   const [streak, setStreak] = useState(null);
@@ -843,7 +921,7 @@ function VisaoGeral({ decks }) {
   const dias = ultimosDias(30);
 
   return (
-    <div className="visao-geral-wrapper">
+    <div className="visao-geral-wrapper fade-in">
       <div className="visao-geral">
         <div className="visao-card">
           <span className="visao-card-icone">📚</span>
@@ -880,14 +958,16 @@ function VisaoGeral({ decks }) {
           )}
         </div>
         <div className="heatmap-grid">
-          {dias.map((data) => {
-            const nivel = nivelHeatmap(heatmapStats[data]);
-            return (
-              <div key={data} className="heatmap-cel"
-                style={{ background: HEATMAP_NIVEIS[nivel].bg }}
-                title={`${data} — ${HEATMAP_NIVEIS[nivel].title}`} />
-            );
-          })}
+          {heatmapCarregando
+            ? dias.map((data) => <div key={data} className="heatmap-cel skeleton" />)
+            : dias.map((data) => {
+                const nivel = nivelHeatmap(heatmapStats[data]);
+                return (
+                  <div key={data} className="heatmap-cel"
+                    style={{ background: HEATMAP_NIVEIS[nivel].bg }}
+                    title={`${data} — ${HEATMAP_NIVEIS[nivel].title}`} />
+                );
+              })}
         </div>
         <span className="heatmap-legenda">
           Menos
