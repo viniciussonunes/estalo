@@ -214,6 +214,7 @@ export default function Dashboard({ usuario, aoSair, aoVerCards, aoEstudar, aoCr
     try { return localStorage.getItem("dashboard_view_mode") === "list" ? "list" : "grid"; }
     catch { return "grid"; }
   });
+  const [busca, setBusca] = useState("");
   const inputRef = useRef(null);
 
   useEffect(() => {
@@ -263,10 +264,23 @@ export default function Dashboard({ usuario, aoSair, aoVerCards, aoEstudar, aoCr
     setPastaAtiva(pa => pa ? (encontrarPasta(novaArvore, pa.id) ?? null) : pa);
   }
 
-  const pastasVisiveis = pastaAtiva ? (pastaAtiva.children || []) : arvore;
-  const decksVisiveis  = todosDecks.filter(d =>
-    pastaAtiva ? d.folder_id === pastaAtiva.id : !d.folder_id
-  );
+  // Busca global: quando ativa, ignora pastaAtiva e acha em toda a árvore
+  // (achatada) + em todos os decks, em vez de só no nível atual. pastaAtiva
+  // e caminho ficam intocados enquanto isso — é assim que a navegação volta
+  // instantaneamente pro mesmo lugar quando a busca é limpa.
+  const termoBusca = busca.trim().toLowerCase();
+  const emBusca = termoBusca.length > 0;
+
+  const pastasVisiveis = emBusca
+    ? achatarPastas(arvore)
+        .filter(p => p.name.toLowerCase().includes(termoBusca))
+        .map(p => encontrarPasta(arvore, p.id))
+        .filter(Boolean)
+    : (pastaAtiva ? (pastaAtiva.children || []) : arvore);
+
+  const decksVisiveis = emBusca
+    ? todosDecks.filter(d => d.title.toLowerCase().includes(termoBusca))
+    : todosDecks.filter(d => pastaAtiva ? d.folder_id === pastaAtiva.id : !d.folder_id);
 
   function entrarPasta(pasta) {
     setPastaAtiva(pasta);
@@ -287,6 +301,15 @@ export default function Dashboard({ usuario, aoSair, aoVerCards, aoEstudar, aoCr
     setPastaAtiva(encontrarPasta(arvore, pasta.id) ?? pasta);
     setCaminho(path);
     setCriandoPasta(false);
+  }
+
+  // Clicar num resultado de busca precisa navegar a partir da raiz (o
+  // resultado pode estar em qualquer nível, não necessariamente dentro da
+  // pastaAtiva atual) — por isso usa irParaPastaSidebar, que recalcula o
+  // caminho inteiro, em vez de entrarPasta, que só empilha mais um nível.
+  function abrirResultadoBusca(pasta) {
+    irParaPastaSidebar(pasta);
+    setBusca("");
   }
 
   async function criarPasta(e) {
@@ -426,10 +449,29 @@ export default function Dashboard({ usuario, aoSair, aoVerCards, aoEstudar, aoCr
           ))}
         </nav>
 
+        {/* Busca global — acha em toda a árvore, não só na pasta atual */}
+        <div className="busca-global">
+          <span className="busca-global-icone"><IconeBusca /></span>
+          <input
+            type="text"
+            className="busca-global-input"
+            value={busca}
+            onChange={e => setBusca(e.target.value)}
+            placeholder="Buscar em todas as pastas e decks..."
+            aria-label="Buscar em todas as pastas e decks"
+          />
+          {busca && (
+            <button type="button" className="busca-global-limpar"
+              onClick={() => setBusca("")} aria-label="Limpar busca">
+              <IconeX />
+            </button>
+          )}
+        </div>
+
         {erro && <p className="erro">{erro}</p>}
 
-        {/* Visão Geral — só na raiz */}
-        {!pastaAtiva && !carregando && todosDecks.length > 0 && (
+        {/* Visão Geral — só na raiz, e não durante busca */}
+        {!pastaAtiva && !carregando && !emBusca && todosDecks.length > 0 && (
           <VisaoGeral decks={todosDecks} />
         )}
 
@@ -459,24 +501,37 @@ export default function Dashboard({ usuario, aoSair, aoVerCards, aoEstudar, aoCr
           <ExplorerSkeleton viewMode={viewMode} />
         ) : vazio ? (
           <div className="vazio-bloco fade-in">
-            <p style={{ fontWeight: 600, marginBottom: "0.35rem" }}>
-              {pastaAtiva ? `"${pastaAtiva.name}" está vazia` : "Nenhum conteúdo ainda"}
-            </p>
-            <p className="vazio-dica" style={{ marginBottom: "1rem" }}>
-              Crie {pastaAtiva && pastaAtiva.depth < 4 ? "uma subpasta ou " : ""}um deck para começar.
-            </p>
-            <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
-              {podeAdicionarPasta && (
-                <button className="btn-secao-acao"
-                  onClick={() => { setCriandoPasta(true); setNomePasta(""); }}>
-                  + Nova Pasta
-                </button>
-              )}
-              <button className="btn-secao-acao primario"
-                onClick={() => aoCriarDeck(pastaAtiva?.id ?? null)}>
-                + Novo Deck
-              </button>
-            </div>
+            {emBusca ? (
+              <>
+                <p style={{ fontWeight: 600, marginBottom: "0.35rem" }}>
+                  Nenhum resultado encontrado para "{busca.trim()}"
+                </p>
+                <p className="vazio-dica">
+                  Tente outro termo, ou limpe a busca pra voltar de onde estava.
+                </p>
+              </>
+            ) : (
+              <>
+                <p style={{ fontWeight: 600, marginBottom: "0.35rem" }}>
+                  {pastaAtiva ? `"${pastaAtiva.name}" está vazia` : "Nenhum conteúdo ainda"}
+                </p>
+                <p className="vazio-dica" style={{ marginBottom: "1rem" }}>
+                  Crie {pastaAtiva && pastaAtiva.depth < 4 ? "uma subpasta ou " : ""}um deck para começar.
+                </p>
+                <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+                  {podeAdicionarPasta && (
+                    <button className="btn-secao-acao"
+                      onClick={() => { setCriandoPasta(true); setNomePasta(""); }}>
+                      + Nova Pasta
+                    </button>
+                  )}
+                  <button className="btn-secao-acao primario"
+                    onClick={() => aoCriarDeck(pastaAtiva?.id ?? null)}>
+                    + Novo Deck
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         ) : (
           <div className="explorer-secoes fade-in">
@@ -484,7 +539,7 @@ export default function Dashboard({ usuario, aoSair, aoVerCards, aoEstudar, aoCr
             {pastasVisiveis.length > 0 && (
               <section className="explorer-secao">
                 <div className="explorer-secao-header">
-                  <h2 className="explorer-secao-titulo">Pastas</h2>
+                  <h2 className="explorer-secao-titulo">{emBusca ? "Pastas encontradas" : "Pastas"}</h2>
                   <div className="explorer-secao-acoes">
                     <div className="view-toggle" role="group" aria-label="Modo de exibição das pastas">
                       <button
@@ -498,7 +553,7 @@ export default function Dashboard({ usuario, aoSair, aoVerCards, aoEstudar, aoCr
                         <IconeListaModo />
                       </button>
                     </div>
-                    {podeAdicionarPasta && (
+                    {podeAdicionarPasta && !emBusca && (
                       <button className="btn-secao-acao"
                         onClick={() => { setCriandoPasta(true); setNomePasta(""); }}>
                         + Nova Pasta
@@ -511,8 +566,8 @@ export default function Dashboard({ usuario, aoSair, aoVerCards, aoEstudar, aoCr
                     {pastasVisiveis.map(pasta => (
                       <PastaItem key={pasta.id} viewMode="grid" pasta={pasta} todosDecks={todosDecks}
                         statsMap={statsMap} statsCarregando={statsCarregando} editando={editando}
-                        setEditando={setEditando} confirmarEdicao={confirmarEdicao}
-                        iniciarEdicao={iniciarEdicao} entrarPasta={entrarPasta} excluirPasta={excluirPasta} />
+                        setEditando={setEditando} confirmarEdicao={confirmarEdicao} iniciarEdicao={iniciarEdicao}
+                        entrarPasta={emBusca ? abrirResultadoBusca : entrarPasta} excluirPasta={excluirPasta} />
                     ))}
                   </div>
                 ) : (
@@ -520,8 +575,8 @@ export default function Dashboard({ usuario, aoSair, aoVerCards, aoEstudar, aoCr
                     {pastasVisiveis.map(pasta => (
                       <PastaItem key={pasta.id} viewMode="list" pasta={pasta} todosDecks={todosDecks}
                         statsMap={statsMap} statsCarregando={statsCarregando} editando={editando}
-                        setEditando={setEditando} confirmarEdicao={confirmarEdicao}
-                        iniciarEdicao={iniciarEdicao} entrarPasta={entrarPasta} excluirPasta={excluirPasta} />
+                        setEditando={setEditando} confirmarEdicao={confirmarEdicao} iniciarEdicao={iniciarEdicao}
+                        entrarPasta={emBusca ? abrirResultadoBusca : entrarPasta} excluirPasta={excluirPasta} />
                     ))}
                   </ul>
                 )}
@@ -532,11 +587,13 @@ export default function Dashboard({ usuario, aoSair, aoVerCards, aoEstudar, aoCr
             {decksVisiveis.length > 0 && (
               <section className="explorer-secao">
                 <div className="explorer-secao-header">
-                  <h2 className="explorer-secao-titulo">Decks</h2>
-                  <button className="btn-secao-acao primario"
-                    onClick={() => aoCriarDeck(pastaAtiva?.id ?? null)}>
-                    + Novo Deck
-                  </button>
+                  <h2 className="explorer-secao-titulo">{emBusca ? "Decks encontrados" : "Decks"}</h2>
+                  {!emBusca && (
+                    <button className="btn-secao-acao primario"
+                      onClick={() => aoCriarDeck(pastaAtiva?.id ?? null)}>
+                      + Novo Deck
+                    </button>
+                  )}
                 </div>
                 <ul className="lista-explorer">
                   {decksVisiveis.map(deck => {
@@ -994,6 +1051,25 @@ function IconePasta() {
     <svg width="18" height="18" viewBox="0 0 20 20" fill="none" aria-hidden="true">
       <path d="M2 6a2 2 0 012-2h3.172a2 2 0 011.414.586l.828.828A2 2 0 0010.828 6H16a2 2 0 012 2v7a2 2 0 01-2 2H4a2 2 0 01-2-2V6z"
         fill="currentColor" opacity=".25" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/>
+    </svg>
+  );
+}
+
+function IconeBusca() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor"
+      strokeWidth="1.7" strokeLinecap="round" aria-hidden="true">
+      <circle cx="9" cy="9" r="6.5" />
+      <path d="M17.5 17.5l-4-4" />
+    </svg>
+  );
+}
+
+function IconeX() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 20 20" fill="none" stroke="currentColor"
+      strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+      <path d="M4 4l12 12M16 4L4 16" />
     </svg>
   );
 }

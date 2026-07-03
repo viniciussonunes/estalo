@@ -811,6 +811,55 @@ body {
 .breadcrumb-sep-wrapper { display: flex; align-items: center; }
 .breadcrumb-sep { color: var(--borda); padding: 0 0.1rem; user-select: none; }
 
+/* ---------- Busca global (pastas + decks, ignora a pasta atual) ---------- */
+.busca-global {
+  position: relative;
+  margin-bottom: 1.25rem;
+}
+.busca-global-input {
+  width: 100%;
+  padding: 0.75rem 2.6rem 0.75rem 2.75rem;
+  border: 1px solid var(--borda);
+  border-radius: var(--raio);
+  background: var(--superficie);
+  font: inherit;
+  font-size: 0.95rem;
+  color: var(--tinta);
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.busca-global-input::placeholder { color: var(--tinta-suave); }
+.busca-global-input:focus {
+  outline: none;
+  border-color: var(--violeta);
+  box-shadow: 0 0 0 3px rgba(91, 75, 232, 0.15);
+}
+.busca-global-icone {
+  position: absolute;
+  left: 0.95rem;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--tinta-suave);
+  pointer-events: none;
+  display: flex;
+}
+.busca-global-limpar {
+  position: absolute;
+  right: 0.55rem;
+  top: 50%;
+  transform: translateY(-50%);
+  border: none;
+  background: transparent;
+  color: var(--tinta-suave);
+  cursor: pointer;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  transition: background 0.12s, color 0.12s;
+}
+.busca-global-limpar:hover { background: var(--papel); color: var(--tinta); }
+
 /* ---------- Formulário criar pasta ---------- */
 .criar-pasta-form {
   display: flex;
