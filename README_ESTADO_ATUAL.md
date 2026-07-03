@@ -49,6 +49,10 @@ Depois desses 6, mais duas rodadas de trabalho:
   animação CSS inexistente (renderizava estático em vez de brilhar).
 - **Pool de conexões + timeout do Gemini** (detalhes na seção 4) —
   identificados numa análise de arquitetura pra cenário de alta escala.
+- **Investigação de infra (Neon pooler + `maxDuration`)** — as duas
+  maiores dúvidas em aberto da análise de escalabilidade foram fechadas
+  por investigação direta, sem precisar mudar nada em produção. Detalhes
+  na seção 4.
 
 ---
 
@@ -99,15 +103,6 @@ Não bloqueiam nada, mas ficaram de fora do escopo desta sessão:
   front/back) não é mais chamada por nenhum router desde que
   `gerar_cards_completos` assumiu o endpoint de geração. Ninguém apagou
   ainda.
-- **`vercel.json` do backend sem `maxDuration` explícito** — o timeout do
-  Gemini foi reduzido (seção 4), mas o limite de duração da função em si
-  continua no default da plataforma, nunca confirmado por não ter sido
-  mexido (risco de alterar o formato `services.web` do `vercel.json` sem
-  conseguir testar a mudança com segurança).
-- **Sem Neon pooler endpoint confirmado** — recomendado usar a connection
-  string *pooled* do Neon (endpoint com `-pooler`) em vez da direta, mas
-  ninguém confirmou se `DATABASE_URL` em produção já usa isso — não dá
-  pra inspecionar a variável (credencial bloqueada por política).
 - **Sem log drain / analytics configurado** — `vercel logs` não retorna
   histórico (retenção curta do plano atual). Sentry cobre exceptions no
   frontend, mas não há Sentry no backend nem Vercel Analytics/Speed
@@ -121,7 +116,7 @@ Não bloqueiam nada, mas ficaram de fora do escopo desta sessão:
 
 ---
 
-## 4. Configuração de infra — pool de conexões e retry do Gemini
+## 4. Configuração de infra — pool de conexões, retry do Gemini, pooler e maxDuration
 
 **Pool de conexões (`estalo-backend/app/core/database.py`):**
 ```python
@@ -148,6 +143,44 @@ antes que isso aconteça.
   nessa mensagem.
 - Erros não-transitórios (4xx que não estão em `_RETRY_STATUS`) continuam
   falhando na hora, sem retry.
+
+**Neon pooler — já confirmado ativo, sem precisar mudar nada.**
+`estalo-backend/app/core/database.py` prioriza uma variável
+`DATABASE_URL_POOL` sobre `DATABASE_URL`, se estiver setada (código
+mantido como porta de emergência de custo zero). Mas a investigação real
+mostrou que isso não é necessário: criamos temporariamente um endpoint
+`GET /admin/debug/db` (protegido por token, respondia 404 sem ele, nunca
+retornava usuário/senha) só pra confirmar de fora qual host a
+`DATABASE_URL` de produção realmente usa. Resultado:
+`ep-mute-mode-at7338cu-pooler.c-9.us-east-1.aws.neon.tech` — **já tem
+`-pooler` no nome**. A integração Neon×Vercel provisiona a `DATABASE_URL`
+padrão como pooled desde o início; a variável `DATABASE_URL_UNPOOLED`
+(separada, nunca usada pela app) é que guarda a conexão direta. Confirmada
+a resposta, o endpoint de diagnóstico foi removido do código e do ar
+(commit `687ec03`) — cumpriu o propósito e não teria mais valor
+operacional mantido ligado.
+
+**`maxDuration` — já confirmado em 300s, sem precisar mexer no
+`vercel.json`.** A dúvida original era se o timeout do Gemini (reduzido
+nesta sessão, ver acima) cabia dentro do limite real da função, já que o
+`vercel.json` do backend nunca configurou isso explicitamente. Investigação
+via `vercel inspect <deployment> --json` mostrou a config real da Lambda
+em produção:
+```json
+"lambda": { "runtime": "python3.12", "memorySize": 2048, "timeout": 300 }
+```
+Com Fluid Compute (ativo por padrão em projetos novos — este tem poucos
+dias), o `maxDuration` **padrão já é 300s tanto no Hobby quanto no Pro**,
+bem acima do pior caso atual do Gemini (~62s, folga enorme) e até do pior
+caso *antigo* antes da redução (~276s, cabia por pouco). Ou seja: mesmo
+antes da redução do timeout do Gemini, a plataforma nunca esteve matando
+essas requests no meio do caminho — a suposição inicial de que isso era
+um risco ativo estava errada. A redução do timeout continua valendo (falha
+mais rápido, gasta menos compute-time à toa, mensagem de erro mais clara),
+mas não era, e não é, uma correção de timeout de plataforma. Decisão:
+**não adicionar `maxDuration` manual ao `vercel.json`** — o default já
+atende com folga, e mexer nesse arquivo (formato `services.web`, pouco
+documentado) sem necessidade real só adicionaria risco.
 
 **Deploy:** processo documentado em `checklist_de_deploy.md` (raiz do
 repo, versionado). Ponto mais importante de lá: o alias
