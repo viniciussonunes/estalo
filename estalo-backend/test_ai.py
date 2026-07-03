@@ -16,11 +16,21 @@ did = deck["id"]
 
 print("1) Gerar cards por IA (resposta do Gemini simulada)...")
 fake = [
-    {"front": "O que e Zero Trust?", "back": "Modelo: nunca confie, sempre verifique"},
-    {"front": "Principio central?", "back": "Verificacao continua de identidade"},
+    {
+        "front": "O que e Zero Trust?",
+        "back": "Modelo: nunca confie, sempre verifique",
+        "distractors": ["Confiar em tudo dentro da rede", "Autenticar so uma vez", "Ignorar a origem da requisicao"],
+        "explanation": "Zero Trust parte do principio de verificacao continua, nunca implicita.",
+    },
+    {
+        "front": "Principio central?",
+        "back": "Verificacao continua de identidade",
+        "distractors": ["Perimetro de rede fixo", "Confianca implicita", "Acesso irrestrito"],
+        "explanation": "O principio central e nunca confiar automaticamente, sempre validar.",
+    },
 ]
-# Troca a funcao gerar_cards por uma que devolve o fake, sem chamar a internet.
-with patch("app.routers.cards.gerar_cards", return_value=fake):
+# Troca a funcao gerar_cards_completos por uma que devolve o fake, sem chamar a internet.
+with patch("app.routers.cards.gerar_cards_completos", return_value=fake):
     r = client.post(f"/decks/{did}/cards/generate",
                     json={"text": "Zero Trust e um modelo de seguranca...", "quantity": 2},
                     headers=vini)
@@ -41,7 +51,7 @@ print("   OK\n")
 
 print("3) Sem chave configurada, a API responde erro 502 (nao 500)...")
 from app.services.ai import IAError
-with patch("app.routers.cards.gerar_cards", side_effect=IAError("Chave do Gemini nao configurada")):
+with patch("app.routers.cards.gerar_cards_completos", side_effect=IAError("Chave do Gemini nao configurada")):
     r = client.post(f"/decks/{did}/cards/generate",
                     json={"text": "qualquer texto aqui", "quantity": 3},
                     headers=vini)
@@ -51,7 +61,7 @@ print("   OK — erro tratado com elegancia, nao quebrou o servidor\n")
 
 print("4) ISOLAMENTO: intruso nao gera cards no deck do Vini...")
 intruso = logar("intruso@estalo.dev")
-with patch("app.routers.cards.gerar_cards", return_value=fake):
+with patch("app.routers.cards.gerar_cards_completos", return_value=fake):
     r = client.post(f"/decks/{did}/cards/generate",
                     json={"text": "texto de invasao", "quantity": 2},
                     headers=intruso)

@@ -23,7 +23,10 @@ did = deck["id"]
 print("1) Stats iniciais (2 cards novos, 2 prontos pra estudar)...")
 s = client.get(f"/study/decks/{did}/stats", headers=vini).json()
 print("  ", s)
-assert s == {"total_cards": 2, "due_now": 2, "new_cards": 2}
+# Checa só os campos que essa regra de negócio valida (2 cards, ambos novos e
+# ambos na fila de hoje) — comparar o dict inteiro quebra toda vez que um
+# campo novo é adicionado ao StudyStats, mesmo sem mudar nenhum comportamento.
+assert s["total_cards"] == 2 and s["due_now"] == 2 and s["new_cards"] == 2
 print("   OK\n")
 
 print("2) Pegar o proximo card pra estudar...")
@@ -44,29 +47,50 @@ print("  ", s)
 assert s["due_now"] == 1 and s["new_cards"] == 1
 print("   OK — card estudado saiu da fila de hoje\n")
 
-print("5) Estudar o segundo card e ERRAR (nota 1) -> volta amanha...")
+print("5) Estudar o segundo card e ERRAR (nota 1) -> Crítico Imediato (due_date = agora)...")
 prox2 = client.get(f"/study/decks/{did}/next", headers=vini).json()
 print("   proximo card:", prox2["front"])
 r = client.post(f"/study/cards/{prox2['card_id']}/answer", json={"quality": 1}, headers=vini).json()
 print(f"   errou -> intervalo: {r['interval']} dia(s), repeticoes zeradas: {r['repetitions']}")
 assert r["interval"] == 1 and r["repetitions"] == 0
-print("   OK — card errado volta logo\n")
+print("   OK — card errado fica com interval=1 e repetitions=0\n")
 
-print("6) Agora a fila de HOJE esta vazia (os dois tem due_date no futuro)...")
+print("6) Crítico Imediato (study.py:238-245): card errado reaparece NA HORA, sessão não encerra...")
 prox3 = client.get(f"/study/decks/{did}/next", headers=vini).json()
-print("   proximo card:", prox3)
-assert prox3 is None
-print("   OK — nada vencido agora\n")
+print("   resposta:", prox3)
+assert "concluida" not in prox3, f"sessão não deveria estar marcada como concluída: {prox3}"
+assert prox3["card_id"] == prox2["card_id"], "o card errado (crítico) deveria reaparecer imediatamente"
+print("   OK — comportamento de 'Crítico Imediato' confirmado, card disponível de novo na hora\n")
 
-print("7) Simular passagem do tempo: forco o card errado a vencer e ele reaparece...")
+print("7) Com TODOS os cards dominados (repetitions>=2) e due_date no futuro, /next encerra a sessão...")
+# Simula o estado de "dominado, nada pendente" direto no banco — chegar lá
+# via respostas reais exigiria burlar a trava de elegibilidade (mesmo card
+# não pode ser respondido 2x no mesmo dia sem ignorar_elegibilidade). O que
+# este teste valida é o CONTRATO do endpoint dado esse estado, não a
+# progressão do SM-2 em si (isso é coberto pelos testes de interval/reps
+# acima).
+db = SessionLocal()
+for cid in (c1["id"], c2["id"]):
+    rev = db.query(Review).filter(Review.card_id == cid).first()
+    rev.repetitions = 2
+    rev.due_date = datetime.utcnow() + timedelta(days=5)
+    db.add(rev)
+db.commit()
+db.close()
+prox4 = client.get(f"/study/decks/{did}/next", headers=vini).json()
+print("   resposta:", prox4)
+assert prox4.get("concluida") is True and prox4["motivo"] == "sem_cards"
+print("   OK — SessaoConcluida devolvida corretamente quando não há cards pendentes\n")
+
+print("8) Simular passagem do tempo: forco um card a vencer de novo e ele reaparece...")
 db = SessionLocal()
 rev = db.query(Review).filter(Review.card_id == prox2["card_id"]).first()
 rev.due_date = datetime.utcnow() - timedelta(days=2)  # finge que ja venceu
 db.commit()
 db.close()
-prox4 = client.get(f"/study/decks/{did}/next", headers=vini).json()
-print("   card que reapareceu:", prox4["front"] if prox4 else None)
-assert prox4 is not None and prox4["card_id"] == prox2["card_id"]
+prox5 = client.get(f"/study/decks/{did}/next", headers=vini).json()
+print("   card que reapareceu:", prox5.get("front"))
+assert "concluida" not in prox5 and prox5["card_id"] == prox2["card_id"]
 print("   OK — card vencido voltou pra fila\n")
 
 print("=== TODOS OS TESTES DE ESTUDO PASSARAM ===")
