@@ -352,6 +352,93 @@ def estatisticas(
     )
 
 
+@router.get("/decks/stats", response_model=dict[int, StudyStats])
+def estatisticas_varios_decks(
+    ids: str = Query(..., description="IDs de deck separados por vírgula, ex: 1,2,3"),
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Versão em lote de GET /decks/{id}/stats — calcula pra vários decks
+    de uma vez com quantidade FIXA de queries (independente de quantos
+    decks ou cards existam). Substitui o padrão antigo do frontend de
+    disparar 1 request HTTP por deck (statsMultiplos)."""
+    try:
+        deck_ids = [int(x) for x in ids.split(",") if x.strip()]
+    except ValueError:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "ids inválido")
+
+    deck_ids_do_usuario = {
+        d.id for d in db.query(Deck.id)
+        .filter(Deck.owner_id == user.id, Deck.id.in_(deck_ids))
+        .all()
+    }
+    deck_ids = [i for i in deck_ids if i in deck_ids_do_usuario]
+    if not deck_ids:
+        return {}
+
+    agora = datetime.utcnow()
+    hoje_data = agora.date()
+
+    cards = db.query(Card).filter(Card.deck_id.in_(deck_ids)).all()
+    card_ids = [c.id for c in cards]
+    reviews = {
+        r.card_id: r
+        for r in db.query(Review)
+        .filter(Review.user_id == user.id, Review.card_id.in_(card_ids))
+        .all()
+    } if card_ids else {}
+
+    por_deck = {
+        deck_id: {"total": 0, "novos": 0, "validando": 0, "dominados": 0, "criticos": 0, "hoje": 0, "due_now": 0}
+        for deck_id in deck_ids
+    }
+
+    for card in cards:
+        acc = por_deck[card.deck_id]
+        acc["total"] += 1
+        review = reviews.get(card.id)
+
+        if review is None:
+            acc["novos"] += 1
+            acc["due_now"] += 1
+            continue
+
+        reps = review.repetitions
+        due = review.due_date
+
+        if reps == 0:
+            acc["novos"] += 1
+        elif reps == 1:
+            acc["validando"] += 1
+        else:
+            acc["dominados"] += 1
+
+        if reps > 0:
+            due_data = due.date()
+            if due_data < hoje_data:
+                acc["criticos"] += 1
+                acc["due_now"] += 1
+            elif due_data == hoje_data:
+                acc["hoje"] += 1
+                acc["due_now"] += 1
+
+    return {
+        deck_id: StudyStats(
+            total_cards=acc["total"],
+            novos=acc["novos"],
+            validando=acc["validando"],
+            dominados=acc["dominados"],
+            criticos=acc["criticos"],
+            hoje=acc["hoje"],
+            due_now=acc["due_now"],
+            new_cards=acc["novos"],
+            validating=acc["validando"],
+            dominated=acc["dominados"],
+        )
+        for deck_id, acc in por_deck.items()
+    }
+
+
 @router.get("/heatmap-stats", response_model=dict[str, int])
 def heatmap_stats(
     db: Session = Depends(get_db),

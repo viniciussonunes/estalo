@@ -61,6 +61,36 @@ def _memorization_pct(deck_id: int, user_id: int, db: Session) -> tuple[int, flo
     return total, round(soma / total, 1)
 
 
+def _memorization_stats_bulk(
+    deck_ids: list[int], user_id: int, db: Session
+) -> dict[int, tuple[int, float]]:
+    """Versão em lote de _memorization_pct: calcula (total_cards, pct) pra
+    vários decks de uma vez, com UMA query (Card outer join Review) em vez
+    de uma query por card — é o que faz listar_decks não ser N+1.
+    """
+    if not deck_ids:
+        return {}
+
+    linhas = (
+        db.query(Card.deck_id, Review.repetitions)
+        .outerjoin(Review, (Review.card_id == Card.id) & (Review.user_id == user_id))
+        .filter(Card.deck_id.in_(deck_ids))
+        .all()
+    )
+
+    contagem: dict[int, int] = {}
+    soma: dict[int, float] = {}
+    for deck_id, repetitions in linhas:
+        contagem[deck_id] = contagem.get(deck_id, 0) + 1
+        pontos = 50.0 if repetitions == 1 else 100.0 if (repetitions or 0) >= 2 else 0.0
+        soma[deck_id] = soma.get(deck_id, 0.0) + pontos
+
+    return {
+        deck_id: (total, round(soma[deck_id] / total, 1))
+        for deck_id, total in contagem.items()
+    }
+
+
 @router.post("", response_model=DeckOut, status_code=status.HTTP_201_CREATED)
 def criar_deck(
     dados: DeckCreate,
@@ -95,11 +125,13 @@ def listar_decks(
     q = db.query(Deck).filter(Deck.owner_id == user.id)
     if folder_id is not None:
         q = q.filter(Deck.folder_id == folder_id)
-    decks = q.all()
+    decks = q.all()  # query 1
+
+    stats = _memorization_stats_bulk([d.id for d in decks], user.id, db)  # query 2
 
     resultado = []
     for deck in decks:
-        total, pct = _memorization_pct(deck.id, user.id, db)
+        total, pct = stats.get(deck.id, (0, 0.0))
         resultado.append(DeckOut(
             id=deck.id,
             title=deck.title,

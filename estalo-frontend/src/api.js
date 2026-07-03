@@ -99,16 +99,13 @@ export const api = {
 
   streak: () => request("/study/streak"),
 
-  // Carrega stats de vários decks em paralelo; retorna Map<id, stats>
-  statsMultiplos: async (deckIds) => {
-    const resultados = await Promise.allSettled(
-      deckIds.map(id => request(`/study/decks/${id}/stats`).then(s => ({ id, s })))
-    );
-    const mapa = {};
-    for (const r of resultados) {
-      if (r.status === "fulfilled") mapa[r.value.id] = r.value.s;
-    }
-    return mapa;
+  // Carrega stats de vários decks numa única chamada; retorna Map<id, stats>.
+  // Antes disparava 1 request HTTP por deck (statsMultiplos em paralelo) —
+  // GET /study/decks/stats calcula tudo no backend com queries em
+  // quantidade fixa, independente de quantos decks existam.
+  statsMultiplos: (deckIds) => {
+    if (deckIds.length === 0) return Promise.resolve({});
+    return request(`/study/decks/stats?ids=${deckIds.join(",")}`);
   },
 
   listarCards: (deckId) => request(`/decks/${deckId}/cards`),

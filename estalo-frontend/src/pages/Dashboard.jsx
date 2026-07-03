@@ -130,7 +130,7 @@ export default function Dashboard({ usuario, aoSair, aoVerCards, aoEstudar, aoCr
         if (!atualizada) setCaminho([]);
       }
 
-      // Carrega stats de todos os decks em paralelo (sem bloquear a UI)
+      // Carrega stats de todos os decks numa única chamada (sem bloquear a UI)
       if (novosDecks.length > 0) {
         setStatsCarregando(true);
         api.statsMultiplos(novosDecks.map(d => d.id))
