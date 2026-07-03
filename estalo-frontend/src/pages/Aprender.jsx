@@ -54,6 +54,10 @@ export default function Aprender({ deck, aoVoltar }) {
   const [concluido, setConcluido]     = useState(false);
   const [salvando, setSalvando]       = useState(false);
   const [resposta, setResposta]       = useState(null);
+  // true durante o "Rever Vilões": um loop de treino extra, 100% em memória,
+  // que reaproveita a mesma UI de pergunta/resposta sem tocar no banco nem
+  // no snapshot de F5 (ver os dois useEffect abaixo e proximo()).
+  const [modoPraticaViloes, setModoPraticaViloes] = useState(false);
 
   // Map<card_id, quantidade de vezes que errou nesta sessão> — antes era um
   // Set (só "errou ou não"). Agora contamos de verdade, pra graduar a nota
@@ -128,8 +132,15 @@ export default function Aprender({ deck, aoVoltar }) {
 
   // Salva o progresso a cada mudança (inclusive a alternativa marcada na
   // questão atual, ainda não confirmada), pra sobreviver a reload/saída.
+  //
+  // modoPraticaViloes também barra o save aqui — sem essa trava, o "Rever
+  // Vilões" reaproveita `fila`/`concluido=false` pra rodar a mesma UI de
+  // pergunta, e esse efeito escreveria um snapshot com só o subconjunto de
+  // vilões. Um F5 nesse momento leria esse snapshot errado e ofereceria
+  // "continuar" uma sessão que não é a sessão real — a real já foi salva e
+  // encerrada antes da prática começar (ver reverViloes()).
   useEffect(() => {
-    if (mostrarPrompt || concluido || fila.length === 0) return;
+    if (mostrarPrompt || concluido || fila.length === 0 || modoPraticaViloes) return;
     salvar({
       fila,
       totalUnicos,
@@ -143,7 +154,7 @@ export default function Aprender({ deck, aoVoltar }) {
       resposta,
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fila, acertosNaPrimeira, concluido, mostrarPrompt, resposta]);
+  }, [fila, acertosNaPrimeira, concluido, mostrarPrompt, resposta, modoPraticaViloes]);
 
   // Sessão chegou ao fim (equivalente a SessaoConcluida) → limpa o snapshot.
   useEffect(() => {
@@ -206,7 +217,14 @@ export default function Aprender({ deck, aoVoltar }) {
       }
       if (novaFila.length === 0) {
         setConcluido(true);
-        await _salvarProgresso();
+        // Trava crítica: no "Rever Vilões" a fila também esvazia e cai
+        // aqui, mas essa rodada é só treino — não pode chamar
+        // _salvarProgresso() de novo (já rodou uma vez, na sessão real).
+        if (modoPraticaViloes) {
+          setModoPraticaViloes(false);
+        } else {
+          await _salvarProgresso();
+        }
       } else {
         setResposta(null);
         setFila(novaFila);
@@ -259,14 +277,43 @@ export default function Aprender({ deck, aoVoltar }) {
       .finally(() => setCarregando(false));
   }
 
+  // Repopula a fila só com os cards que erraram >=2x na sessão que acabou
+  // de fechar, e reusa a MESMA UI de pergunta/resposta pra treinar de novo.
+  // Não busca nada do servidor, não mexe em errosPorCard/startingReps — é
+  // puramente uma segunda passada em memória sobre o que já está carregado.
+  function reverViloes() {
+    const viloes = questoesOriginais.current.filter(
+      q => (errosPorCard.current.get(q.card_id) ?? 0) >= 2
+    );
+    if (viloes.length === 0) return;
+    setModoPraticaViloes(true);
+    setResposta(null);
+    setFila(viloes);
+    setConcluido(false);
+  }
+
+  // Durante o "Rever Vilões", Voltar não sai da tela — volta pro resumo da
+  // sessão real (que já foi salva). Fora desse modo, comportamento normal.
+  function voltarOuSairDaPratica() {
+    if (modoPraticaViloes) {
+      setModoPraticaViloes(false);
+      setResposta(null);
+      setConcluido(true);
+    } else {
+      sair();
+    }
+  }
+
   // ─── Header ────────────────────────────────────────────────────────────
   const cabecalho = (
     <header className="topo">
       <div className="topo-esquerda">
-        <button className="botao-texto" onClick={sair}>← Voltar</button>
+        <button className="botao-texto" onClick={voltarOuSairDaPratica}>
+          {modoPraticaViloes ? "← Voltar ao resumo" : "← Voltar"}
+        </button>
         <span className="estudo-deck-nome">{deck.title}</span>
       </div>
-      <span className="modo-label">Múltipla escolha</span>
+      <span className="modo-label">{modoPraticaViloes ? "Revisão de vilões" : "Múltipla escolha"}</span>
     </header>
   );
 
@@ -349,6 +396,11 @@ export default function Aprender({ deck, aoVoltar }) {
     const avancadosParaValidacao = questoesOriginais.current.filter(
       q => (startingReps.current[q.card_id] ?? 0) === 0
     ).length;
+    // Vilões: cards que custaram 2+ erros nesta sessão — candidatos a uma
+    // segunda passada rápida, só em memória (ver reverViloes()).
+    const viloes = questoesOriginais.current.filter(
+      q => (errosPorCard.current.get(q.card_id) ?? 0) >= 2
+    );
 
     return (
       <div className="pagina">{cabecalho}
@@ -381,6 +433,27 @@ export default function Aprender({ deck, aoVoltar }) {
                 </div>
               )}
             </div>
+
+            {viloes.length > 0 && (
+              <div className="viloes-bloco">
+                <p className="viloes-titulo">🎯 Vilões da rodada</p>
+                <p className="viloes-sub">
+                  {viloes.length} card{viloes.length !== 1 ? "s" : ""} te derrubaram 2 vezes ou
+                  mais nesta sessão — vale uma revisão rápida agora, sem custar nada no seu ritmo real.
+                </p>
+                <ul className="viloes-lista">
+                  {viloes.map(v => (
+                    <li key={v.card_id} className="viloes-item">
+                      <span className="viloes-item-texto">{v.question}</span>
+                      <span className="viloes-item-badge">{errosPorCard.current.get(v.card_id)}×</span>
+                    </li>
+                  ))}
+                </ul>
+                <button className="botao-principal" onClick={reverViloes}>
+                  Rever Vilões
+                </button>
+              </div>
+            )}
 
             {temCardsEmValidacao ? (
               <div className="gamificado-aviso">

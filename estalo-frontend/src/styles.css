@@ -95,6 +95,9 @@
   color: var(--ambar);
 }
 .tema-escuro .sessao-stat.ambar .sessao-stat-valor { color: var(--ambar); }
+.tema-escuro .viloes-bloco { background: var(--ambar-suave); border-color: var(--ambar); }
+.tema-escuro .viloes-titulo { color: var(--ambar); }
+.tema-escuro .viloes-item-badge { background: var(--ambar-suave); color: var(--ambar); }
 
 /* Caixa do ícone em itens de lista (pasta/deck): var(--papel) fica mais
    escuro que o próprio card no tema escuro, "engolindo" o ícone. Troca
@@ -1536,6 +1539,62 @@ kbd {
 .sessao-stat.verde  .sessao-stat-valor { color: var(--verde); }
 .sessao-stat.roxo   .sessao-stat-valor { color: var(--violeta); }
 .sessao-stat.ambar  .sessao-stat-valor { color: #92400e; }
+
+/* ---------- Vilões da rodada (resumo do Aprender) ---------- */
+.viloes-bloco {
+  background: #fffbeb;
+  border: 1.5px solid #fde68a;
+  border-radius: 12px;
+  padding: 1.1rem 1.2rem;
+  margin: 1rem 0;
+  text-align: left;
+  width: 100%;
+}
+.viloes-titulo {
+  font-weight: 700;
+  font-size: 0.95rem;
+  color: #92400e;
+  margin-bottom: 0.3rem;
+}
+.viloes-sub {
+  font-size: 0.85rem;
+  line-height: 1.5;
+  color: var(--tinta-suave);
+  margin-bottom: 0.8rem;
+}
+.viloes-lista {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  margin-bottom: 1rem;
+}
+.viloes-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+  background: var(--superficie);
+  border: 1px solid var(--borda);
+  border-radius: 8px;
+  padding: 0.5rem 0.7rem;
+}
+.viloes-item-texto {
+  font-size: 0.85rem;
+  color: var(--tinta);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.viloes-item-badge {
+  flex-shrink: 0;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #92400e;
+  background: #fef3c7;
+  border-radius: 20px;
+  padding: 0.12rem 0.5rem;
+}
 
 /* ---------- Dashboard V3 — container ---------- */
 .dash-container {
