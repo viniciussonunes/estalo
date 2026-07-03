@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
+import * as Sentry from "@sentry/react";
 import { api } from "../api.js";
 
 /** Devolve o caminho (array de pastas) da raiz até `targetId` */
@@ -242,6 +243,7 @@ export default function Dashboard({ usuario, aoSair, aoVerCards, aoEstudar, aoCr
       <header className="topo">
         <span className="marca-nome pequeno">Estalo</span>
         <div className="topo-direita">
+          {import.meta.env.DEV && <BotaoTesteSentry />}
           <ToggleTema tema={tema} proximoTema={proximoTema} />
           <span className="usuario-email">{usuario.email}</span>
           <button className="botao-texto" onClick={aoSair}>Sair</button>
@@ -641,6 +643,20 @@ const TEMA_ICONES = { light: IconeSol, dark: IconeLua, system: IconeMonitor };
 const TEMA_LABELS = { light: "Claro", dark: "Escuro", system: "Sistema" };
 
 /** Botão único que cicla light → dark → system → light. */
+/** Só renderiza em dev (import.meta.env.DEV). Dispara um erro simulado
+ * pro Sentry pra verificar a captura sem precisar quebrar a UI de verdade. */
+function BotaoTesteSentry() {
+  function disparar() {
+    const id = Sentry.captureException(new Error("[teste] erro simulado disparado manualmente"));
+    console.info("[Sentry] captureException chamado, event id:", id);
+  }
+  return (
+    <button className="botao-texto" onClick={disparar} title="Dispara um erro de teste pro Sentry (só em dev)">
+      🐞 Testar Sentry
+    </button>
+  );
+}
+
 function ToggleTema({ tema, proximoTema }) {
   const Icone = TEMA_ICONES[tema] ?? IconeMonitor;
   return (
