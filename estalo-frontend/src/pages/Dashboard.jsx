@@ -41,6 +41,28 @@ function coletarIdsPastas(pasta) {
   return [pasta.id, ...(pasta.children || []).flatMap(coletarIdsPastas)];
 }
 
+/**
+ * Ordena uma lista (pastas OU decks, nunca misturados — cada seção chama
+ * essa função com a própria lista) conforme o critério ativo.
+ *
+ * `pegarRecente` extrai um valor comparável pra "mais recentes primeiro":
+ * pastas vindas de GET /folders não trazem created_at (o schema FolderTree
+ * do backend não expõe esse campo, só FolderOut), mas o id é atribuído em
+ * ordem de criação e nunca é reaproveitado — serve como proxy exato sem
+ * precisar mudar o backend. Decks já têm created_at real, então usam a
+ * data mesmo.
+ */
+function ordenarLista(lista, criterio, campoNome, pegarRecente) {
+  const copia = [...lista];
+  if (criterio === "Z-A") {
+    return copia.sort((a, b) => b[campoNome].localeCompare(a[campoNome], "pt-BR", { sensitivity: "base" }));
+  }
+  if (criterio === "recentes") {
+    return copia.sort((a, b) => pegarRecente(b) - pegarRecente(a));
+  }
+  return copia.sort((a, b) => a[campoNome].localeCompare(b[campoNome], "pt-BR", { sensitivity: "base" }));
+}
+
 /** Nova árvore com `novoNo` inserido como filho de `parentId` (raiz se parentId for null) */
 function inserirNaArvore(arvore, parentId, novoNo) {
   if (parentId === null) return [...arvore, novoNo];
@@ -215,6 +237,7 @@ export default function Dashboard({ usuario, aoSair, aoVerCards, aoEstudar, aoCr
     catch { return "grid"; }
   });
   const [busca, setBusca] = useState("");
+  const [ordenacao, setOrdenacao] = useState("A-Z"); // "A-Z" | "Z-A" | "recentes"
   const inputRef = useRef(null);
 
   useEffect(() => {
@@ -271,16 +294,24 @@ export default function Dashboard({ usuario, aoSair, aoVerCards, aoEstudar, aoCr
   const termoBusca = busca.trim().toLowerCase();
   const emBusca = termoBusca.length > 0;
 
-  const pastasVisiveis = emBusca
+  const pastasFiltradas = emBusca
     ? achatarPastas(arvore)
         .filter(p => p.name.toLowerCase().includes(termoBusca))
         .map(p => encontrarPasta(arvore, p.id))
         .filter(Boolean)
     : (pastaAtiva ? (pastaAtiva.children || []) : arvore);
 
-  const decksVisiveis = emBusca
+  const decksFiltrados = emBusca
     ? todosDecks.filter(d => d.title.toLowerCase().includes(termoBusca))
     : todosDecks.filter(d => pastaAtiva ? d.folder_id === pastaAtiva.id : !d.folder_id);
+
+  // Camada de ordenação, por cima do filtro — pastas e decks são ordenados
+  // cada um dentro da própria lista, nunca misturados (pastas continuam
+  // sempre na seção de cima, decks embaixo, como já era). Funciona igual
+  // nos dois modos (navegação normal ou busca global) porque atua sobre o
+  // resultado já filtrado, sem se importar com a origem dos dados.
+  const pastasVisiveis = ordenarLista(pastasFiltradas, ordenacao, "name", p => p.id);
+  const decksVisiveis  = ordenarLista(decksFiltrados, ordenacao, "title", d => new Date(d.created_at).getTime());
 
   function entrarPasta(pasta) {
     setPastaAtiva(pasta);
@@ -449,23 +480,36 @@ export default function Dashboard({ usuario, aoSair, aoVerCards, aoEstudar, aoCr
           ))}
         </nav>
 
-        {/* Busca global — acha em toda a árvore, não só na pasta atual */}
-        <div className="busca-global">
-          <span className="busca-global-icone"><IconeBusca /></span>
-          <input
-            type="text"
-            className="busca-global-input"
-            value={busca}
-            onChange={e => setBusca(e.target.value)}
-            placeholder="Buscar em todas as pastas e decks..."
-            aria-label="Buscar em todas as pastas e decks"
-          />
-          {busca && (
-            <button type="button" className="busca-global-limpar"
-              onClick={() => setBusca("")} aria-label="Limpar busca">
-              <IconeX />
-            </button>
-          )}
+        {/* Busca global + ordenação — acha em toda a árvore, não só na pasta atual */}
+        <div className="busca-e-ordenacao">
+          <div className="busca-global">
+            <span className="busca-global-icone"><IconeBusca /></span>
+            <input
+              type="text"
+              className="busca-global-input"
+              value={busca}
+              onChange={e => setBusca(e.target.value)}
+              placeholder="Buscar em todas as pastas e decks..."
+              aria-label="Buscar em todas as pastas e decks"
+            />
+            {busca && (
+              <button type="button" className="busca-global-limpar"
+                onClick={() => setBusca("")} aria-label="Limpar busca">
+                <IconeX />
+              </button>
+            )}
+          </div>
+          <select
+            className="ordenacao-select"
+            value={ordenacao}
+            onChange={e => setOrdenacao(e.target.value)}
+            aria-label="Ordenar pastas e decks"
+            title="Ordenar por"
+          >
+            <option value="A-Z">Nome (A-Z)</option>
+            <option value="Z-A">Nome (Z-A)</option>
+            <option value="recentes">Mais recentes</option>
+          </select>
         </div>
 
         {erro && <p className="erro">{erro}</p>}
