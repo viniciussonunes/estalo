@@ -13,7 +13,7 @@ class Card(Base):
     id:      Mapped[int] = mapped_column(Integer, primary_key=True)
     front:   Mapped[str] = mapped_column(Text, nullable=False)
     back:    Mapped[str] = mapped_column(Text, nullable=False)
-    deck_id: Mapped[int] = mapped_column(ForeignKey("decks.id"), nullable=False)
+    deck_id: Mapped[int] = mapped_column(ForeignKey("decks.id"), nullable=False, index=True)
     source:  Mapped[str] = mapped_column(String, default="manual")  # "manual" | "ai"
 
     # Dados pré-gerados para o Modo Aprender (gerados no nascimento, carregamento instantâneo)

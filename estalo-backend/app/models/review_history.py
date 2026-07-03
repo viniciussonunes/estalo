@@ -6,7 +6,7 @@ do tempo: quando acertou, quando errou, como o intervalo foi crescendo.
 """
 from datetime import datetime
 
-from sqlalchemy import DateTime, Float, ForeignKey, Integer, String
+from sqlalchemy import DateTime, Float, ForeignKey, Index, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -14,6 +14,12 @@ from app.core.database import Base
 
 class ReviewHistory(Base):
     __tablename__ = "review_history"
+    # user_id + avaliado_em são varridos toda hora pelo heatmap e pelo
+    # streak (GET /study/heatmap-stats, GET /study/streak) — sem esse
+    # índice composto viram full table scan à medida que o histórico cresce.
+    __table_args__ = (
+        Index("ix_review_history_user_avaliado", "user_id", "avaliado_em"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)

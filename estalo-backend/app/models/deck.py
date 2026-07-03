@@ -19,7 +19,7 @@ class Deck(Base):
     title: Mapped[str] = mapped_column(String, nullable=False)
     description: Mapped[str | None] = mapped_column(String, nullable=True)
 
-    owner_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+    owner_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
 
     # Deck pode estar dentro de uma pasta OU solto (folder_id = None).
     folder_id: Mapped[int | None] = mapped_column(

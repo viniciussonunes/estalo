@@ -11,7 +11,13 @@ Base.metadata.create_all(bind=engine)
 
 
 def _migrar():
-    """Adiciona colunas novas em tabelas existentes (sem Alembic)."""
+    """Adiciona colunas/índices novos em tabelas existentes (sem Alembic).
+
+    Base.metadata.create_all() só cria tabelas que ainda não existem — em
+    bancos já populados (Neon em produção, ou o SQLite local de quem já
+    rodou o projeto antes), as tabelas já estão lá e create_all() não mexe
+    nelas. Por isso os índices também entram aqui, não só nos models.
+    """
     inspector = inspect(engine)
     with engine.begin() as conn:
         colunas_cards = {c["name"] for c in inspector.get_columns("cards")}
@@ -19,6 +25,22 @@ def _migrar():
             conn.execute(text("ALTER TABLE cards ADD COLUMN options TEXT"))
         if "explanation" not in colunas_cards:
             conn.execute(text("ALTER TABLE cards ADD COLUMN explanation TEXT"))
+
+        # Índices — nomes iguais aos que o SQLAlchemy geraria sozinho num
+        # banco novo (ix_<tabela>_<coluna>), pra ficar consistente entre
+        # create_all() (banco novo) e essa migração manual (banco existente).
+        # IF NOT EXISTS funciona em Postgres e em SQLite (>=3.8), então é
+        # seguro rodar em toda inicialização.
+        conn.execute(text(
+            "CREATE INDEX IF NOT EXISTS ix_cards_deck_id ON cards (deck_id)"
+        ))
+        conn.execute(text(
+            "CREATE INDEX IF NOT EXISTS ix_decks_owner_id ON decks (owner_id)"
+        ))
+        conn.execute(text(
+            "CREATE INDEX IF NOT EXISTS ix_review_history_user_avaliado "
+            "ON review_history (user_id, avaliado_em)"
+        ))
 
 
 _migrar()
