@@ -33,7 +33,8 @@ def _validar_pasta(folder_id: int | None, user: User, db: Session) -> None:
 
 
 def _memorization_pct(deck_id: int, user_id: int, db: Session) -> tuple[int, float]:
-    """Retorna (total_cards, memorization_pct 0-100).
+    """Retorna (total_cards, memorization_pct 0-100) pra UM deck, com 2
+    queries fixas (cards, depois reviews via IN) em vez de 1 query por card.
 
     Fases por card:
       - sem Review ou repetitions == 0  → Fase 1 / Novo      (0 %)
@@ -45,13 +46,17 @@ def _memorization_pct(deck_id: int, user_id: int, db: Session) -> tuple[int, flo
     if total == 0:
         return 0, 0.0
 
+    card_ids = [c.id for c in cards]
+    reviews_por_card = {
+        r.card_id: r
+        for r in db.query(Review)
+        .filter(Review.user_id == user_id, Review.card_id.in_(card_ids))
+        .all()
+    }
+
     soma = 0.0
-    for card in cards:
-        review = (
-            db.query(Review)
-            .filter(Review.user_id == user_id, Review.card_id == card.id)
-            .first()
-        )
+    for card_id in card_ids:
+        review = reviews_por_card.get(card_id)
         reps = review.repetitions if review else 0
         if reps == 1:
             soma += 50.0
