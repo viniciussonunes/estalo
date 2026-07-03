@@ -11,6 +11,7 @@
   --violeta: #5c54e8;
   --violeta-escuro: #4a3dd1;
   --violeta-suave: #ede9ff;
+  --violeta-medio: #b3aef5;
   --ambar: #f59e0b;
   --ambar-suave: #fffbeb;
   --verde: #16a34a;
@@ -41,6 +42,7 @@
   --violeta: #8b82f5;
   --violeta-escuro: #7269e0;
   --violeta-suave: rgba(139, 130, 245, 0.16);
+  --violeta-medio: #635cc4;
   --ambar: #fbbf24;
   --ambar-suave: rgba(251, 191, 36, 0.16);
   --verde-suave: rgba(22, 163, 74, 0.18);
@@ -1875,10 +1877,11 @@ kbd {
   transition: width 0.5s cubic-bezier(.4,0,.2,1);
   flex-shrink: 0;
 }
-.seg-critico  { background: var(--erro, #dc2626); }
-.seg-hoje     { background: var(--ambar, #d97706); }
-.seg-neutro   { background: var(--borda-forte, #94a3b8); }
-.seg-dominado { background: var(--verde, #16a34a); }
+.seg-critico   { background: var(--erro, #dc2626); }
+.seg-hoje      { background: var(--ambar, #d97706); }
+.seg-novo      { background: var(--violeta); }
+.seg-validando { background: var(--violeta-medio); }
+.seg-dominado  { background: var(--verde, #16a34a); }
 
 .barra-seg-skeleton {
   background: linear-gradient(90deg, var(--borda) 25%, var(--superficie) 50%, var(--borda) 75%);

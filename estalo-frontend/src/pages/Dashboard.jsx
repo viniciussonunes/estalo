@@ -67,23 +67,25 @@ function BarraSegmentada({ stats, carregando = false }) {
 
   const sCriticos  = pct(stats.criticos);
   const sHoje      = pct(stats.hoje);
-  const sNeutros   = pct((stats.novos || 0) + (stats.validando || 0));
+  const sNovos     = pct(stats.novos);
+  const sValidando = pct(stats.validando);
   const sDominados = pct(stats.dominados);
 
   const tooltip = [
     stats.criticos  && `${stats.criticos} crítico${stats.criticos  !== 1 ? "s" : ""}`,
     stats.hoje      && `${stats.hoje} hoje`,
-    (stats.novos || 0) + (stats.validando || 0) > 0
-      && `${(stats.novos||0)+(stats.validando||0)} em progresso`,
+    stats.novos     && `${stats.novos} novo${stats.novos !== 1 ? "s" : ""}`,
+    stats.validando && `${stats.validando} validando`,
     stats.dominados && `${stats.dominados} dominado${stats.dominados !== 1 ? "s" : ""}`,
   ].filter(Boolean).join(" · ");
 
   return (
     <div className="barra-seg" title={tooltip || `${total} cards`} aria-hidden="true">
-      {sCriticos  > 0 && <span className="barra-seg-fatia seg-critico"  style={{ width: `${sCriticos}%`  }} />}
-      {sHoje      > 0 && <span className="barra-seg-fatia seg-hoje"     style={{ width: `${sHoje}%`      }} />}
-      {sNeutros   > 0 && <span className="barra-seg-fatia seg-neutro"   style={{ width: `${sNeutros}%`   }} />}
-      {sDominados > 0 && <span className="barra-seg-fatia seg-dominado" style={{ width: `${sDominados}%` }} />}
+      {sCriticos  > 0 && <span className="barra-seg-fatia seg-critico"   style={{ width: `${sCriticos}%`  }} />}
+      {sHoje      > 0 && <span className="barra-seg-fatia seg-hoje"      style={{ width: `${sHoje}%`      }} />}
+      {sNovos     > 0 && <span className="barra-seg-fatia seg-novo"      style={{ width: `${sNovos}%`     }} />}
+      {sValidando > 0 && <span className="barra-seg-fatia seg-validando" style={{ width: `${sValidando}%` }} />}
+      {sDominados > 0 && <span className="barra-seg-fatia seg-dominado"  style={{ width: `${sDominados}%` }} />}
     </div>
   );
 }
