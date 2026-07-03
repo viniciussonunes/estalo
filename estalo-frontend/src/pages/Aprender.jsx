@@ -82,6 +82,9 @@ export default function Aprender({ deck, aoVoltar }) {
     errosPorCard.current = new Set(snap.errosPorCard);
     setAcertosNaPrimeira(snap.acertosNaPrimeira);
     inicioSessao.current = snap.inicioSessao;
+    // snap.resposta pode não existir em snapshots salvos antes dessa mudança
+    // (?? null cobre isso: retoma sem alternativa marcada, e não quebra).
+    setResposta(snap.resposta ?? null);
   }
 
   function _carregarDoServidor() {
@@ -112,12 +115,15 @@ export default function Aprender({ deck, aoVoltar }) {
     _carregarDoServidor();
   }
 
+  // "Voltar" só navega — não descarta o snapshot. O progresso só é apagado
+  // quando a sessão é concluída de verdade (useEffect logo abaixo) ou quando
+  // o usuário escolhe explicitamente "Começar do zero".
   function sair() {
-    limpar();
     aoVoltar();
   }
 
-  // Salva o progresso da fila a cada mudança, pra sobreviver a reload/saída.
+  // Salva o progresso a cada mudança (inclusive a alternativa marcada na
+  // questão atual, ainda não confirmada), pra sobreviver a reload/saída.
   useEffect(() => {
     if (mostrarPrompt || concluido || fila.length === 0) return;
     salvar({
@@ -128,9 +134,10 @@ export default function Aprender({ deck, aoVoltar }) {
       errosPorCard: [...errosPorCard.current],
       acertosNaPrimeira,
       inicioSessao: inicioSessao.current,
+      resposta,
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fila, acertosNaPrimeira, concluido, mostrarPrompt]);
+  }, [fila, acertosNaPrimeira, concluido, mostrarPrompt, resposta]);
 
   // Sessão chegou ao fim (equivalente a SessaoConcluida) → limpa o snapshot.
   useEffect(() => {
