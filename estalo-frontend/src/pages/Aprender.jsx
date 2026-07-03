@@ -4,11 +4,12 @@ import useStudySession from "../hooks/useStudySession.js";
 
 /*
   Lógica de fases SM-2:
-    Fase 1 (rep == 0 / Novo)       → quality 3  → Fase 2
-    Fase 2 (rep == 1 / Validando)  acertou 1ª   → quality 5  → Fase 3
-    Fase 2                         errou alguma → NÃO envia  → permanece Fase 2
-    Fase 3+ (rep ≥ 2 / Dominado)   acertou 1ª   → quality 5
-    Fase 3+                        errou alguma → quality 1  → Fase 1
+    Fase 1 (rep == 0 / Novo)       0 erros no quiz  → quality 4  → Fase 2 (fica fácil)
+    Fase 1 (rep == 0 / Novo)       1+ erros no quiz → quality 3  → Fase 2 (padrão)
+    Fase 2 (rep == 1 / Validando)  acertou sem errar → quality 5  → Fase 3
+    Fase 2                         errou alguma vez  → quality 2  → reseta (Crítico Imediato)
+    Fase 3+ (rep ≥ 2 / Dominado)   acertou sem errar → quality 5
+    Fase 3+                        errou alguma vez  → quality 1  → volta à Fase 1
 */
 
 const LETRAS = ["A", "B", "C", "D"];
@@ -54,7 +55,10 @@ export default function Aprender({ deck, aoVoltar }) {
   const [salvando, setSalvando]       = useState(false);
   const [resposta, setResposta]       = useState(null);
 
-  const errosPorCard      = useRef(new Set());
+  // Map<card_id, quantidade de vezes que errou nesta sessão> — antes era um
+  // Set (só "errou ou não"). Agora contamos de verdade, pra graduar a nota
+  // final em _salvarProgresso (Proposta 3) em vez de tratar todo erro igual.
+  const errosPorCard      = useRef(new Map());
   const startingReps      = useRef({});
   const questoesOriginais = useRef([]);
   const inicioSessao      = useRef(null);
@@ -79,7 +83,7 @@ export default function Aprender({ deck, aoVoltar }) {
     setTotalUnicos(snap.totalUnicos);
     questoesOriginais.current = snap.questoesOriginais;
     startingReps.current = snap.startingReps;
-    errosPorCard.current = new Set(snap.errosPorCard);
+    errosPorCard.current = new Map(snap.errosPorCard);
     setAcertosNaPrimeira(snap.acertosNaPrimeira);
     inicioSessao.current = snap.inicioSessao;
     // snap.resposta pode não existir em snapshots salvos antes dessa mudança
@@ -131,6 +135,8 @@ export default function Aprender({ deck, aoVoltar }) {
       totalUnicos,
       questoesOriginais: questoesOriginais.current,
       startingReps: startingReps.current,
+      // Serializa o Map como array de pares [card_id, contagem] — JSON não
+      // tem Map nativo. new Map(arrayDePares) reconstrói certinho na volta.
       errosPorCard: [...errosPorCard.current],
       acertosNaPrimeira,
       inicioSessao: inicioSessao.current,
@@ -151,6 +157,12 @@ export default function Aprender({ deck, aoVoltar }) {
   // Mantém ref atualizada para o handler de teclado (evita stale closure)
   useEffect(() => { proximoRef.current = proximo; });
 
+  // Incrementa a contagem de erros do card (usado tanto pelo clique quanto
+  // pelo atalho de teclado, pra não duplicar a lógica em dois lugares).
+  function _registrarErro(cardId) {
+    errosPorCard.current.set(cardId, (errosPorCard.current.get(cardId) ?? 0) + 1);
+  }
+
   useEffect(() => {
     function onKey(e) {
       if (concluido || semQuiz || carregando) return;
@@ -160,7 +172,7 @@ export default function Aprender({ deck, aoVoltar }) {
         const opt = atual.options[parseInt(e.key) - 1];
         if (opt) {
           setResposta(opt.letter);
-          if (opt.letter !== atual.correct_letter) errosPorCard.current.add(atual.card_id);
+          if (opt.letter !== atual.correct_letter) _registrarErro(atual.card_id);
         }
       }
       if (respondeu && (e.key === " " || e.key === "Enter")) {
@@ -179,7 +191,7 @@ export default function Aprender({ deck, aoVoltar }) {
     if (respondeu) return;
     setResposta(letter);
     if (letter !== fila[0].correct_letter) {
-      errosPorCard.current.add(fila[0].card_id);
+      _registrarErro(fila[0].card_id);
     }
   }
 
@@ -216,14 +228,16 @@ export default function Aprender({ deck, aoVoltar }) {
     setTempoSessao(Math.floor((Date.now() - (inicioSessao.current ?? Date.now())) / 1000));
     setSalvando(true);
     const chamadas = questoesOriginais.current.map(q => {
-      const fase  = startingReps.current[q.card_id] ?? 0;
-      const errou = errosPorCard.current.has(q.card_id);
-      if (fase === 1 && errou) return Promise.resolve(); // permanece Fase 2
+      const fase = startingReps.current[q.card_id] ?? 0;
+      const errou = (errosPorCard.current.get(q.card_id) ?? 0) > 0;
+
       let quality;
-      if (fase === 0)               quality = 3; // Fase 1 → 2
-      else if (fase === 1 && !errou) quality = 5; // Fase 2 → 3
-      else if (fase >= 2 && !errou)  quality = 5; // Dominado: estende
-      else                           quality = 1; // Dominado: volta Fase 1
+      if (fase === 0)                quality = errou ? 3 : 4; // Novo: limpo=4, com erro=3 — nunca cai no Crítico Imediato (quality<3)
+      else if (fase === 1 && errou)  quality = 2;              // Validando + erro: reseta (Crítico Imediato), penalidade mais leve que Dominado
+      else if (fase === 1 && !errou) quality = 5;              // Validando sem erro: avança pra Dominado
+      else if (fase >= 2 && !errou)  quality = 5;              // Dominado sem erro: estende
+      else                            quality = 1;              // Dominado com erro: volta à Fase 1
+
       return api.responderCard(q.card_id, quality, true).catch(err => {
         console.error(`[Aprender] card ${q.card_id} fase=${fase} quality=${quality} erro:`, err.message);
       });
@@ -233,7 +247,7 @@ export default function Aprender({ deck, aoVoltar }) {
   }
 
   function reiniciarSessao() {
-    errosPorCard.current = new Set();
+    errosPorCard.current = new Map();
     startingReps.current = {};
     setAcertosNaPrimeira(0);
     setResposta(null);
