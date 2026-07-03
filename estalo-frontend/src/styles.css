@@ -458,6 +458,7 @@ body {
   border: 1.5px solid var(--borda);
   border-radius: 10px;
   background: var(--superficie);
+  color: var(--tinta);
   font: inherit;
   font-size: 0.95rem;
   text-align: left;
