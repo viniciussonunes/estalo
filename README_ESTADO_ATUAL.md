@@ -116,6 +116,19 @@ Não bloqueiam nada, mas ficaram de fora do escopo desta sessão:
 
 ---
 
+## 3.1. Backlog de melhorias futuras
+
+Ideias discutidas mas não implementadas — não são dívida técnica (nada
+está quebrado ou pendente), são escopo novo pra quando fizer sentido:
+
+- **Personalização de cores nas pastas (identidade visual)** — capacidade
+  de atualizar a cor de cada pasta, pra facilitar organização visual e
+  identificação rápida no Dashboard. Requer migração de banco/schema no
+  backend (nova coluna em `Folder`) e um color picker na modal de
+  criação/edição no frontend.
+
+---
+
 ## 4. Configuração de infra — pool de conexões, retry do Gemini, pooler e maxDuration
 
 **Pool de conexões (`estalo-backend/app/core/database.py`):**
