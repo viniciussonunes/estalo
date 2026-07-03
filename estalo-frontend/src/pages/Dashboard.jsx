@@ -36,6 +36,33 @@ function coletarDecks(pasta, todosDecks) {
   return [...diretos, ...filhos];
 }
 
+/** Coleta os ids da pasta e de toda a sub-árvore dela (pra saber o que uma exclusão em cascata leva junto) */
+function coletarIdsPastas(pasta) {
+  return [pasta.id, ...(pasta.children || []).flatMap(coletarIdsPastas)];
+}
+
+/** Nova árvore com `novoNo` inserido como filho de `parentId` (raiz se parentId for null) */
+function inserirNaArvore(arvore, parentId, novoNo) {
+  if (parentId === null) return [...arvore, novoNo];
+  return arvore.map(p => p.id === parentId
+    ? { ...p, children: [...(p.children || []), novoNo] }
+    : { ...p, children: inserirNaArvore(p.children || [], parentId, novoNo) });
+}
+
+/** Nova árvore com a pasta `id` renomeada */
+function renomearNaArvore(arvore, id, novoNome) {
+  return arvore.map(p => p.id === id
+    ? { ...p, name: novoNome }
+    : { ...p, children: renomearNaArvore(p.children || [], id, novoNome) });
+}
+
+/** Nova árvore sem a pasta `id` (e sua sub-árvore) */
+function removerDaArvore(arvore, id) {
+  return arvore
+    .filter(p => p.id !== id)
+    .map(p => ({ ...p, children: removerDaArvore(p.children || [], id) }));
+}
+
 /** Agrega stats de todos os decks contidos em uma pasta (recursivo) */
 function agregarStats(pasta, todosDecks, statsMap) {
   const decks = coletarDecks(pasta, todosDecks);
@@ -150,6 +177,14 @@ export default function Dashboard({ usuario, aoSair, aoVerCards, aoEstudar, aoCr
     if (criandoPasta) inputRef.current?.focus();
   }, [criandoPasta]);
 
+  // Aplica uma nova árvore e resincroniza pastaAtiva com ela (senão
+  // pastaAtiva.children fica congelado na versão de quando você entrou
+  // na pasta, e mudanças nos filhos não apareceriam na tela).
+  function aplicarArvore(novaArvore) {
+    setArvore(novaArvore);
+    setPastaAtiva(pa => pa ? (encontrarPasta(novaArvore, pa.id) ?? null) : pa);
+  }
+
   const pastasVisiveis = pastaAtiva ? (pastaAtiva.children || []) : arvore;
   const decksVisiveis  = todosDecks.filter(d =>
     pastaAtiva ? d.folder_id === pastaAtiva.id : !d.folder_id
@@ -181,9 +216,9 @@ export default function Dashboard({ usuario, aoSair, aoVerCards, aoEstudar, aoCr
     if (!nomePasta.trim()) return;
     setSalvandoPasta(true);
     try {
-      await api.criarPasta(nomePasta.trim(), pastaAtiva?.id ?? null);
+      const nova = await api.criarPasta(nomePasta.trim(), pastaAtiva?.id ?? null);
       setNomePasta(""); setCriandoPasta(false);
-      await carregar(pastaAtiva);
+      aplicarArvore(inserirNaArvore(arvore, pastaAtiva?.id ?? null, { ...nova, children: [] }));
     } catch (err) { setErro(err.message); }
     finally { setSalvandoPasta(false); }
   }
@@ -191,15 +226,29 @@ export default function Dashboard({ usuario, aoSair, aoVerCards, aoEstudar, aoCr
   async function excluirPasta(pasta, e) {
     e.stopPropagation();
     if (!confirm(`Excluir "${pasta.name}" e tudo dentro dela?`)) return;
-    try { await api.excluirPasta(pasta.id); await carregar(pastaAtiva); }
-    catch (err) { setErro(err.message); }
+    try {
+      await api.excluirPasta(pasta.id);
+      const idsRemovidos = new Set(coletarIdsPastas(pasta));
+      aplicarArvore(removerDaArvore(arvore, pasta.id));
+      setTodosDecks(decks => decks.filter(d => d.folder_id === null || !idsRemovidos.has(d.folder_id)));
+      setStatsMap(sm => {
+        const novo = { ...sm };
+        for (const d of todosDecks) {
+          if (d.folder_id !== null && idsRemovidos.has(d.folder_id)) delete novo[d.id];
+        }
+        return novo;
+      });
+    } catch (err) { setErro(err.message); }
   }
 
   async function excluirDeck(deck, e) {
     e.stopPropagation();
     if (!confirm(`Excluir "${deck.title}" e todos os cards?`)) return;
-    try { await api.excluirDeck(deck.id); await carregar(pastaAtiva); }
-    catch (err) { setErro(err.message); }
+    try {
+      await api.excluirDeck(deck.id);
+      setTodosDecks(decks => decks.filter(d => d.id !== deck.id));
+      setStatsMap(sm => { const novo = { ...sm }; delete novo[deck.id]; return novo; });
+    } catch (err) { setErro(err.message); }
   }
 
   function abrirMover(deck, e) {
@@ -212,8 +261,8 @@ export default function Dashboard({ usuario, aoSair, aoVerCards, aoEstudar, aoCr
     const deck = movendo;
     setMovendo(null);
     try {
-      await api.moverDeck(deck.id, folderId);
-      await carregar(pastaAtiva);
+      const atualizado = await api.moverDeck(deck.id, folderId);
+      setTodosDecks(decks => decks.map(d => d.id === deck.id ? atualizado : d));
     } catch (err) { setErro(err.message); }
   }
 
@@ -229,9 +278,13 @@ export default function Dashboard({ usuario, aoSair, aoVerCards, aoEstudar, aoCr
     const nomeNovo = valor.trim();
     if (!nomeNovo) return;
     try {
-      if (tipo === "pasta") await api.renomearPasta(id, nomeNovo);
-      else await api.renomearDeck(id, nomeNovo);
-      await carregar(pastaAtiva);
+      if (tipo === "pasta") {
+        await api.renomearPasta(id, nomeNovo);
+        aplicarArvore(renomearNaArvore(arvore, id, nomeNovo));
+      } else {
+        const atualizado = await api.renomearDeck(id, nomeNovo);
+        setTodosDecks(decks => decks.map(d => d.id === id ? atualizado : d));
+      }
     } catch (err) { setErro(err.message); }
   }
 
