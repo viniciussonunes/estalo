@@ -1,3 +1,5 @@
+import os
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import inspect, text
@@ -6,8 +8,6 @@ from app.core.config import settings
 from app.core.database import Base, engine
 from app import models  # noqa: F401
 from app.routers import auth, folders, decks, cards, study
-
-Base.metadata.create_all(bind=engine)
 
 
 def _migrar():
@@ -43,7 +43,24 @@ def _migrar():
         ))
 
 
-_migrar()
+# create_all()/_migrar() fazem várias idas ao banco (checar tabelas, colunas
+# e índices existentes) — na Vercel isso corria em TODO cold start, não só
+# na primeira vez, e cada cold start pagava essa latência antes de responder
+# a primeira request.
+#
+# Em dev local (a Vercel injeta a env var VERCEL=1 em produção; localmente
+# ela não existe) continua rodando sempre, sem fricção — é rápido no SQLite
+# e garante que o banco local sempre existe/está atualizado.
+#
+# Em produção só roda se RUN_MIGRATIONS=1 estiver setado explicitamente:
+# depois de mudar o schema (nova coluna, novo índice), seta essa variável
+# na Vercel e faz um deploy pra aplicar. create_all()/_migrar() são
+# idempotentes (IF NOT EXISTS em tudo), então não tem risco em deixar
+# setada por engano — só o custo de latência que este guard evita no dia a
+# dia.
+if os.getenv("RUN_MIGRATIONS") == "1" or not os.getenv("VERCEL"):
+    Base.metadata.create_all(bind=engine)
+    _migrar()
 
 app = FastAPI(title="Estalo API", version="0.8.0")
 
