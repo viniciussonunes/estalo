@@ -16,11 +16,14 @@ class FolderCreate(BaseModel):
     """O que o usuário manda pra criar uma pasta."""
     name: str
     parent_id: int | None = None  # None = pasta raiz (nível 1)
+    color: str | None = None      # hex ou var(--token) do frontend; None = cor padrão
 
 
 class FolderUpdate(BaseModel):
-    """Por enquanto só renomear. Mover de lugar entra depois."""
-    name: str
+    """Renomear e/ou trocar a cor — os dois campos são opcionais, só o que
+    vier preenchido é atualizado (mesmo padrão do DeckUpdate)."""
+    name: str | None = None
+    color: str | None = None
 
 
 class FolderOut(BaseModel):
@@ -29,6 +32,7 @@ class FolderOut(BaseModel):
     name: str
     parent_id: int | None
     depth: int
+    color: str | None = None
     created_at: datetime
 
     model_config = {"from_attributes": True}
@@ -39,6 +43,7 @@ class FolderTree(BaseModel):
     id: int
     name: str
     depth: int
+    color: str | None = None
     children: list[FolderTree] = []
 
     model_config = {"from_attributes": True}

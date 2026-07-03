@@ -61,11 +61,11 @@ export const api = {
 
   listarPastas: () => request("/folders"),
 
-  criarPasta: (name, parent_id = null) =>
-    request("/folders", { method: "POST", body: { name, parent_id } }),
+  criarPasta: (name, parent_id = null, color = null) =>
+    request("/folders", { method: "POST", body: { name, parent_id, color } }),
 
-  renomearPasta: (id, name) =>
-    request(`/folders/${id}`, { method: "PATCH", body: { name } }),
+  renomearPasta: (id, name, color) =>
+    request(`/folders/${id}`, { method: "PATCH", body: { name, color } }),
 
   excluirPasta: (id) => request(`/folders/${id}`, { method: "DELETE" }),
 

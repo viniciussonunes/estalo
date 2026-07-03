@@ -24,7 +24,7 @@ function encontrarPasta(arvore, id) {
 /** Achata a árvore de pastas numa lista plana, com nível (pra indentar no seletor de mover) */
 function achatarPastas(arvore, nivel = 0) {
   return arvore.flatMap(p => [
-    { id: p.id, name: p.name, nivel },
+    { id: p.id, name: p.name, nivel, color: p.color },
     ...achatarPastas(p.children || [], nivel + 1),
   ]);
 }
@@ -71,11 +71,11 @@ function inserirNaArvore(arvore, parentId, novoNo) {
     : { ...p, children: inserirNaArvore(p.children || [], parentId, novoNo) });
 }
 
-/** Nova árvore com a pasta `id` renomeada */
-function renomearNaArvore(arvore, id, novoNome) {
+/** Nova árvore com a pasta `id` renomeada (e/ou com a cor trocada) */
+function renomearNaArvore(arvore, id, novoNome, novaCor) {
   return arvore.map(p => p.id === id
-    ? { ...p, name: novoNome }
-    : { ...p, children: renomearNaArvore(p.children || [], id, novoNome) });
+    ? { ...p, name: novoNome, color: novaCor }
+    : { ...p, children: renomearNaArvore(p.children || [], id, novoNome, novaCor) });
 }
 
 /** Nova árvore sem a pasta `id` (e sua sub-árvore) */
@@ -218,6 +218,49 @@ function ExplorerSkeleton({ viewMode }) {
   );
 }
 
+/** Paleta fixa de cores pra pastas — a maioria reaproveita os tokens que já
+ * existem na identidade visual (só o Azul não tem token próprio ainda),
+ * escolhidos justamente por já lerem bem nos dois temas sem precisar de
+ * override — mesmo raciocínio documentado no :root do styles.css pro
+ * verde/âmbar/perigo. "Padrão" (valor null) volta pra cor neutra de sempre. */
+const PALETA_CORES_PASTA = [
+  { nome: "Padrão",   valor: null },
+  { nome: "Azul",     valor: "#3b82f6" },
+  { nome: "Verde",    valor: "var(--verde)" },
+  { nome: "Roxo",     valor: "var(--violeta)" },
+  { nome: "Vermelho", valor: "var(--perigo)" },
+  { nome: "Laranja",  valor: "var(--ambar)" },
+];
+
+/**
+ * Linha de bolinhas clicáveis pra escolher a cor de uma pasta — reaproveitada
+ * tanto no formulário de criação quanto na edição inline.
+ *
+ * onMouseDown com preventDefault evita que clicar numa bolinha tire o foco
+ * do campo de nome ao lado: na edição inline o nome salva via onBlur, e sem
+ * isso o clique na bolinha disparia esse blur (fechando a edição) ANTES do
+ * clique em si ser processado — a cor nunca chegaria a ser aplicada.
+ */
+function SeletorCorPasta({ corSelecionada, onSelecionar }) {
+  return (
+    <div className="seletor-cor-pasta" role="group" aria-label="Cor da pasta">
+      {PALETA_CORES_PASTA.map(opcao => (
+        <button
+          key={opcao.nome}
+          type="button"
+          className={`cor-pasta-bolinha${opcao.valor === null ? " padrao" : ""}${corSelecionada === opcao.valor ? " selecionada" : ""}`}
+          style={opcao.valor ? { background: opcao.valor } : undefined}
+          onMouseDown={e => e.preventDefault()}
+          onClick={() => onSelecionar(opcao.valor)}
+          title={opcao.nome}
+          aria-label={opcao.nome}
+          aria-pressed={corSelecionada === opcao.valor}
+        />
+      ))}
+    </div>
+  );
+}
+
 export default function Dashboard({ usuario, aoSair, aoVerCards, aoEstudar, aoCriarDeck, tema, proximoTema }) {
   const [arvore, setArvore]         = useState([]);
   const [todosDecks, setTodosDecks] = useState([]);
@@ -229,8 +272,9 @@ export default function Dashboard({ usuario, aoSair, aoVerCards, aoEstudar, aoCr
   const [erro, setErro]             = useState("");
   const [criandoPasta, setCriandoPasta]   = useState(false);
   const [nomePasta, setNomePasta]         = useState("");
+  const [corPasta, setCorPasta]           = useState(null);
   const [salvandoPasta, setSalvandoPasta] = useState(false);
-  const [editando, setEditando] = useState(null); // { tipo: "pasta"|"deck", id, valor }
+  const [editando, setEditando] = useState(null); // { tipo: "pasta"|"deck", id, valor, cor? }
   const [movendo, setMovendo]   = useState(null); // deck sendo movido, ou null
   const [viewMode, setViewMode] = useState(() => {
     try { return localStorage.getItem("dashboard_view_mode") === "list" ? "list" : "grid"; }
@@ -348,8 +392,8 @@ export default function Dashboard({ usuario, aoSair, aoVerCards, aoEstudar, aoCr
     if (!nomePasta.trim()) return;
     setSalvandoPasta(true);
     try {
-      const nova = await api.criarPasta(nomePasta.trim(), pastaAtiva?.id ?? null);
-      setNomePasta(""); setCriandoPasta(false);
+      const nova = await api.criarPasta(nomePasta.trim(), pastaAtiva?.id ?? null, corPasta);
+      setNomePasta(""); setCorPasta(null); setCriandoPasta(false);
       aplicarArvore(inserirNaArvore(arvore, pastaAtiva?.id ?? null, { ...nova, children: [] }));
     } catch (err) { setErro(err.message); }
     finally { setSalvandoPasta(false); }
@@ -398,21 +442,21 @@ export default function Dashboard({ usuario, aoSair, aoVerCards, aoEstudar, aoCr
     } catch (err) { setErro(err.message); }
   }
 
-  function iniciarEdicao(tipo, id, valorAtual, e) {
+  function iniciarEdicao(tipo, id, valorAtual, e, corAtual = null) {
     e.stopPropagation();
-    setEditando({ tipo, id, valor: valorAtual });
+    setEditando({ tipo, id, valor: valorAtual, cor: corAtual });
   }
 
   async function confirmarEdicao() {
     if (!editando) return;
-    const { tipo, id, valor } = editando;
+    const { tipo, id, valor, cor } = editando;
     setEditando(null);
     const nomeNovo = valor.trim();
     if (!nomeNovo) return;
     try {
       if (tipo === "pasta") {
-        await api.renomearPasta(id, nomeNovo);
-        aplicarArvore(renomearNaArvore(arvore, id, nomeNovo));
+        await api.renomearPasta(id, nomeNovo, cor);
+        aplicarArvore(renomearNaArvore(arvore, id, nomeNovo, cor));
       } else {
         const atualizado = await api.renomearDeck(id, nomeNovo);
         setTodosDecks(decks => decks.map(d => d.id === id ? atualizado : d));
@@ -529,12 +573,13 @@ export default function Dashboard({ usuario, aoSair, aoVerCards, aoEstudar, aoCr
               onChange={e => setNomePasta(e.target.value)}
               placeholder="Nome da pasta"
             />
+            <SeletorCorPasta corSelecionada={corPasta} onSelecionar={setCorPasta} />
             <button className="botao-principal" type="submit"
               disabled={salvandoPasta || !nomePasta.trim()}>
               {salvandoPasta ? "Criando…" : "Criar"}
             </button>
             <button type="button" className="botao-texto"
-              onClick={() => { setCriandoPasta(false); setNomePasta(""); }}>
+              onClick={() => { setCriandoPasta(false); setNomePasta(""); setCorPasta(null); }}>
               Cancelar
             </button>
           </form>
@@ -565,7 +610,7 @@ export default function Dashboard({ usuario, aoSair, aoVerCards, aoEstudar, aoCr
                 <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
                   {podeAdicionarPasta && (
                     <button className="btn-secao-acao"
-                      onClick={() => { setCriandoPasta(true); setNomePasta(""); }}>
+                      onClick={() => { setCriandoPasta(true); setNomePasta(""); setCorPasta(null); }}>
                       + Nova Pasta
                     </button>
                   )}
@@ -599,7 +644,7 @@ export default function Dashboard({ usuario, aoSair, aoVerCards, aoEstudar, aoCr
                     </div>
                     {podeAdicionarPasta && !emBusca && (
                       <button className="btn-secao-acao"
-                        onClick={() => { setCriandoPasta(true); setNomePasta(""); }}>
+                        onClick={() => { setCriandoPasta(true); setNomePasta(""); setCorPasta(null); }}>
                         + Nova Pasta
                       </button>
                     )}
@@ -733,7 +778,7 @@ export default function Dashboard({ usuario, aoSair, aoVerCards, aoEstudar, aoCr
                     className={`mover-opcao-pasta${movendo.folder_id === p.id ? " ativa" : ""}`}
                     style={{ paddingLeft: `${0.9 + p.nivel * 1.1}rem` }}
                     onClick={() => moverPara(p.id)}>
-                    <IconePasta /> {p.name}
+                    <IconePasta color={p.color} /> {p.name}
                   </button>
                 </li>
               ))}
@@ -783,9 +828,13 @@ function PastaItem({
   if (viewMode === "list") {
     return (
       <li className="lista-item lista-pasta">
-        <span className="lista-icone pasta"><IconePasta /></span>
+        <span className="lista-icone pasta"><IconePasta color={pasta.color} /></span>
         {editandoEsta ? (
-          <div className="lista-info">{inputNome}</div>
+          <div className="lista-info lista-info-editando">
+            {inputNome}
+            <SeletorCorPasta corSelecionada={editando.cor}
+              onSelecionar={cor => setEditando(ed => ({ ...ed, cor }))} />
+          </div>
         ) : (
           <button className="lista-info" onClick={() => entrarPasta(pasta)}>
             <span className="lista-nome">{pasta.name}</span>
@@ -795,7 +844,7 @@ function PastaItem({
         {barra}
         <div className="lista-acoes">
           <button className="icone-acao lista-deck-editar"
-            onClick={e => iniciarEdicao("pasta", pasta.id, pasta.name, e)} title="Renomear pasta">
+            onClick={e => iniciarEdicao("pasta", pasta.id, pasta.name, e, pasta.color)} title="Renomear pasta">
             <IcoLapis />
           </button>
           <button className="icone-acao perigo lista-deck-excluir"
@@ -811,19 +860,21 @@ function PastaItem({
     <div className={`pasta-card${temCriticos ? " pasta-card-alerta" : ""}`}>
       {editandoEsta ? (
         <div className="pasta-card-corpo">
-          <span className="pasta-card-icone"><IconePasta /></span>
+          <span className="pasta-card-icone"><IconePasta color={pasta.color} /></span>
           {inputNome}
+          <SeletorCorPasta corSelecionada={editando.cor}
+            onSelecionar={cor => setEditando(ed => ({ ...ed, cor }))} />
         </div>
       ) : (
         <button className="pasta-card-corpo" onClick={() => entrarPasta(pasta)}>
-          <span className="pasta-card-icone"><IconePasta /></span>
+          <span className="pasta-card-icone"><IconePasta color={pasta.color} /></span>
           <span className="pasta-card-nome">{pasta.name}</span>
           <span className="pasta-card-meta">{meta}</span>
           {barra}
         </button>
       )}
       <button className="pasta-card-editar icone-acao"
-        onClick={e => iniciarEdicao("pasta", pasta.id, pasta.name, e)} title="Renomear pasta">
+        onClick={e => iniciarEdicao("pasta", pasta.id, pasta.name, e, pasta.color)} title="Renomear pasta">
         <IcoLapis />
       </button>
       <button className="pasta-card-excluir icone-acao perigo"
@@ -851,7 +902,7 @@ function SidebarNo({ pasta, pastaAtiva, aoNavegar, nivel }) {
         ) : <span style={{ width: 22, flexShrink: 0 }} />}
         <button className={`sidebar-no-btn${eAtiva ? " ativo" : ""}`}
           onClick={() => aoNavegar(pasta)}>
-          <IconePasta />
+          <IconePasta color={pasta.color} />
           <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>{pasta.name}</span>
         </button>
       </div>
@@ -1090,9 +1141,13 @@ function IconeHome() {
   );
 }
 
-function IconePasta() {
+/** color (opcional) sobrescreve a cor herdada via CSS (currentColor) — sem
+ * ela, cai no fallback definido nas classes do elemento pai (.pasta-card-icone,
+ * .lista-icone.pasta etc.), exatamente o comportamento de antes. */
+function IconePasta({ color }) {
   return (
-    <svg width="18" height="18" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+    <svg width="18" height="18" viewBox="0 0 20 20" fill="none" aria-hidden="true"
+      style={color ? { color } : undefined}>
       <path d="M2 6a2 2 0 012-2h3.172a2 2 0 011.414.586l.828.828A2 2 0 0010.828 6H16a2 2 0 012 2v7a2 2 0 01-2 2H4a2 2 0 01-2-2V6z"
         fill="currentColor" opacity=".25" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/>
     </svg>

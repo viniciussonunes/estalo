@@ -26,6 +26,10 @@ def _migrar():
         if "explanation" not in colunas_cards:
             conn.execute(text("ALTER TABLE cards ADD COLUMN explanation TEXT"))
 
+        colunas_pastas = {c["name"] for c in inspector.get_columns("folders")}
+        if "color" not in colunas_pastas:
+            conn.execute(text("ALTER TABLE folders ADD COLUMN color TEXT"))
+
         # Índices — nomes iguais aos que o SQLAlchemy geraria sozinho num
         # banco novo (ix_<tabela>_<coluna>), pra ficar consistente entre
         # create_all() (banco novo) e essa migração manual (banco existente).

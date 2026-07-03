@@ -63,6 +63,7 @@ def criar_pasta(
         owner_id=user_id,
         parent_id=dados.parent_id,
         depth=depth,
+        color=dados.color,
     )
     db.add(pasta)
     db.commit()
@@ -104,9 +105,18 @@ def renomear_pasta(
     db: Session = Depends(get_db),
     user_id: int = Depends(get_current_user_id),
 ):
-    """Renomeia uma pasta."""
+    """Renomeia e/ou troca a cor de uma pasta — só os campos enviados mudam.
+
+    color usa model_fields_set (não `is not None`) porque null é um valor
+    válido e intencional aqui: é como o frontend pede "volta pra cor
+    padrão". Com `is not None`, dar PATCH com color=null nunca resetaria
+    nada — ficaria indistinguível de "não mandei esse campo".
+    """
     pasta = _buscar_pasta_do_usuario(folder_id, user_id, db)
-    pasta.name = dados.name
+    if dados.name is not None:
+        pasta.name = dados.name
+    if "color" in dados.model_fields_set:
+        pasta.color = dados.color
     db.commit()
     db.refresh(pasta)
     return pasta

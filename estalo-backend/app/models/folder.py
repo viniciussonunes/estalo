@@ -37,6 +37,10 @@ class Folder(Base):
     # depth guarda o nível (1 a 4). A gente preenche e valida no service.
     depth: Mapped[int] = mapped_column(Integer, default=1)
 
+    # Cor de identificação visual (hex ou var(--token) do frontend). None =
+    # usa a cor padrão do tema, sem personalização.
+    color: Mapped[str | None] = mapped_column(String, nullable=True)
+
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     # Relacionamentos

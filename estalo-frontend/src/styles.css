@@ -1826,6 +1826,43 @@ kbd {
 .pasta-card-nome-input { font-size: 0.88rem; font-weight: 600; }
 .lista-nome-input { font-size: 0.93rem; font-weight: 600; }
 
+/* Edição inline de pasta em modo lista: nome e bolinhas de cor lado a lado
+   (em modo grid o card é estreito demais pra isso, então empilha por baixo
+   do fluxo normal em coluna do .pasta-card-corpo — sem override aqui). */
+.lista-info-editando {
+  flex-direction: row;
+  align-items: center;
+  gap: 0.6rem;
+}
+.lista-info-editando .lista-nome-input { width: auto; flex: 1; min-width: 0; }
+
+/* ---------- Personalização de cor das pastas ---------- */
+.seletor-cor-pasta {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-shrink: 0;
+}
+.cor-pasta-bolinha {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 2px solid var(--borda);
+  padding: 0;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: transform 0.12s, border-color 0.12s, box-shadow 0.12s;
+}
+.cor-pasta-bolinha:hover { transform: scale(1.15); }
+.cor-pasta-bolinha.padrao {
+  background: var(--papel);
+  background-image: linear-gradient(45deg, transparent 47%, var(--borda-forte) 49%, var(--borda-forte) 51%, transparent 53%);
+}
+.cor-pasta-bolinha.selecionada {
+  border-color: var(--tinta);
+  box-shadow: 0 0 0 2px var(--superficie), 0 0 0 4px var(--violeta);
+}
+
 /* ---------- Cards V2 — status cards (crítico / hoje) ---------- */
 .status-cards {
   display: flex;
