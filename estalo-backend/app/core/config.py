@@ -10,12 +10,10 @@ class Settings(BaseSettings):
     # Connection string alternativa, apontando pro endpoint *pooled* (PgBouncer)
     # do Neon (host com "-pooler"). Se setada, tem prioridade sobre DATABASE_URL —
     # ver app/core/database.py. Deixe vazia pra manter o comportamento atual.
+    # Confirmado em 2026-07-03 que a DATABASE_URL provisionada pela integração
+    # Neon×Vercel já é pooled por padrão — essa variável fica como porta de
+    # emergência (custo zero) caso isso mude ou seja preciso trocar de host.
     DATABASE_URL_POOL: str = ""
-
-    # Token pro endpoint de diagnóstico GET /admin/debug/db. Vazio = endpoint
-    # desabilitado (responde 404 sempre, mesmo com token certo) — nunca fica
-    # aberto por acidente por falta de configuração.
-    DIAGNOSTIC_TOKEN: str = ""
 
     # JWT
     SECRET_KEY: str = "troque-isso-em-producao"

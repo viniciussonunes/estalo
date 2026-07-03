@@ -7,7 +7,7 @@ from sqlalchemy import inspect, text
 from app.core.config import settings
 from app.core.database import Base, engine
 from app import models  # noqa: F401
-from app.routers import auth, folders, decks, cards, study, admin
+from app.routers import auth, folders, decks, cards, study
 
 
 def _migrar():
@@ -82,7 +82,6 @@ app.include_router(folders.router)
 app.include_router(decks.router)
 app.include_router(cards.router)
 app.include_router(study.router)
-app.include_router(admin.router)
 
 
 @app.get("/")
