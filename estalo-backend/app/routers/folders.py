@@ -10,18 +10,18 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.database import get_db
-from app.dependencies import get_current_user
-from app.models import Folder, User
+from app.dependencies import get_current_user_id
+from app.models import Folder
 from app.schemas.folder import FolderCreate, FolderOut, FolderTree, FolderUpdate
 
 router = APIRouter(prefix="/folders", tags=["Pastas"])
 
 
-def _buscar_pasta_do_usuario(folder_id: int, user: User, db: Session) -> Folder:
+def _buscar_pasta_do_usuario(folder_id: int, user_id: int, db: Session) -> Folder:
     """Busca uma pasta garantindo que ela é do usuário. Se não, 404."""
     pasta = (
         db.query(Folder)
-        .filter(Folder.id == folder_id, Folder.owner_id == user.id)
+        .filter(Folder.id == folder_id, Folder.owner_id == user_id)
         .first()
     )
     if pasta is None:
@@ -36,7 +36,7 @@ def _buscar_pasta_do_usuario(folder_id: int, user: User, db: Session) -> Folder:
 def criar_pasta(
     dados: FolderCreate,
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user_id: int = Depends(get_current_user_id),
 ):
     """
     Cria uma pasta. Se tiver pai, calcula a profundidade a partir dele e
@@ -47,7 +47,7 @@ def criar_pasta(
         depth = 1
     else:
         # Pasta pai precisa existir E ser do usuário.
-        pai = _buscar_pasta_do_usuario(dados.parent_id, user, db)
+        pai = _buscar_pasta_do_usuario(dados.parent_id, user_id, db)
 
         # AQUI a trava dos 4 níveis: se o pai já está no nível máximo,
         # o filho seria o nível 5 — barra.
@@ -60,7 +60,7 @@ def criar_pasta(
 
     pasta = Folder(
         name=dados.name,
-        owner_id=user.id,
+        owner_id=user_id,
         parent_id=dados.parent_id,
         depth=depth,
     )
@@ -73,7 +73,7 @@ def criar_pasta(
 @router.get("", response_model=list[FolderTree])
 def listar_arvore(
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user_id: int = Depends(get_current_user_id),
 ):
     """
     Devolve a árvore inteira do usuário: só as pastas raiz, com os filhos
@@ -81,7 +81,7 @@ def listar_arvore(
     """
     raizes = (
         db.query(Folder)
-        .filter(Folder.owner_id == user.id, Folder.parent_id.is_(None))
+        .filter(Folder.owner_id == user_id, Folder.parent_id.is_(None))
         .all()
     )
     return raizes
@@ -91,10 +91,10 @@ def listar_arvore(
 def ver_pasta(
     folder_id: int,
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user_id: int = Depends(get_current_user_id),
 ):
     """Devolve uma pasta específica com a sub-árvore dela."""
-    return _buscar_pasta_do_usuario(folder_id, user, db)
+    return _buscar_pasta_do_usuario(folder_id, user_id, db)
 
 
 @router.patch("/{folder_id}", response_model=FolderOut)
@@ -102,10 +102,10 @@ def renomear_pasta(
     folder_id: int,
     dados: FolderUpdate,
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user_id: int = Depends(get_current_user_id),
 ):
     """Renomeia uma pasta."""
-    pasta = _buscar_pasta_do_usuario(folder_id, user, db)
+    pasta = _buscar_pasta_do_usuario(folder_id, user_id, db)
     pasta.name = dados.name
     db.commit()
     db.refresh(pasta)
@@ -116,12 +116,12 @@ def renomear_pasta(
 def excluir_pasta(
     folder_id: int,
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user_id: int = Depends(get_current_user_id),
 ):
     """
     Exclui a pasta E tudo que está dentro dela (subpastas e decks),
     por causa do cascade configurado no model. Cuidado: é em cascata.
     """
-    pasta = _buscar_pasta_do_usuario(folder_id, user, db)
+    pasta = _buscar_pasta_do_usuario(folder_id, user_id, db)
     db.delete(pasta)
     db.commit()

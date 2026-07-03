@@ -2,17 +2,17 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.dependencies import get_current_user
-from app.models import Card, Deck, Folder, Review, User
+from app.dependencies import get_current_user_id
+from app.models import Card, Deck, Folder, Review
 from app.schemas.deck import DeckCreate, DeckMove, DeckOut, DeckUpdate
 
 router = APIRouter(prefix="/decks", tags=["Decks"])
 
 
-def _buscar_deck_do_usuario(deck_id: int, user: User, db: Session) -> Deck:
+def _buscar_deck_do_usuario(deck_id: int, user_id: int, db: Session) -> Deck:
     deck = (
         db.query(Deck)
-        .filter(Deck.id == deck_id, Deck.owner_id == user.id)
+        .filter(Deck.id == deck_id, Deck.owner_id == user_id)
         .first()
     )
     if deck is None:
@@ -20,12 +20,12 @@ def _buscar_deck_do_usuario(deck_id: int, user: User, db: Session) -> Deck:
     return deck
 
 
-def _validar_pasta(folder_id: int | None, user: User, db: Session) -> None:
+def _validar_pasta(folder_id: int | None, user_id: int, db: Session) -> None:
     if folder_id is None:
         return
     existe = (
         db.query(Folder)
-        .filter(Folder.id == folder_id, Folder.owner_id == user.id)
+        .filter(Folder.id == folder_id, Folder.owner_id == user_id)
         .first()
     )
     if existe is None:
@@ -100,14 +100,14 @@ def _memorization_stats_bulk(
 def criar_deck(
     dados: DeckCreate,
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user_id: int = Depends(get_current_user_id),
 ):
-    _validar_pasta(dados.folder_id, user, db)
+    _validar_pasta(dados.folder_id, user_id, db)
     deck = Deck(
         title=dados.title,
         description=dados.description,
         folder_id=dados.folder_id,
-        owner_id=user.id,
+        owner_id=user_id,
     )
     db.add(deck)
     db.commit()
@@ -125,14 +125,14 @@ def criar_deck(
 def listar_decks(
     folder_id: int | None = None,
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user_id: int = Depends(get_current_user_id),
 ):
-    q = db.query(Deck).filter(Deck.owner_id == user.id)
+    q = db.query(Deck).filter(Deck.owner_id == user_id)
     if folder_id is not None:
         q = q.filter(Deck.folder_id == folder_id)
     decks = q.all()  # query 1
 
-    stats = _memorization_stats_bulk([d.id for d in decks], user.id, db)  # query 2
+    stats = _memorization_stats_bulk([d.id for d in decks], user_id, db)  # query 2
 
     resultado = []
     for deck in decks:
@@ -153,10 +153,10 @@ def listar_decks(
 def ver_deck(
     deck_id: int,
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user_id: int = Depends(get_current_user_id),
 ):
-    deck = _buscar_deck_do_usuario(deck_id, user, db)
-    total, pct = _memorization_pct(deck.id, user.id, db)
+    deck = _buscar_deck_do_usuario(deck_id, user_id, db)
+    total, pct = _memorization_pct(deck.id, user_id, db)
     return DeckOut(
         id=deck.id,
         title=deck.title,
@@ -173,11 +173,11 @@ def atualizar_deck(
     deck_id: int,
     dados: DeckUpdate,
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user_id: int = Depends(get_current_user_id),
 ):
-    deck = _buscar_deck_do_usuario(deck_id, user, db)
+    deck = _buscar_deck_do_usuario(deck_id, user_id, db)
     if dados.folder_id is not None:
-        _validar_pasta(dados.folder_id, user, db)
+        _validar_pasta(dados.folder_id, user_id, db)
     if dados.title is not None:
         deck.title = dados.title
     if dados.description is not None:
@@ -186,7 +186,7 @@ def atualizar_deck(
         deck.folder_id = dados.folder_id
     db.commit()
     db.refresh(deck)
-    total, pct = _memorization_pct(deck.id, user.id, db)
+    total, pct = _memorization_pct(deck.id, user_id, db)
     return DeckOut(
         id=deck.id,
         title=deck.title,
@@ -203,15 +203,15 @@ def mover_deck(
     deck_id: int,
     dados: DeckMove,
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user_id: int = Depends(get_current_user_id),
 ):
     """Move o deck pra outra pasta (ou pra raiz, com folder_id=null)."""
-    deck = _buscar_deck_do_usuario(deck_id, user, db)
-    _validar_pasta(dados.folder_id, user, db)
+    deck = _buscar_deck_do_usuario(deck_id, user_id, db)
+    _validar_pasta(dados.folder_id, user_id, db)
     deck.folder_id = dados.folder_id
     db.commit()
     db.refresh(deck)
-    total, pct = _memorization_pct(deck.id, user.id, db)
+    total, pct = _memorization_pct(deck.id, user_id, db)
     return DeckOut(
         id=deck.id,
         title=deck.title,
@@ -227,8 +227,8 @@ def mover_deck(
 def excluir_deck(
     deck_id: int,
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user_id: int = Depends(get_current_user_id),
 ):
-    deck = _buscar_deck_do_usuario(deck_id, user, db)
+    deck = _buscar_deck_do_usuario(deck_id, user_id, db)
     db.delete(deck)
     db.commit()

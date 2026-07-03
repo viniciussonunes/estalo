@@ -7,8 +7,8 @@ from sqlalchemy import case, func
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.dependencies import get_current_user
-from app.models import Card, Deck, Review, User
+from app.dependencies import get_current_user_id
+from app.models import Card, Deck, Review
 from app.models.review_history import ReviewHistory
 from app.schemas.study import (
     HistoryEntry, QuizOption, QuizQuestion, RevealCard,
@@ -20,10 +20,10 @@ from app.services.sm2 import SM2State, calcular_proxima_revisao
 router = APIRouter(prefix="/study", tags=["Estudo"])
 
 
-def _deck_do_usuario(deck_id: int, user: User, db: Session) -> Deck:
+def _deck_do_usuario(deck_id: int, user_id: int, db: Session) -> Deck:
     deck = (
         db.query(Deck)
-        .filter(Deck.id == deck_id, Deck.owner_id == user.id)
+        .filter(Deck.id == deck_id, Deck.owner_id == user_id)
         .first()
     )
     if deck is None:
@@ -38,9 +38,9 @@ def proximo_card(
     incluir_dominados: bool = Query(False, description="Se true, dominados (reps≥2) entram na fila"),
     limite_diario: int = Query(50, ge=1, le=500, description="Máximo de cards revisados por dia"),
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user_id: int = Depends(get_current_user_id),
 ):
-    _deck_do_usuario(deck_id, user, db)
+    _deck_do_usuario(deck_id, user_id, db)
     hoje = datetime.utcnow().date()
     inicio_do_dia = datetime(hoje.year, hoje.month, hoje.day, 0, 0, 0)
 
@@ -49,7 +49,7 @@ def proximo_card(
         db.query(func.count(ReviewHistory.id))
         .join(Card, ReviewHistory.card_id == Card.id)
         .filter(
-            ReviewHistory.user_id == user.id,
+            ReviewHistory.user_id == user_id,
             Card.deck_id == deck_id,
             ReviewHistory.avaliado_em >= inicio_do_dia,
         )
@@ -76,7 +76,7 @@ def proximo_card(
         db.query(Card, Review, prioridade_com_novo.label("prio"))
         .outerjoin(
             Review,
-            (Review.card_id == Card.id) & (Review.user_id == user.id),
+            (Review.card_id == Card.id) & (Review.user_id == user_id),
         )
         .filter(Card.deck_id == deck_id)
     )
@@ -151,7 +151,7 @@ def responder_card(
     card_id: int,
     resposta: ReviewAnswer,
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user_id: int = Depends(get_current_user_id),
     x_request_id: str | None = Header(None, alias="X-Request-ID"),
 ):
     # --- Tarefa 1: Idempotência via X-Request-ID ---
@@ -161,7 +161,7 @@ def responder_card(
         entrada_existente = (
             db.query(ReviewHistory)
             .filter(
-                ReviewHistory.user_id == user.id,
+                ReviewHistory.user_id == user_id,
                 ReviewHistory.request_id == x_request_id,
             )
             .first()
@@ -173,7 +173,7 @@ def responder_card(
     card = (
         db.query(Card)
         .join(Deck, Card.deck_id == Deck.id)
-        .filter(Card.id == card_id, Deck.owner_id == user.id)
+        .filter(Card.id == card_id, Deck.owner_id == user_id)
         .first()
     )
     if card is None:
@@ -192,7 +192,7 @@ def responder_card(
     # concorrentes aguardam o commit antes de prosseguir.
     review = (
         db.query(Review)
-        .filter(Review.user_id == user.id, Review.card_id == card_id)
+        .filter(Review.user_id == user_id, Review.card_id == card_id)
         .with_for_update()
         .first()
     )
@@ -202,7 +202,7 @@ def responder_card(
 
     if review is None:
         # Card nunca estudado — cria o estado inicial dentro da transação atual
-        review = Review(user_id=user.id, card_id=card_id, due_date=agora)
+        review = Review(user_id=user_id, card_id=card_id, due_date=agora)
         db.add(review)
         db.flush()  # persiste no banco sem commit para que o lock cubra o INSERT
 
@@ -249,7 +249,7 @@ def responder_card(
     # --- Bloco atômico: histórico + atualização do estado ---
     # Tudo no mesmo commit; se qualquer parte falhar, o banco reverte.
     db.add(ReviewHistory(
-        user_id=user.id,
+        user_id=user_id,
         card_id=card.id,
         difficulty=difficulty,
         quality=quality,
@@ -285,9 +285,9 @@ def responder_card(
 def estatisticas(
     deck_id: int,
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user_id: int = Depends(get_current_user_id),
 ):
-    _deck_do_usuario(deck_id, user, db)
+    _deck_do_usuario(deck_id, user_id, db)
     agora = datetime.utcnow()
     hoje_data = agora.date()
 
@@ -298,7 +298,7 @@ def estatisticas(
     reviews = {
         r.card_id: r
         for r in db.query(Review)
-        .filter(Review.user_id == user.id, Review.card_id.in_(card_ids))
+        .filter(Review.user_id == user_id, Review.card_id.in_(card_ids))
         .all()
     } if card_ids else {}
 
@@ -356,7 +356,7 @@ def estatisticas(
 def estatisticas_varios_decks(
     ids: str = Query(..., description="IDs de deck separados por vírgula, ex: 1,2,3"),
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user_id: int = Depends(get_current_user_id),
 ):
     """Versão em lote de GET /decks/{id}/stats — calcula pra vários decks
     de uma vez com quantidade FIXA de queries (independente de quantos
@@ -369,7 +369,7 @@ def estatisticas_varios_decks(
 
     deck_ids_do_usuario = {
         d.id for d in db.query(Deck.id)
-        .filter(Deck.owner_id == user.id, Deck.id.in_(deck_ids))
+        .filter(Deck.owner_id == user_id, Deck.id.in_(deck_ids))
         .all()
     }
     deck_ids = [i for i in deck_ids if i in deck_ids_do_usuario]
@@ -384,7 +384,7 @@ def estatisticas_varios_decks(
     reviews = {
         r.card_id: r
         for r in db.query(Review)
-        .filter(Review.user_id == user.id, Review.card_id.in_(card_ids))
+        .filter(Review.user_id == user_id, Review.card_id.in_(card_ids))
         .all()
     } if card_ids else {}
 
@@ -442,14 +442,14 @@ def estatisticas_varios_decks(
 @router.get("/heatmap-stats", response_model=dict[str, int])
 def heatmap_stats(
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user_id: int = Depends(get_current_user_id),
 ):
     """Quantidade de avaliações do usuário por dia (YYYY-MM-DD), últimos 30 dias."""
     desde = datetime.utcnow() - timedelta(days=30)
     dia = func.date(ReviewHistory.avaliado_em)
     linhas = (
         db.query(dia.label("dia"), func.count(ReviewHistory.id))
-        .filter(ReviewHistory.user_id == user.id, ReviewHistory.avaliado_em >= desde)
+        .filter(ReviewHistory.user_id == user_id, ReviewHistory.avaliado_em >= desde)
         .group_by(dia)
         .all()
     )
@@ -459,13 +459,13 @@ def heatmap_stats(
 @router.get("/streak", response_model=StreakOut)
 def streak(
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user_id: int = Depends(get_current_user_id),
 ):
     """Sequência de dias seguidos com pelo menos uma avaliação (ReviewHistory)."""
     dia = func.date(ReviewHistory.avaliado_em)
     linhas = (
         db.query(dia)
-        .filter(ReviewHistory.user_id == user.id)
+        .filter(ReviewHistory.user_id == user_id)
         .distinct()
         .all()
     )
@@ -500,13 +500,13 @@ def historico_card(
     card_id: int,
     limit: int = Query(50, ge=1, le=200),
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user_id: int = Depends(get_current_user_id),
 ):
     """Retorna o histórico de avaliações de um card, do mais recente ao mais antigo."""
     card = (
         db.query(Card)
         .join(Deck, Card.deck_id == Deck.id)
-        .filter(Card.id == card_id, Deck.owner_id == user.id)
+        .filter(Card.id == card_id, Deck.owner_id == user_id)
         .first()
     )
     if card is None:
@@ -514,7 +514,7 @@ def historico_card(
 
     return (
         db.query(ReviewHistory)
-        .filter(ReviewHistory.user_id == user.id, ReviewHistory.card_id == card_id)
+        .filter(ReviewHistory.user_id == user_id, ReviewHistory.card_id == card_id)
         .order_by(ReviewHistory.avaliado_em.desc())
         .limit(limit)
         .all()
@@ -525,9 +525,9 @@ def historico_card(
 def gerar_quiz_deck(
     deck_id: int,
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user_id: int = Depends(get_current_user_id),
 ):
-    _deck_do_usuario(deck_id, user, db)
+    _deck_do_usuario(deck_id, user_id, db)
     cards = db.query(Card).filter(Card.deck_id == deck_id).all()
     if not cards:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -550,7 +550,7 @@ def gerar_quiz_deck(
     for card in cards_selecionados:
         review = (
             db.query(Review)
-            .filter(Review.user_id == user.id, Review.card_id == card.id)
+            .filter(Review.user_id == user_id, Review.card_id == card.id)
             .first()
         )
         reps_map[card.id] = review.repetitions if review else 0
@@ -581,9 +581,9 @@ def gerar_quiz_deck(
 def gerar_reveal_deck(
     deck_id: int,
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user_id: int = Depends(get_current_user_id),
 ):
-    _deck_do_usuario(deck_id, user, db)
+    _deck_do_usuario(deck_id, user_id, db)
     cards = db.query(Card).filter(Card.deck_id == deck_id).all()
     if not cards:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY,
