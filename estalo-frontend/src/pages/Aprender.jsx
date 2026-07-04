@@ -83,6 +83,12 @@ export default function Aprender({ deck, aoVoltar, modoGlobal = false }) {
   const [concluido, setConcluido]     = useState(false);
   const [salvando, setSalvando]       = useState(false);
   const [resposta, setResposta]       = useState(null);
+  // true só durante a "linha de chegada": o intervalo entre acertar o
+  // último card e de fato trocar pra tela de resultado. Sem isso,
+  // setConcluido(true) desmontava a pergunta na mesma hora que a fila
+  // esvaziava, e a barra nunca tinha tempo de deslizar até 100% (ver
+  // proximo()). Também trava novos cliques/Enter nesse intervalo.
+  const [concluindoAnimacao, setConcluindoAnimacao] = useState(false);
   // true durante o "Rever Vilões": um loop de treino extra, 100% em memória,
   // que reaproveita a mesma UI de pergunta/resposta sem tocar no banco nem
   // no snapshot de F5 (ver os dois useEffect abaixo e proximo()).
@@ -236,6 +242,8 @@ export default function Aprender({ deck, aoVoltar, modoGlobal = false }) {
   }
 
   async function proximo() {
+    if (concluindoAnimacao) return; // trava clique duplo/Enter repetido durante a linha de chegada
+
     const atual   = fila[0];
     const acertou = resposta === atual.correct_letter;
 
@@ -245,15 +253,27 @@ export default function Aprender({ deck, aoVoltar, modoGlobal = false }) {
         setAcertosNaPrimeira(n => n + 1);
       }
       if (novaFila.length === 0) {
-        setConcluido(true);
+        // Linha de chegada: NÃO atualiza `fila` aqui de propósito — ela
+        // continua com o último card, então questaoAtual nunca vira null
+        // e a tela de pergunta permanece montada, congelada. concluindoAnimacao
+        // força a barra pro estilo inline de 100% (ver JSX), e só depois de
+        // ~450ms — tempo do CSS transition rodar de verdade — é que troca
+        // pra tela de resultado. Sem esse atraso, setConcluido(true) trocava
+        // de tela na mesma hora que a fila esvaziava, e o preenchimento de
+        // 100% nunca chegava a ser desenhado.
+        setConcluindoAnimacao(true);
         // Trava crítica: no "Rever Vilões" a fila também esvazia e cai
         // aqui, mas essa rodada é só treino — não pode chamar
         // _salvarProgresso() de novo (já rodou uma vez, na sessão real).
-        if (modoPraticaViloes) {
-          setModoPraticaViloes(false);
-        } else {
-          await _salvarProgresso();
-        }
+        // Disparado em paralelo com o atraso visual, não bloqueia a
+        // animação — a tela de resultado já mostra "Salvando…" enquanto
+        // isso ainda estiver em voo (ver `salvando`).
+        if (!modoPraticaViloes) _salvarProgresso();
+        setTimeout(() => {
+          setConcluido(true);
+          setConcluindoAnimacao(false);
+          if (modoPraticaViloes) setModoPraticaViloes(false);
+        }, 450);
       } else {
         setResposta(null);
         setFila(novaFila);
@@ -525,10 +545,12 @@ export default function Aprender({ deck, aoVoltar, modoGlobal = false }) {
     <div className="pagina">{cabecalho}
       <main className="conteudo estudo-centro">
         <div className="quiz-progresso">
-          <span>{cardsConcluidos} de {totalUnicos}</span>
+          <span className="quiz-progresso-contador">
+            Card {Math.min(cardsConcluidos + 1, totalUnicos)} de {totalUnicos}
+          </span>
           <div className="quiz-barra">
             <div className="quiz-barra-fill"
-              style={{ width: `${(cardsConcluidos / totalUnicos) * 100}%` }} />
+              style={{ width: `${concluindoAnimacao ? 100 : (cardsConcluidos / totalUnicos) * 100}%` }} />
           </div>
           {repeticoes > 0 && (
             <span className="quiz-repetindo" title="Aguardando reacerto">+{repeticoes}↺</span>
@@ -582,7 +604,7 @@ export default function Aprender({ deck, aoVoltar, modoGlobal = false }) {
                   : `Incorreto — a certa é ${questaoAtual.correct_letter}. A questão volta ao final.`}
               </p>
               <p className="quiz-explicacao-texto">{questaoAtual.explanation}</p>
-              <button className="botao-principal" onClick={proximo}>
+              <button className="botao-principal" onClick={proximo} disabled={concluindoAnimacao}>
                 {acertouAtual && cardsConcluidos + 1 >= totalUnicos
                   ? "Ver resultado" : "Próxima →"}
               </button>
