@@ -49,6 +49,7 @@ function DashboardPage({ usuario, sair, tema, proximoTema }) {
       aoVerCards={deck => navigate(`/deck/${deck.id}`, { state: { deck } })}
       aoEstudar={deck => navigate(`/deck/${deck.id}/aprender`, { state: { deck } })}
       aoCriarDeck={pastaId => navigate("/criar-deck", { state: { pastaId } })}
+      aoEstudarTudo={() => navigate("/revisao-global")}
     />
   );
 }
@@ -92,6 +93,11 @@ function EstudoPage() {
 
   if (!deck) return <Navigate to="/" replace />;
   return <Estudo deck={deck} aoVoltar={() => navigate(`/deck/${deck.id}`, { state: { deck } })} />;
+}
+
+function RevisaoGlobalPage() {
+  const navigate = useNavigate();
+  return <Estudo modoGlobal aoVoltar={() => navigate("/")} />;
 }
 
 function AprenderPage() {
@@ -142,6 +148,10 @@ export default function App() {
 
       <Route path="/deck/:id/estudo" element={
         <RequireAuth usuario={usuario}><EstudoPage /></RequireAuth>
+      } />
+
+      <Route path="/revisao-global" element={
+        <RequireAuth usuario={usuario}><RevisaoGlobalPage /></RequireAuth>
       } />
 
       <Route path="/deck/:id/aprender" element={

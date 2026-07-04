@@ -699,6 +699,24 @@ body {
   line-height: 1.4;
   letter-spacing: -0.01em;
 }
+
+/* Badge de origem — só na Fila Única (Revisão Geral), pra lembrar de qual
+ * deck veio o card. Cor vinda do backend (herdada da pasta-mãe); as
+ * propriedades de cor ficam inline (ver Estudo.jsx), aqui só a forma. */
+.revisao-badge-origem {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 0.15rem 0.6rem;
+  border-radius: 20px;
+  border: 1.5px solid;
+  margin: -0.3rem 0 0.7rem;
+}
 .cartao-divisor {
   border: none;
   border-top: 1px solid var(--borda);
@@ -1602,6 +1620,69 @@ kbd {
   max-width: 1040px;
   margin: 0 auto;
   width: 100%;
+}
+
+/* ---------- Card Herói — Fila Única de Revisão (Home) ---------- */
+.hero-revisao-faixa {
+  background: var(--superficie);
+  border-bottom: 1px solid var(--borda);
+}
+.hero-revisao-container {
+  max-width: 1040px;
+  margin: 0 auto;
+  padding: 1.1rem 1.5rem;
+}
+.hero-revisao {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  background: var(--violeta-suave);
+  border: 1.5px solid var(--violeta);
+  border-radius: var(--raio);
+  padding: 1rem 1.25rem;
+}
+.hero-revisao-icone,
+.hero-revisao-icone-limpo {
+  flex-shrink: 0;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--superficie);
+}
+.hero-revisao-icone { color: var(--violeta); }
+.hero-revisao-icone-limpo { color: var(--verde); font-size: 1.3rem; font-weight: 700; }
+.hero-revisao-texto { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 0.15rem; }
+.hero-revisao-titulo {
+  font-family: "Fraunces", serif;
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--tinta);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.hero-revisao-contador {
+  font-family: system-ui, sans-serif;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #fff;
+  background: var(--violeta);
+  border-radius: 20px;
+  padding: 0.1rem 0.55rem;
+}
+.hero-revisao-sub { font-size: 0.85rem; color: var(--tinta-suave); }
+.hero-revisao-botao { width: auto; flex-shrink: 0; white-space: nowrap; }
+
+.hero-revisao-limpo {
+  background: var(--verde-suave);
+  border-color: var(--verde);
+}
+
+@media (max-width: 640px) {
+  .hero-revisao { flex-wrap: wrap; }
+  .hero-revisao-botao { width: 100%; }
 }
 
 /* ---------- Dashboard V3 — botão estudar condicional ---------- */

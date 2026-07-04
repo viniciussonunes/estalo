@@ -261,7 +261,7 @@ function SeletorCorPasta({ corSelecionada, onSelecionar }) {
   );
 }
 
-export default function Dashboard({ usuario, aoSair, aoVerCards, aoEstudar, aoCriarDeck, tema, proximoTema }) {
+export default function Dashboard({ usuario, aoSair, aoVerCards, aoEstudar, aoCriarDeck, aoEstudarTudo, tema, proximoTema }) {
   const [arvore, setArvore]         = useState([]);
   const [todosDecks, setTodosDecks] = useState([]);
   const [statsMap, setStatsMap]     = useState({});   // { [deckId]: StudyStats }
@@ -467,6 +467,14 @@ export default function Dashboard({ usuario, aoSair, aoVerCards, aoEstudar, aoCr
   const podeAdicionarPasta = !pastaAtiva || pastaAtiva.depth < 4;
   const vazio = !carregando && pastasVisiveis.length === 0 && decksVisiveis.length === 0;
 
+  // Fonte única pro total de revisões pendentes: soma due_now (críticos +
+  // hoje) de todos os decks do usuário, de statsMap — que já é carregado
+  // pra alimentar a barra segmentada de cada deck/pasta. O Card Herói e o
+  // VisaoGeral (mais abaixo) usam o MESMO número, em vez de cada um
+  // calcular a sua conta (era a origem da divergência que o VisaoGeral
+  // tinha antes, com uma estimativa via memorization_pct).
+  const totalPendentes = Object.values(statsMap).reduce((soma, s) => soma + (s?.due_now ?? 0), 0);
+
   return (
     <div className="pagina dashboard-layout">
       <header className="topo">
@@ -478,6 +486,14 @@ export default function Dashboard({ usuario, aoSair, aoVerCards, aoEstudar, aoCr
           <button className="botao-texto" onClick={aoSair}>Sair</button>
         </div>
       </header>
+
+      {!pastaAtiva && !carregando && !emBusca && (
+        <div className="hero-revisao-faixa">
+          <div className="hero-revisao-container">
+            <HeroRevisaoGlobal total={totalPendentes} aoEstudarTudo={aoEstudarTudo} />
+          </div>
+        </div>
+      )}
 
       <div className="dashboard-corpo">
         {/* Sidebar — visível apenas em desktop */}
@@ -560,7 +576,7 @@ export default function Dashboard({ usuario, aoSair, aoVerCards, aoEstudar, aoCr
 
         {/* Visão Geral — só na raiz, e não durante busca */}
         {!pastaAtiva && !carregando && !emBusca && todosDecks.length > 0 && (
-          <VisaoGeral decks={todosDecks} />
+          <VisaoGeral decks={todosDecks} pendentesReais={totalPendentes} />
         )}
 
         {/* Formulário criar pasta */}
@@ -1049,12 +1065,58 @@ const HEATMAP_NIVEIS = [
   { bg: "var(--verde)",    title: "Muita atividade" },
 ];
 
-function VisaoGeral({ decks }) {
+/** Card Herói da Home — Fila Única de Revisão. Dois estados: com pendências
+ * (convida a estudar tudo de uma vez) ou zerado (celebra o "em dia"). */
+function HeroRevisaoGlobal({ total, aoEstudarTudo }) {
+  if (total <= 0) {
+    return (
+      <div className="hero-revisao hero-revisao-limpo">
+        <span className="hero-revisao-icone-limpo">✓</span>
+        <div className="hero-revisao-texto">
+          <span className="hero-revisao-titulo">Parabéns! Está tudo em dia para hoje ✓</span>
+          <span className="hero-revisao-sub">Nenhuma pasta tem revisões pendentes agora.</span>
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div className="hero-revisao">
+      <span className="hero-revisao-icone"><IconePilha /></span>
+      <div className="hero-revisao-texto">
+        <span className="hero-revisao-titulo">
+          Revisão Geral do Dia
+          <span className="hero-revisao-contador">{total}</span>
+        </span>
+        <span className="hero-revisao-sub">
+          {total} card{total !== 1 ? "s" : ""} vencido{total !== 1 ? "s" : ""} esperando, juntando todas as suas pastas.
+        </span>
+      </div>
+      <button className="botao-principal hero-revisao-botao" onClick={aoEstudarTudo}>
+        Estudar Tudo
+      </button>
+    </div>
+  );
+}
+
+function IconePilha() {
+  return (
+    <svg width="22" height="22" viewBox="0 0 20 20" fill="none" stroke="currentColor"
+      strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <rect x="4" y="8.5" width="12" height="7" rx="1.5" />
+      <path d="M6 6.2h8a1.5 1.5 0 011.5 1.5" opacity=".55" />
+      <path d="M7.5 4h5a1.5 1.5 0 011.5 1.5" opacity=".3" />
+    </svg>
+  );
+}
+
+function VisaoGeral({ decks, pendentesReais }) {
   const totalCards = decks.reduce((s, d) => s + (d.total_cards || 0), 0);
   const dominados  = decks.reduce((s, d) =>
     s + Math.round(((d.memorization_pct || 0) / 100) * (d.total_cards || 0)), 0);
-  const pendentes  = decks.reduce((s, d) =>
-    s + Math.round(((1 - (d.memorization_pct || 0) / 100)) * (d.total_cards || 0)), 0);
+  // Antes calculado por aproximação (via memorization_pct); agora usa a
+  // mesma soma real de due_now que o Card Herói, pra não mostrar dois
+  // números de "pendentes" diferentes na mesma tela.
+  const pendentes = pendentesReais;
 
   const [heatmapStats, setHeatmapStats] = useState({});
   const [heatmapCarregando, setHeatmapCarregando] = useState(true);
