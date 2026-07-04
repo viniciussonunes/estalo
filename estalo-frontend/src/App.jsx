@@ -97,7 +97,7 @@ function EstudoPage() {
 
 function RevisaoGlobalPage() {
   const navigate = useNavigate();
-  return <Estudo modoGlobal aoVoltar={() => navigate("/")} />;
+  return <Aprender modoGlobal aoVoltar={() => navigate("/")} />;
 }
 
 function AprenderPage() {

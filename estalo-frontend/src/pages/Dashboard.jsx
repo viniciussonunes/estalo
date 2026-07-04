@@ -467,13 +467,20 @@ export default function Dashboard({ usuario, aoSair, aoVerCards, aoEstudar, aoCr
   const podeAdicionarPasta = !pastaAtiva || pastaAtiva.depth < 4;
   const vazio = !carregando && pastasVisiveis.length === 0 && decksVisiveis.length === 0;
 
-  // Fonte única pro total de revisões pendentes: soma due_now (críticos +
-  // hoje) de todos os decks do usuário, de statsMap — que já é carregado
-  // pra alimentar a barra segmentada de cada deck/pasta. O Card Herói e o
-  // VisaoGeral (mais abaixo) usam o MESMO número, em vez de cada um
-  // calcular a sua conta (era a origem da divergência que o VisaoGeral
-  // tinha antes, com uma estimativa via memorization_pct).
-  const totalPendentes = Object.values(statsMap).reduce((soma, s) => soma + (s?.due_now ?? 0), 0);
+  // Fonte única pro total de revisões pendentes: soma criticos + hoje (só
+  // cards que JÁ têm progresso e estão vencidos) de todos os decks, via
+  // statsMap — que já é carregado pra alimentar a barra segmentada de cada
+  // deck/pasta. Não usa due_now direto porque esse campo também soma
+  // "novos" (nunca estudados) — e a Fila Única agora exclui novos de
+  // propósito (eles moram só dentro de cada pasta), então o número do Card
+  // Herói precisa refletir exatamente o que /study/global-reviews retorna,
+  // senão o total mostrado nunca bate com o que a sessão realmente serve.
+  // O VisaoGeral (mais abaixo) usa o MESMO número, em vez de cada um
+  // calcular a sua conta (era a origem da divergência que ele tinha antes,
+  // com uma estimativa via memorization_pct).
+  const totalPendentes = Object.values(statsMap).reduce(
+    (soma, s) => soma + (s?.criticos ?? 0) + (s?.hoje ?? 0), 0
+  );
 
   return (
     <div className="pagina dashboard-layout">
@@ -1065,6 +1072,15 @@ const HEATMAP_NIVEIS = [
   { bg: "var(--verde)",    title: "Muita atividade" },
 ];
 
+// Teto de 15 no que é exibido — o mesmo limite do lote que
+// /study/global-reviews entrega por vez. Sem isso, um usuário com um
+// backlog de centenas de cards veria um número gigante e ansiogênico
+// logo ao abrir a Home; "15+" comunica "tem bastante" sem seres um
+// contador de vergonha.
+function rotuloPendentes(total) {
+  return total > 15 ? "15+" : String(total);
+}
+
 /** Card Herói da Home — Fila Única de Revisão. Dois estados: com pendências
  * (convida a estudar tudo de uma vez) ou zerado (celebra o "em dia"). */
 function HeroRevisaoGlobal({ total, aoEstudarTudo }) {
@@ -1079,16 +1095,17 @@ function HeroRevisaoGlobal({ total, aoEstudarTudo }) {
       </div>
     );
   }
+  const rotulo = rotuloPendentes(total);
   return (
     <div className="hero-revisao">
       <span className="hero-revisao-icone"><IconePilha /></span>
       <div className="hero-revisao-texto">
         <span className="hero-revisao-titulo">
           Revisão Geral do Dia
-          <span className="hero-revisao-contador">{total}</span>
+          <span className="hero-revisao-contador">{rotulo}</span>
         </span>
         <span className="hero-revisao-sub">
-          {total} card{total !== 1 ? "s" : ""} vencido{total !== 1 ? "s" : ""} esperando, juntando todas as suas pastas.
+          {rotulo} card{total !== 1 ? "s" : ""} vencido{total !== 1 ? "s" : ""} esperando, juntando todas as suas pastas.
         </span>
       </div>
       <button className="botao-principal hero-revisao-botao" onClick={aoEstudarTudo}>

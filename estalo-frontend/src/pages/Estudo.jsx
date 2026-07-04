@@ -8,7 +8,7 @@ const NOTAS = [
   { label: "Fácil",   quality: 5, classe: "nota-facil"   },
 ];
 
-export default function Estudo({ deck, aoVoltar, modoGlobal = false }) {
+export default function Estudo({ deck, aoVoltar }) {
   const [card, setCard] = useState(undefined); // undefined = ainda carregando, null = sessão concluída
   const [virado, setVirado] = useState(false);
   const [stats, setStats] = useState(null);
@@ -20,24 +20,21 @@ export default function Estudo({ deck, aoVoltar, modoGlobal = false }) {
     setErro("");
     setVirado(false);
     try {
-      if (modoGlobal) {
-        // Fila Única: 1 chamada só, sem stats por deck (não existe "o" deck aqui).
-        const proximo = await api.proximaRevisaoGlobal();
-        setCard(proximo?.motivo ? null : proximo);
-      } else {
-        const [proximo, novasStats] = await Promise.all([
-          api.proximoCard(deck.id),
-          api.statsEstudo(deck.id),
-        ]);
-        setCard(proximo?.motivo ? null : proximo);
-        setStats(novasStats);
-      }
+      const [proximo, novasStats] = await Promise.all([
+        api.proximoCard(deck.id),
+        api.statsEstudo(deck.id),
+      ]);
+      // O backend nunca devolve null de verdade — sempre um objeto truthy
+      // (StudyCard ou SessaoConcluida). motivo só existe em SessaoConcluida,
+      // por isso é o jeito certo de detectar "fila vazia".
+      setCard(proximo?.motivo ? null : proximo);
+      setStats(novasStats);
     } catch (err) {
       setErro(err.message);
     } finally {
       setCarregando(false);
     }
-  }, [deck?.id, modoGlobal]);
+  }, [deck.id]);
 
   useEffect(() => {
     carregarProximo();
@@ -48,10 +45,7 @@ export default function Estudo({ deck, aoVoltar, modoGlobal = false }) {
     setEnviando(true);
     setErro("");
     try {
-      // Na Fila Única, o mesmo card pode ser respondido mais de uma vez na
-      // mesma sessão antes do due_date (fase "Validando") — sem essa flag o
-      // backend barra com 409 (ver ReviewAnswer.ignorar_elegibilidade).
-      await api.responderCard(card.card_id, quality, modoGlobal);
+      await api.responderCard(card.card_id, quality);
       await carregarProximo();
     } catch (err) {
       setErro(err.message);
@@ -64,7 +58,7 @@ export default function Estudo({ deck, aoVoltar, modoGlobal = false }) {
   if (carregando) {
     return (
       <div className="pagina">
-        <CabecalhoEstudo deck={deck} stats={null} aoVoltar={aoVoltar} modoGlobal={modoGlobal} />
+        <CabecalhoEstudo deck={deck} stats={null} aoVoltar={aoVoltar} />
         <main className="conteudo estudo-centro">
           <p className="vazio">Carregando…</p>
         </main>
@@ -76,7 +70,7 @@ export default function Estudo({ deck, aoVoltar, modoGlobal = false }) {
   if (card === null) {
     return (
       <div className="pagina">
-        <CabecalhoEstudo deck={deck} stats={stats} aoVoltar={aoVoltar} modoGlobal={modoGlobal} />
+        <CabecalhoEstudo deck={deck} stats={stats} aoVoltar={aoVoltar} />
         <main className="conteudo estudo-centro">
           <div className="estudo-concluido">
             <div className="estudo-concluido-icone">✓</div>
@@ -95,27 +89,13 @@ export default function Estudo({ deck, aoVoltar, modoGlobal = false }) {
 
   return (
     <div className="pagina">
-      <CabecalhoEstudo deck={deck} stats={stats} aoVoltar={aoVoltar} modoGlobal={modoGlobal} />
+      <CabecalhoEstudo deck={deck} stats={stats} aoVoltar={aoVoltar} />
       <main className="conteudo estudo-centro">
         {erro && <p className="erro">{erro}</p>}
 
         <div className="cartao-estudo">
           <div className="cartao-frente">
             <span className="cartao-lado-label">Pergunta</span>
-            {modoGlobal && card.deck_name && (
-              <span
-                className="revisao-badge-origem"
-                style={{
-                  borderColor: card.deck_color || "var(--borda-forte)",
-                  color: card.deck_color || "var(--tinta-suave)",
-                  background: card.deck_color
-                    ? `color-mix(in srgb, ${card.deck_color} 14%, transparent)`
-                    : "var(--papel)",
-                }}
-              >
-                {card.deck_name}
-              </span>
-            )}
             <p className="cartao-texto">{card.front}</p>
           </div>
 
@@ -154,16 +134,14 @@ export default function Estudo({ deck, aoVoltar, modoGlobal = false }) {
   );
 }
 
-function CabecalhoEstudo({ deck, stats, aoVoltar, modoGlobal = false }) {
+function CabecalhoEstudo({ deck, stats, aoVoltar }) {
   return (
     <header className="topo">
       <div className="topo-esquerda">
         <button className="botao-texto" onClick={aoVoltar}>
           ← Voltar
         </button>
-        <span className="estudo-deck-nome">
-          {modoGlobal ? "Revisão Geral do Dia" : deck.title}
-        </span>
+        <span className="estudo-deck-nome">{deck.title}</span>
       </div>
       {stats !== null && (
         <span className="estudo-contador">

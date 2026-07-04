@@ -38,12 +38,41 @@ function montarFila(cards) {
         correct_letter,
         explanation:    card.explanation,
         repetitions:    card.repetitions ?? 0,
+        // Só vêm preenchidos na Fila Única (Revisão Geral) — ver
+        // _buscarCards(). Em cards normais (api.listarCards) ficam
+        // undefined, então a badge de origem simplesmente não renderiza.
+        deck_name:      card.deck_name,
+        deck_color:     card.deck_color,
       };
     });
 }
 
-export default function Aprender({ deck, aoVoltar }) {
-  const { snapshotPendente, salvar, limpar, descartarPendente } = useStudySession(deck.id);
+export default function Aprender({ deck, aoVoltar, modoGlobal = false }) {
+  // Na Fila Única não existe "o" deck — usa uma chave fixa própria pro
+  // snapshot de F5, isolada de qualquer sessão por-deck real (ids de deck
+  // são sempre numéricos, nunca colidem com essa string).
+  const { snapshotPendente, salvar, limpar, descartarPendente } = useStudySession(modoGlobal ? "global" : deck.id);
+
+  // Busca os cards a estudar: de um deck só (Modo Aprender normal) ou o
+  // lote agrupado de até 15 vencidos de todas as pastas (Fila Única). Os
+  // dois formatos convergem pro mesmo shape que montarFila() já espera
+  // (id/front/back/options/explanation/repetitions), só a Fila Única
+  // carrega junto deck_name/deck_color pra badge.
+  function _buscarCards() {
+    if (modoGlobal) {
+      return api.proximaRevisaoGlobal().then(lista => lista.map(c => ({
+        id:          c.card_id,
+        front:       c.front,
+        back:        c.back,
+        options:     c.options,
+        explanation: c.explanation,
+        repetitions: c.repetitions,
+        deck_name:   c.deck_name,
+        deck_color:  c.deck_color,
+      })));
+    }
+    return api.listarCards(deck.id);
+  }
 
   const [fila, setFila]               = useState([]);
   const [totalUnicos, setTotalUnicos] = useState(0);
@@ -97,7 +126,7 @@ export default function Aprender({ deck, aoVoltar }) {
 
   function _carregarDoServidor() {
     setCarregando(true);
-    api.listarCards(deck.id)
+    _buscarCards()
       .then(_iniciarComCards)
       .catch(err => setErro(err.message))
       .finally(() => setCarregando(false));
@@ -107,7 +136,7 @@ export default function Aprender({ deck, aoVoltar }) {
     if (mostrarPrompt) return; // aguarda decisão do usuário sobre a sessão salva
     _carregarDoServidor();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [deck.id]);
+  }, [deck?.id, modoGlobal]);
 
   function continuarSessaoSalva() {
     _restaurarDeSnapshot(snapshotPendente);
@@ -271,7 +300,7 @@ export default function Aprender({ deck, aoVoltar }) {
     setResposta(null);
     setConcluido(false);
     setCarregando(true);
-    api.listarCards(deck.id)
+    _buscarCards()
       .then(cards => { _iniciarComCards(cards); })
       .catch(err => setErro(err.message))
       .finally(() => setCarregando(false));
@@ -311,7 +340,9 @@ export default function Aprender({ deck, aoVoltar }) {
         <button className="botao-texto" onClick={voltarOuSairDaPratica}>
           {modoPraticaViloes ? "← Voltar ao resumo" : "← Voltar"}
         </button>
-        <span className="estudo-deck-nome">{deck.title}</span>
+        <span className="estudo-deck-nome">
+          {modoGlobal ? "Revisão Geral do Dia" : deck.title}
+        </span>
       </div>
       <span className="modo-label">{modoPraticaViloes ? "Revisão de vilões" : "Múltipla escolha"}</span>
     </header>
@@ -369,11 +400,12 @@ export default function Aprender({ deck, aoVoltar }) {
             <div className="estudo-concluido-icone">✦</div>
             <h2 className="estudo-concluido-titulo">Sem questões disponíveis</h2>
             <p className="estudo-concluido-sub">
-              Este deck não tem cards gerados com IA. Vá até a tela de Cards
-              e use a aba "Gerar com IA" para criar questões com alternativas.
+              {modoGlobal
+                ? 'Os cards vencidos ainda não têm alternativas geradas por IA. Entre em cada deck e use a aba "Gerar com IA" para criar questões com alternativas.'
+                : 'Este deck não tem cards gerados com IA. Vá até a tela de Cards e use a aba "Gerar com IA" para criar questões com alternativas.'}
             </p>
             <button className="botao-principal estudo-concluido-botao" onClick={sair}>
-              Voltar ao deck
+              {modoGlobal ? "Voltar à Home" : "Voltar ao deck"}
             </button>
           </div>
         </main>
@@ -467,13 +499,15 @@ export default function Aprender({ deck, aoVoltar }) {
                   <button className="botao-principal" onClick={reiniciarSessao} disabled={salvando}>
                     Nova sessão agora
                   </button>
-                  <button className="botao-texto" onClick={sair}>Voltar aos decks</button>
+                  <button className="botao-texto" onClick={sair}>
+                    {modoGlobal ? "Voltar à Home" : "Voltar aos decks"}
+                  </button>
                 </div>
               </div>
             ) : (
               <button className="botao-principal estudo-concluido-botao"
                 onClick={sair} disabled={salvando}>
-                {salvando ? "Salvando…" : "Voltar ao deck"}
+                {salvando ? "Salvando…" : modoGlobal ? "Voltar à Home" : "Voltar ao deck"}
               </button>
             )}
           </div>
@@ -504,6 +538,20 @@ export default function Aprender({ deck, aoVoltar }) {
         <div className="cartao-estudo">
           <div className="cartao-frente">
             <span className="cartao-lado-label">Pergunta</span>
+            {modoGlobal && questaoAtual.deck_name && (
+              <span
+                className="revisao-badge-origem"
+                style={{
+                  borderColor: questaoAtual.deck_color || "var(--borda-forte)",
+                  color: questaoAtual.deck_color || "var(--tinta-suave)",
+                  background: questaoAtual.deck_color
+                    ? `color-mix(in srgb, ${questaoAtual.deck_color} 14%, transparent)`
+                    : "var(--papel)",
+                }}
+              >
+                {questaoAtual.deck_name}
+              </span>
+            )}
             <p className="cartao-texto">{questaoAtual.question}</p>
           </div>
 
