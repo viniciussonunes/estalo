@@ -383,17 +383,22 @@ def estatisticas(
         else:
             dominados += 1
 
-        # Status temporal (só para cards já estudados ao menos uma vez)
-        if reps > 0:
-            due_data = due.date()
-            if due_data < hoje_data:
-                # Venceu antes de hoje → Crítico (prioridade máxima)
-                criticos += 1
-                due_now += 1
-            elif due_data == hoje_data:
-                # Vence hoje → Revisão do Dia
-                hoje += 1
-                due_now += 1
+        # Status temporal — dimensão independente da fase, não "só pra
+        # reps>0": o Crítico Imediato (study.py, responder_card) reseta
+        # repetitions pra 0 quando o usuário erra, com due_date=agora. Sem
+        # essa checagem valer pra reps==0, um card que acabou de falhar e
+        # está genuinamente vencido ficava invisível pra criticos/hoje —
+        # contava só como "novo", igual um card nunca estudado, embora os
+        # dois sejam bem diferentes (um tem histórico e prioridade real).
+        due_data = due.date()
+        if due_data < hoje_data:
+            # Venceu antes de hoje → Crítico (prioridade máxima)
+            criticos += 1
+            due_now += 1
+        elif due_data == hoje_data:
+            # Vence hoje → Revisão do Dia
+            hoje += 1
+            due_now += 1
 
     total = len(cards)
     return StudyStats(
@@ -472,14 +477,16 @@ def estatisticas_varios_decks(
         else:
             acc["dominados"] += 1
 
-        if reps > 0:
-            due_data = due.date()
-            if due_data < hoje_data:
-                acc["criticos"] += 1
-                acc["due_now"] += 1
-            elif due_data == hoje_data:
-                acc["hoje"] += 1
-                acc["due_now"] += 1
+        # Ver comentário equivalente em estatisticas(): status temporal
+        # independe da fase, senão um card resetado pelo Crítico Imediato
+        # (reps=0, due_date=agora) fica invisível pra criticos/hoje.
+        due_data = due.date()
+        if due_data < hoje_data:
+            acc["criticos"] += 1
+            acc["due_now"] += 1
+        elif due_data == hoje_data:
+            acc["hoje"] += 1
+            acc["due_now"] += 1
 
     return {
         deck_id: StudyStats(
