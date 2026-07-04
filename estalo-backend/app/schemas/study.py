@@ -17,9 +17,13 @@ class StudyCard(BaseModel):
 class GlobalReviewCard(StudyCard):
     """StudyCard + contexto de origem, pra Fila Única de Revisão (Global
     Review): já que um card aqui pode vir de qualquer deck do usuário, o
-    frontend precisa saber de qual assunto ele é pra mostrar a badge."""
+    frontend precisa saber de qual assunto ele é pra mostrar a badge.
+    options/explanation vêm crus do Card — o Modo Aprender (montarFila no
+    frontend) que sabe montar isso em pergunta de múltipla escolha."""
     deck_name: str
     deck_color: str | None = None   # herdado da pasta-mãe; None = deck solto na raiz
+    options: list[str] | None = None
+    explanation: str | None = None
 
 
 class SessaoConcluida(BaseModel):

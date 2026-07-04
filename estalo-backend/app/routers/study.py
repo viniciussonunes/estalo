@@ -121,79 +121,63 @@ def proximo_card(
     )
 
 
-@router.get("/global-reviews", response_model=Union[GlobalReviewCard, SessaoConcluida])
+@router.get("/global-reviews", response_model=list[GlobalReviewCard])
 def revisao_global(
-    incluir_dominados: bool = Query(False, description="Se true, dominados (reps≥2) entram na fila"),
     db: Session = Depends(get_db),
     user_id: int = Depends(get_current_user_id),
 ):
-    """Generalização de /decks/{id}/next pra TODOS os decks do usuário de
-    uma vez (Fila Única de Revisão / "Estudar Tudo"). Mesmo contrato
-    stateless — 1 card por chamada, sem fila em memória — só que a
-    prioridade SM-2 de cada card compete dentro do grupo (Pasta, Deck), não
-    só dentro de 1 deck isolado. Sem limite_diario de propósito: esse
-    endpoint existe pra zerar o backlog inteiro numa sessão só, e o teto de
-    50/dia foi pensado pra uma sessão por-deck (ver proximo_card).
+    """Fila Única de Revisão ("Estudar Tudo"), pra alimentar o Modo Aprender.
+
+    Só cards que JÁ têm progresso e estão vencidos (Review.due_date <=
+    agora) — cards nunca estudados ficam de fora de propósito. Eles moram
+    só dentro de cada pasta; misturá-los aqui é o que causava a ansiedade
+    do "número gigante" que motivou esse ajuste. Como o card precisa ter
+    Review pra entrar, o JOIN é interno (não outer) — sem prioridade SM-2
+    pra calcular, o due_date sozinho já ordena "mais vencido primeiro"
+    dentro do mesmo deck.
+
+    Devolve até 15 de uma vez (não é mais 1-por-chamada como o /next): o
+    Modo Aprender consome lote, não fila stateless. Cada item já inclui
+    options/explanation crus do Card — o mesmo contrato de CardOut que
+    montarFila() no frontend já sabe montar em pergunta de múltipla
+    escolha; cards sem esses dois campos pré-gerados são descartados lá,
+    igual já acontece hoje pro Modo Aprender por-deck.
     """
-    hoje = datetime.utcnow().date()
+    agora = datetime.utcnow()
 
-    prioridade_com_novo = case(
-        (Review.id.is_(None),                2),  # Novo (sem review)
-        (func.date(Review.due_date) < hoje,  0),  # Crítico
-        (func.date(Review.due_date) == hoje, 1),  # Hoje
-        else_=3,                                   # Validando
-    )
-
-    query = (
-        db.query(Card, Review, Deck, Folder, prioridade_com_novo.label("prio"))
+    linhas = (
+        db.query(Card, Review, Deck, Folder)
         .join(Deck, Card.deck_id == Deck.id)
-        .outerjoin(Review, (Review.card_id == Card.id) & (Review.user_id == user_id))
+        .join(Review, (Review.card_id == Card.id) & (Review.user_id == user_id))
         .outerjoin(Folder, Deck.folder_id == Folder.id)
-        .filter(Deck.owner_id == user_id)
-    )
-
-    if not incluir_dominados:
-        query = query.filter(
-            (Review.id.is_(None))
-            | (Review.repetitions < 2)
-            | (func.date(Review.due_date) <= hoje)
-        )
-
-    # Agrupamento: decks dentro de pasta (A-Z) primeiro, decks soltos na
-    # raiz por último — Folder.name.is_(None) evita depender da ordenação
-    # de NULL default do banco (SQLite e Postgres discordam nisso). Dentro
-    # do mesmo deck, prioridade SM-2 e due_date decidem a ordem final.
-    resultado = (
-        query.order_by(
+        .filter(Deck.owner_id == user_id, Review.due_date <= agora)
+        .order_by(
+            # Folder.name.is_(None) evita depender da ordenação de NULL
+            # default do banco (SQLite e Postgres discordam nisso) — decks
+            # dentro de pasta (A-Z) vêm antes dos soltos na raiz.
             Folder.name.is_(None),
             Folder.name.asc(),
             Deck.title.asc(),
-            prioridade_com_novo,
             Review.due_date.asc(),
         )
-        .first()
+        .limit(15)
+        .all()
     )
 
-    if resultado is None:
-        return SessaoConcluida(
-            motivo="sem_cards",
-            revisoes_hoje=0,
-            limite_diario=0,
+    return [
+        GlobalReviewCard(
+            card_id=card.id,
+            front=card.front,
+            back=card.back,
+            due_date=review.due_date,
+            repetitions=review.repetitions,
+            options=card.options,
+            explanation=card.explanation,
+            deck_name=deck.title,
+            deck_color=folder.color if folder else None,
         )
-
-    card, review, deck, folder, _ = resultado
-    due = review.due_date if review else datetime.utcnow()
-    reps = review.repetitions if review else 0
-
-    return GlobalReviewCard(
-        card_id=card.id,
-        front=card.front,
-        back=card.back,
-        due_date=due,
-        repetitions=reps,
-        deck_name=deck.title,
-        deck_color=folder.color if folder else None,
-    )
+        for card, review, deck, folder in linhas
+    ]
 
 
 def _classificar_status(repetitions: int, due_date: datetime, hoje: "date") -> str:
