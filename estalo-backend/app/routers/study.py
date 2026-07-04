@@ -10,9 +10,11 @@ from app.core.database import get_db
 from app.dependencies import get_current_user_id
 from app.models import Card, Deck, Folder, Review
 from app.models.review_history import ReviewHistory
+from app.models.study_session import StudySession
 from app.schemas.study import (
     GlobalReviewCard, HistoryEntry, QuizOption, QuizQuestion, RevealCard,
-    ReviewAnswer, ReviewResult, SessaoConcluida, StreakOut, StudyCard, StudyStats,
+    ReviewAnswer, ReviewResult, SessaoConcluida, StreakOut, StudyCard,
+    StudySessionLog, StudySessionOut, StudyStats,
 )
 from app.services.ai import IAError, gerar_explicacoes, gerar_quiz
 from app.services.sm2 import SM2State, calcular_proxima_revisao
@@ -582,6 +584,48 @@ def historico_card(
         db.query(ReviewHistory)
         .filter(ReviewHistory.user_id == user_id, ReviewHistory.card_id == card_id)
         .order_by(ReviewHistory.avaliado_em.desc())
+        .limit(limit)
+        .all()
+    )
+
+
+@router.post("/session/log", response_model=StudySessionOut, status_code=status.HTTP_201_CREATED)
+def logar_sessao(
+    dados: StudySessionLog,
+    db: Session = Depends(get_db),
+    user_id: int = Depends(get_current_user_id),
+):
+    """Registra o resumo de uma rodada do Modo Aprender já encerrada.
+
+    Insert puro, sem leitura prévia — ao contrário de responder_card() (que
+    faz read-modify-write num Review existente e por isso precisa de lock de
+    linha), aqui não há estado anterior pra disputar: cada chamada só
+    adiciona uma linha nova, então não existe corrida possível.
+    """
+    sessao = StudySession(
+        user_id=user_id,
+        total_cards=dados.total_cards,
+        acertos_primeira=dados.acertos_primeira,
+        duracao_seg=dados.duracao_seg,
+        modo=dados.modo,
+    )
+    db.add(sessao)
+    db.commit()
+    db.refresh(sessao)
+    return sessao
+
+
+@router.get("/history", response_model=list[StudySessionOut])
+def historico_sessoes(
+    limit: int = Query(5, ge=1, le=30),
+    db: Session = Depends(get_db),
+    user_id: int = Depends(get_current_user_id),
+):
+    """Últimas rodadas encerradas do usuário, mais recente primeiro."""
+    return (
+        db.query(StudySession)
+        .filter(StudySession.user_id == user_id)
+        .order_by(StudySession.finished_at.desc())
         .limit(limit)
         .all()
     )

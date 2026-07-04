@@ -7,6 +7,7 @@ from app.models.deck import Deck
 from app.models.folder import Folder
 from app.models.review import Review
 from app.models.review_history import ReviewHistory
+from app.models.study_session import StudySession
 from app.models.user import User
 
-__all__ = ["User", "Folder", "Deck", "Card", "Review", "ReviewHistory"]
+__all__ = ["User", "Folder", "Deck", "Card", "Review", "ReviewHistory", "StudySession"]

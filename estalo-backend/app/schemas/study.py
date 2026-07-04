@@ -95,6 +95,25 @@ class HistoryEntry(BaseModel):
     model_config = {"from_attributes": True}
 
 
+# --- Histórico de rodadas (resumo do Modo Aprender, pro gráfico do Dashboard) ---
+
+class StudySessionLog(BaseModel):
+    total_cards: int = Field(..., ge=1)
+    acertos_primeira: int = Field(..., ge=0)
+    duracao_seg: int = Field(..., ge=0)
+    modo: str = Field(..., pattern="^(deck|global)$")
+
+
+class StudySessionOut(BaseModel):
+    id: int
+    finished_at: datetime
+    total_cards: int
+    acertos_primeira: int
+    duracao_seg: int
+    modo: str
+    model_config = {"from_attributes": True}
+
+
 # --- Modo Aprender (múltipla escolha gerada por IA) ---
 
 class QuizOption(BaseModel):
