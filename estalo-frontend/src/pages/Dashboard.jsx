@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
+import { useSearchParams } from "react-router-dom";
 import * as Sentry from "@sentry/react";
 import { api } from "../api.js";
 
@@ -266,8 +267,19 @@ export default function Dashboard({ usuario, aoSair, aoVerCards, aoEstudar, aoCr
   const [todosDecks, setTodosDecks] = useState([]);
   const [statsMap, setStatsMap]     = useState({});   // { [deckId]: StudyStats }
   const [statsCarregando, setStatsCarregando] = useState(false);
-  const [pastaAtiva, setPastaAtiva] = useState(null);
-  const [caminho, setCaminho]       = useState([]);
+
+  // A pasta ativa mora na URL (?folder=id), não em estado local — assim o
+  // botão "Voltar" do navegador funciona de verdade (a URL muda, o
+  // componente re-renderiza, pastaAtiva/caminho abaixo recalculam sozinhos)
+  // e dá pra compartilhar/recarregar o link de uma pasta específica.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const pastaAtivaId = searchParams.get("folder") ? Number(searchParams.get("folder")) : null;
+  // Derivados a cada render a partir de arvore + pastaAtivaId — nunca ficam
+  // desatualizados depois de uma mutação na árvore (renomear, criar
+  // subpasta etc.), porque não são estado próprio pra resincronizar.
+  const pastaAtiva = pastaAtivaId !== null ? encontrarPasta(arvore, pastaAtivaId) : null;
+  const caminho    = pastaAtivaId !== null ? (caminhoParaPasta(arvore, pastaAtivaId) ?? []) : [];
+
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro]             = useState("");
   const [criandoPasta, setCriandoPasta]   = useState(false);
@@ -288,7 +300,7 @@ export default function Dashboard({ usuario, aoSair, aoVerCards, aoEstudar, aoCr
     try { localStorage.setItem("dashboard_view_mode", viewMode); } catch { /* localStorage indisponível */ }
   }, [viewMode]);
 
-  const carregar = useCallback(async (pastaAtivaAtual = null) => {
+  const carregar = useCallback(async () => {
     setErro("");
     try {
       const [novaArvore, novosDecks] = await Promise.all([
@@ -297,11 +309,6 @@ export default function Dashboard({ usuario, aoSair, aoVerCards, aoEstudar, aoCr
       ]);
       setArvore(novaArvore);
       setTodosDecks(novosDecks);
-      if (pastaAtivaAtual) {
-        const atualizada = encontrarPasta(novaArvore, pastaAtivaAtual.id);
-        setPastaAtiva(atualizada ?? null);
-        if (!atualizada) setCaminho([]);
-      }
 
       // Carrega stats de todos os decks numa única chamada (sem bloquear a UI)
       if (novosDecks.length > 0) {
@@ -322,14 +329,6 @@ export default function Dashboard({ usuario, aoSair, aoVerCards, aoEstudar, aoCr
   useEffect(() => {
     if (criandoPasta) inputRef.current?.focus();
   }, [criandoPasta]);
-
-  // Aplica uma nova árvore e resincroniza pastaAtiva com ela (senão
-  // pastaAtiva.children fica congelado na versão de quando você entrou
-  // na pasta, e mudanças nos filhos não apareceriam na tela).
-  function aplicarArvore(novaArvore) {
-    setArvore(novaArvore);
-    setPastaAtiva(pa => pa ? (encontrarPasta(novaArvore, pa.id) ?? null) : pa);
-  }
 
   // Busca global: quando ativa, ignora pastaAtiva e acha em toda a árvore
   // (achatada) + em todos os decks, em vez de só no nível atual. pastaAtiva
@@ -357,31 +356,25 @@ export default function Dashboard({ usuario, aoSair, aoVerCards, aoEstudar, aoCr
   const pastasVisiveis = ordenarLista(pastasFiltradas, ordenacao, "name", p => p.id);
   const decksVisiveis  = ordenarLista(decksFiltrados, ordenacao, "title", d => new Date(d.created_at).getTime());
 
-  function entrarPasta(pasta) {
-    setPastaAtiva(pasta);
-    setCaminho(c => [...c, pasta]);
-    setCriandoPasta(false);
-  }
-
   function navegarBreadcrumb(idx) {
-    if (idx === -1) { setPastaAtiva(null); setCaminho([]); return; }
-    const novo = caminho.slice(0, idx + 1);
-    setPastaAtiva(encontrarPasta(arvore, novo[novo.length - 1].id) ?? novo[novo.length - 1]);
-    setCaminho(novo);
+    if (idx === -1) { setSearchParams({}); return; }
+    setSearchParams({ folder: String(caminho[idx].id) });
   }
 
+  // Única função de navegação pra dentro de uma pasta — a URL não distingue
+  // se o clique veio de um card do conteúdo principal, da sidebar ou de um
+  // resultado de busca, então os três pontos convergem aqui. caminho/
+  // pastaAtiva são derivados da URL (ver topo do componente), então trocar
+  // só o parâmetro já recalcula tudo sozinho, sem precisar montar o caminho
+  // manualmente feito antes.
   function irParaPastaSidebar(pasta) {
-    if (!pasta) { setPastaAtiva(null); setCaminho([]); return; }
-    const path = caminhoParaPasta(arvore, pasta.id) ?? [pasta];
-    setPastaAtiva(encontrarPasta(arvore, pasta.id) ?? pasta);
-    setCaminho(path);
+    if (!pasta) { setSearchParams({}); setCriandoPasta(false); return; }
+    setSearchParams({ folder: String(pasta.id) });
     setCriandoPasta(false);
   }
 
-  // Clicar num resultado de busca precisa navegar a partir da raiz (o
-  // resultado pode estar em qualquer nível, não necessariamente dentro da
-  // pastaAtiva atual) — por isso usa irParaPastaSidebar, que recalcula o
-  // caminho inteiro, em vez de entrarPasta, que só empilha mais um nível.
+  const entrarPasta = irParaPastaSidebar;
+
   function abrirResultadoBusca(pasta) {
     irParaPastaSidebar(pasta);
     setBusca("");
@@ -394,7 +387,7 @@ export default function Dashboard({ usuario, aoSair, aoVerCards, aoEstudar, aoCr
     try {
       const nova = await api.criarPasta(nomePasta.trim(), pastaAtiva?.id ?? null, corPasta);
       setNomePasta(""); setCorPasta(null); setCriandoPasta(false);
-      aplicarArvore(inserirNaArvore(arvore, pastaAtiva?.id ?? null, { ...nova, children: [] }));
+      setArvore(inserirNaArvore(arvore, pastaAtiva?.id ?? null, { ...nova, children: [] }));
     } catch (err) { setErro(err.message); }
     finally { setSalvandoPasta(false); }
   }
@@ -405,7 +398,7 @@ export default function Dashboard({ usuario, aoSair, aoVerCards, aoEstudar, aoCr
     try {
       await api.excluirPasta(pasta.id);
       const idsRemovidos = new Set(coletarIdsPastas(pasta));
-      aplicarArvore(removerDaArvore(arvore, pasta.id));
+      setArvore(removerDaArvore(arvore, pasta.id));
       setTodosDecks(decks => decks.filter(d => d.folder_id === null || !idsRemovidos.has(d.folder_id)));
       setStatsMap(sm => {
         const novo = { ...sm };
@@ -456,7 +449,7 @@ export default function Dashboard({ usuario, aoSair, aoVerCards, aoEstudar, aoCr
     try {
       if (tipo === "pasta") {
         await api.renomearPasta(id, nomeNovo, cor);
-        aplicarArvore(renomearNaArvore(arvore, id, nomeNovo, cor));
+        setArvore(renomearNaArvore(arvore, id, nomeNovo, cor));
       } else {
         const atualizado = await api.renomearDeck(id, nomeNovo);
         setTodosDecks(decks => decks.map(d => d.id === id ? atualizado : d));
