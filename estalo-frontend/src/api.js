@@ -104,6 +104,17 @@ export const api = {
 
   streak: () => request("/study/streak"),
 
+  // Resumo de uma rodada do Modo Aprender já encerrada (pro gráfico de
+  // evolução do Dashboard). Chamado uma única vez, depois do Promise.all
+  // de responderCard (ver _salvarProgresso em Aprender.jsx).
+  logarSessao: (totalCards, acertosPrimeira, duracaoSeg, modo) =>
+    request("/study/session/log", {
+      method: "POST",
+      body: { total_cards: totalCards, acertos_primeira: acertosPrimeira, duracao_seg: duracaoSeg, modo },
+    }),
+
+  historicoSessoes: () => request("/study/history"),
+
   // Carrega stats de vários decks numa única chamada; retorna Map<id, stats>.
   // Antes disparava 1 request HTTP por deck (statsMultiplos em paralelo) —
   // GET /study/decks/stats calcula tudo no backend com queries em

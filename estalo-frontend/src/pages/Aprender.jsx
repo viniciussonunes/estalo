@@ -310,6 +310,26 @@ export default function Aprender({ deck, aoVoltar, modoGlobal = false }) {
       });
     });
     try { await Promise.all(chamadas); } catch { /* silencioso */ }
+
+    // Resumo da rodada pro histórico do Dashboard. Fire-and-forget depois
+    // das respostas individuais acima: se isso falhar, perde-se só um ponto
+    // do gráfico de evolução, não o progresso real dos cards.
+    //
+    // acertosNaPrimeira (state) não serve aqui — quando o último card é
+    // acertado, o setAcertosNaPrimeira(n => n+1) ainda não "assentou" no
+    // momento em que _salvarProgresso roda (mesma classe de stale closure
+    // que motivou o proximoRef acima). Recalcula do zero a partir do ref,
+    // que está sempre atualizado.
+    const acertosPrimeiraFinal = questoesOriginais.current.filter(
+      q => !errosPorCard.current.has(q.card_id)
+    ).length;
+    api.logarSessao(
+      questoesOriginais.current.length,
+      acertosPrimeiraFinal,
+      Math.floor((Date.now() - (inicioSessao.current ?? Date.now())) / 1000),
+      modoGlobal ? "global" : "deck",
+    ).catch(err => console.error("[Aprender] falha ao logar sessão:", err.message));
+
     setSalvando(false);
   }
 
