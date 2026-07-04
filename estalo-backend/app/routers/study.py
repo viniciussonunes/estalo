@@ -8,10 +8,10 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.dependencies import get_current_user_id
-from app.models import Card, Deck, Review
+from app.models import Card, Deck, Folder, Review
 from app.models.review_history import ReviewHistory
 from app.schemas.study import (
-    HistoryEntry, QuizOption, QuizQuestion, RevealCard,
+    GlobalReviewCard, HistoryEntry, QuizOption, QuizQuestion, RevealCard,
     ReviewAnswer, ReviewResult, SessaoConcluida, StreakOut, StudyCard, StudyStats,
 )
 from app.services.ai import IAError, gerar_explicacoes, gerar_quiz
@@ -118,6 +118,81 @@ def proximo_card(
         repetitions=reps,
         revisoes_hoje=revisoes_hoje,
         limite_diario=limite_diario,
+    )
+
+
+@router.get("/global-reviews", response_model=Union[GlobalReviewCard, SessaoConcluida])
+def revisao_global(
+    incluir_dominados: bool = Query(False, description="Se true, dominados (reps≥2) entram na fila"),
+    db: Session = Depends(get_db),
+    user_id: int = Depends(get_current_user_id),
+):
+    """Generalização de /decks/{id}/next pra TODOS os decks do usuário de
+    uma vez (Fila Única de Revisão / "Estudar Tudo"). Mesmo contrato
+    stateless — 1 card por chamada, sem fila em memória — só que a
+    prioridade SM-2 de cada card compete dentro do grupo (Pasta, Deck), não
+    só dentro de 1 deck isolado. Sem limite_diario de propósito: esse
+    endpoint existe pra zerar o backlog inteiro numa sessão só, e o teto de
+    50/dia foi pensado pra uma sessão por-deck (ver proximo_card).
+    """
+    hoje = datetime.utcnow().date()
+
+    prioridade_com_novo = case(
+        (Review.id.is_(None),                2),  # Novo (sem review)
+        (func.date(Review.due_date) < hoje,  0),  # Crítico
+        (func.date(Review.due_date) == hoje, 1),  # Hoje
+        else_=3,                                   # Validando
+    )
+
+    query = (
+        db.query(Card, Review, Deck, Folder, prioridade_com_novo.label("prio"))
+        .join(Deck, Card.deck_id == Deck.id)
+        .outerjoin(Review, (Review.card_id == Card.id) & (Review.user_id == user_id))
+        .outerjoin(Folder, Deck.folder_id == Folder.id)
+        .filter(Deck.owner_id == user_id)
+    )
+
+    if not incluir_dominados:
+        query = query.filter(
+            (Review.id.is_(None))
+            | (Review.repetitions < 2)
+            | (func.date(Review.due_date) <= hoje)
+        )
+
+    # Agrupamento: decks dentro de pasta (A-Z) primeiro, decks soltos na
+    # raiz por último — Folder.name.is_(None) evita depender da ordenação
+    # de NULL default do banco (SQLite e Postgres discordam nisso). Dentro
+    # do mesmo deck, prioridade SM-2 e due_date decidem a ordem final.
+    resultado = (
+        query.order_by(
+            Folder.name.is_(None),
+            Folder.name.asc(),
+            Deck.title.asc(),
+            prioridade_com_novo,
+            Review.due_date.asc(),
+        )
+        .first()
+    )
+
+    if resultado is None:
+        return SessaoConcluida(
+            motivo="sem_cards",
+            revisoes_hoje=0,
+            limite_diario=0,
+        )
+
+    card, review, deck, folder, _ = resultado
+    due = review.due_date if review else datetime.utcnow()
+    reps = review.repetitions if review else 0
+
+    return GlobalReviewCard(
+        card_id=card.id,
+        front=card.front,
+        back=card.back,
+        due_date=due,
+        repetitions=reps,
+        deck_name=deck.title,
+        deck_color=folder.color if folder else None,
     )
 
 

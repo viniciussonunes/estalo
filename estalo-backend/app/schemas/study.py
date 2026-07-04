@@ -14,6 +14,14 @@ class StudyCard(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class GlobalReviewCard(StudyCard):
+    """StudyCard + contexto de origem, pra Fila Única de Revisão (Global
+    Review): já que um card aqui pode vir de qualquer deck do usuário, o
+    frontend precisa saber de qual assunto ele é pra mostrar a badge."""
+    deck_name: str
+    deck_color: str | None = None   # herdado da pasta-mãe; None = deck solto na raiz
+
+
 class SessaoConcluida(BaseModel):
     concluida: bool = True
     motivo: str                   # "limite_diario" | "sem_cards"
