@@ -30,7 +30,7 @@ class IAError(Exception):
 _RETRY_STATUS = {429, 500, 502, 503, 504}
 
 
-def _chamar_gemini(prompt: str, timeout: int = 25) -> str:
+def _chamar_gemini(prompt: str, timeout: int = 25, instrucao_sistema: str | None = None) -> str:
     """Chama o Gemini e retorna o texto gerado. Tenta até 2 vezes em erros transitórios.
 
     Orçamento de tempo pensado pra caber numa função serverless: 2 tentativas
@@ -38,12 +38,19 @@ def _chamar_gemini(prompt: str, timeout: int = 25) -> str:
     ~2*timeout + 2s. Antes eram 3 tentativas de até 90s com backoff 2s/4s
     (pior caso ~276s), o que estourava qualquer limite de duração de função
     plausível bem antes da 3ª tentativa terminar.
+
+    `instrucao_sistema`, quando informado, vai no campo `systemInstruction` da
+    própria API — separado de `contents` de propósito. É o que faz a persona
+    (tom, regras, formatação) ficar estável entre chamadas, sem competir com o
+    conteúdo específico de cada prompt nem precisar ser reforçada em cada um.
     """
     if not settings.GEMINI_API_KEY:
         raise IAError("Chave do Gemini não configurada. Preencha GEMINI_API_KEY no arquivo .env")
 
     url = GEMINI_URL.format(model=settings.GEMINI_MODEL)
     payload = {"contents": [{"parts": [{"text": prompt}]}]}
+    if instrucao_sistema:
+        payload["systemInstruction"] = {"parts": [{"text": instrucao_sistema}]}
     headers = {
         "Content-Type": "application/json",
         "X-goog-api-key": settings.GEMINI_API_KEY,
