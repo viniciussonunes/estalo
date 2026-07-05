@@ -14,7 +14,7 @@ helper qualquer como este não é, a menos que algum teste o importe).
 import factory
 from factory.alchemy import SQLAlchemyModelFactory
 
-from app.models import Card, Deck, Review, User
+from app.models import Card, Deck, Folder, Review, User
 from app.models.card import calcular_content_hash
 
 
@@ -27,6 +27,17 @@ class UserFactory(SQLAlchemyModelFactory):
     # Nunca usado pra logar de verdade nesses testes — só precisa
     # satisfazer a coluna NOT NULL, não precisa ser um hash bcrypt válido.
     hashed_password = "$2b$12$placeholderplaceholderplaceholderplaceh"
+
+
+class FolderFactory(SQLAlchemyModelFactory):
+    class Meta:
+        model = Folder
+        sqlalchemy_session_persistence = "commit"
+
+    name = factory.Faker("word")
+    owner = factory.SubFactory(UserFactory)
+    parent = None
+    depth = 1
 
 
 class DeckFactory(SQLAlchemyModelFactory):
@@ -62,4 +73,4 @@ class ReviewFactory(SQLAlchemyModelFactory):
     due_date = factory.Faker("date_time_this_year")
 
 
-ALL_FACTORIES = (UserFactory, DeckFactory, CardFactory, ReviewFactory)
+ALL_FACTORIES = (UserFactory, FolderFactory, DeckFactory, CardFactory, ReviewFactory)

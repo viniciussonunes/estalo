@@ -12,6 +12,7 @@ from app.dependencies import get_current_user_id, get_user_timezone
 from app.models import Card, Deck, Folder, Review
 from app.models.review_history import ReviewHistory
 from app.models.study_session import StudySession
+from app.routers.folders import _buscar_pasta_do_usuario
 from app.schemas.study import (
     EnrichCardsRequest, EnrichCardsResponse, EnrichedCard,
     GlobalReviewCard, HistoryEntry, QuizOption, QuizQuestion, RevealCard,
@@ -20,6 +21,7 @@ from app.schemas.study import (
 )
 from app.services.ai import IAError, gerar_explicacoes, gerar_quiz
 from app.services.sm2 import SM2State, calcular_proxima_revisao
+from app.services.study_service import get_all_deck_ids_in_folder
 
 router = APIRouter(prefix="/study", tags=["Estudo"])
 
@@ -138,6 +140,9 @@ def proximo_card(
 
 @router.get("/global-reviews", response_model=list[GlobalReviewCard])
 def revisao_global(
+    folder_id: int | None = Query(
+        None, description="Se informado, restringe a fila a essa pasta e suas subpastas (Estudo por Pasta). Sem isso, todos os decks do usuário (Modo Global)."
+    ),
     db: Session = Depends(get_db),
     user_id: int = Depends(get_current_user_id),
 ):
@@ -157,15 +162,34 @@ def revisao_global(
     montarFila() no frontend já sabe montar em pergunta de múltipla
     escolha; cards sem esses dois campos pré-gerados são descartados lá,
     igual já acontece hoje pro Modo Aprender por-deck.
+
+    folder_id (opcional) liga o "Estudo por Pasta": restringe a fila aos
+    decks daquela pasta e de todas as suas subpastas (recursivo — ver
+    get_all_deck_ids_in_folder em services/study_service.py). 404 se a
+    pasta não existir ou não for do usuário; lista vazia (sem erro) se a
+    pasta existir mas não tiver nenhum deck com cards vencidos.
     """
     agora = datetime.utcnow()
 
-    linhas = (
+    deck_ids_da_pasta = None
+    if folder_id is not None:
+        _buscar_pasta_do_usuario(folder_id, user_id, db)  # 404 se não existir/não for do usuário
+        deck_ids_da_pasta = get_all_deck_ids_in_folder(folder_id, user_id, db)
+        if not deck_ids_da_pasta:
+            return []  # pasta (e subpastas) sem nenhum deck — nada pra buscar
+
+    query = (
         db.query(Card, Review, Deck, Folder)
         .join(Deck, Card.deck_id == Deck.id)
         .join(Review, (Review.card_id == Card.id) & (Review.user_id == user_id))
         .outerjoin(Folder, Deck.folder_id == Folder.id)
         .filter(Deck.owner_id == user_id, Review.due_date <= agora)
+    )
+    if deck_ids_da_pasta is not None:
+        query = query.filter(Deck.id.in_(deck_ids_da_pasta))
+
+    linhas = (
+        query
         .order_by(
             # Folder.name.is_(None) evita depender da ordenação de NULL
             # default do banco (SQLite e Postgres discordam nisso) — decks
