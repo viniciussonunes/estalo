@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.dependencies import get_current_user_id
 from app.models import Card, Deck, Review
+from app.models.card import calcular_content_hash
 from app.schemas.ai import GenerateRequest
 from app.schemas.card import CardCreate, CardOut, CardUpdate
 from app.services.ai import IAError, gerar_cards_completos
@@ -71,6 +72,7 @@ def criar_card(
         back=dados.back,
         source=dados.source,
         deck_id=deck_id,
+        content_hash=calcular_content_hash(dados.front, dados.back),
     )
     db.add(card)
     db.commit()
@@ -108,6 +110,7 @@ def gerar_cards_ia(
             explanation=g["explanation"],
             source="ai",
             deck_id=deck_id,
+            content_hash=calcular_content_hash(g["front"], g["back"]),
         )
         for g in gerados
     ]
@@ -151,6 +154,10 @@ def atualizar_card(
         card.front = dados.front
     if dados.back is not None:
         card.back = dados.back
+    if dados.front is not None or dados.back is not None:
+        # Recalcula com os valores JÁ atualizados de card.front/card.back
+        # acima — cobre tanto editar só um dos dois campos quanto os dois.
+        card.content_hash = calcular_content_hash(card.front, card.back)
     db.commit()
     db.refresh(card)
     return _card_out(card, user_id, db)
