@@ -12,6 +12,18 @@ const BASE = import.meta.env.VITE_API_URL || "http://localhost:8000";
 // nada — o banco continua sempre em UTC.
 const FUSO_HORARIO = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
+// Lançada quando o backend recusa uma chamada por limite diário de tokens
+// de IA estourado (HTTP 429 -- ver Quota Manager em app/services/ai.py).
+// Classe própria (não um Error genérico) pra quem chama poder decidir
+// tratar isso de um jeito diferente de "deu erro qualquer" (ver
+// pedirTutor em Aprender.jsx).
+export class QuotaExceededException extends Error {
+  constructor(message) {
+    super(message);
+    this.name = "QuotaExceededException";
+  }
+}
+
 // O crachá fica guardado no navegador (localStorage), então o login
 // "gruda" mesmo se você recarregar a página.
 export const token = {
@@ -47,6 +59,7 @@ async function request(path, { method = "GET", body, form } = {}) {
     } catch {
       /* resposta sem corpo JSON */
     }
+    if (resp.status === 429) throw new QuotaExceededException(detalhe);
     throw new Error(detalhe);
   }
 

@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from "react";
 import ReactMarkdown from "react-markdown";
-import { api } from "../api.js";
+import { api, QuotaExceededException } from "../api.js";
 import useStudySession from "../hooks/useStudySession.js";
+import QuotaLimitModal from "../components/QuotaLimitModal.jsx";
 
 /*
   Lógica de fases SM-2:
@@ -127,6 +128,10 @@ export default function Aprender({ deck, aoVoltar, modoGlobal = false, folderId 
   const [tutorCarregando, setTutorCarregando] = useState(false);
   const [tutorTexto, setTutorTexto]           = useState("");
   const [tutorErro, setTutorErro]             = useState("");
+  // true quando o backend recusou a chamada por limite diário de tokens
+  // (429 -> QuotaExceededException, ver api.js) -- some pra um modal
+  // dedicado em vez de aparecer como texto de erro dentro do modal do tutor.
+  const [isQuotaModalOpen, setIsQuotaModalOpen] = useState(false);
 
   function _iniciarComCards(cards) {
     const questoes = montarFila(cards);
@@ -281,7 +286,14 @@ export default function Aprender({ deck, aoVoltar, modoGlobal = false, folderId 
       const { explanation } = await api.tutorExplicarCard(questaoAtual.card_id);
       setTutorTexto(explanation);
     } catch (e) {
-      setTutorErro(e.message || "Não foi possível carregar a explicação do tutor.");
+      if (e instanceof QuotaExceededException) {
+        // Modal dedicado assume o lugar do modal do tutor -- não faz
+        // sentido mostrar os dois ao mesmo tempo.
+        setTutorAberto(false);
+        setIsQuotaModalOpen(true);
+      } else {
+        setTutorErro(e.message || "Não foi possível carregar a explicação do tutor.");
+      }
     } finally {
       setTutorCarregando(false);
     }
@@ -766,6 +778,8 @@ export default function Aprender({ deck, aoVoltar, modoGlobal = false, folderId 
           </div>
         </div>
       )}
+
+      <QuotaLimitModal aberto={isQuotaModalOpen} aoFechar={() => setIsQuotaModalOpen(false)} />
     </div>
   );
 }

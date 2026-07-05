@@ -531,6 +531,12 @@ body {
 .tutor-conteudo li { margin-bottom: 0.35rem; }
 .tutor-conteudo li:last-child { margin-bottom: 0; }
 
+/* ---------- Modal de limite de cota (QuotaLimitModal) ---------- */
+.modal-cota { max-width: 420px; }
+.modal-cota-texto { font-size: 0.92rem; line-height: 1.55; color: var(--tinta); margin-bottom: 1.2rem; }
+.modal-cota-botoes { display: flex; gap: 0.6rem; align-items: center; flex-wrap: wrap; }
+.modal-cota-botoes .botao-principal { flex: 1; }
+
 /* ---------- Resultado final do quiz ---------- */
 .quiz-resultado-placar {
   font-size: 1.15rem;
