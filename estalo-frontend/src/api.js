@@ -114,6 +114,13 @@ export const api = {
 
   streak: () => request("/study/streak"),
 
+  // Tutor Inteligente: explicação didática sob demanda pra um card (ver
+  // botão "Perguntar ao Tutor" em Aprender.jsx). Primeira chamada gera via
+  // IA e o backend cacheia (Card.tutor_explanation); chamadas seguintes
+  // pro mesmo card voltam instantâneas.
+  tutorExplicarCard: (cardId) =>
+    request(`/study/cards/${cardId}/tutor`, { method: "POST" }),
+
   // Resumo de uma rodada do Modo Aprender já encerrada (pro gráfico de
   // evolução do Dashboard). Chamado uma única vez, depois do Promise.all
   // de responderCard (ver _salvarProgresso em Aprender.jsx).

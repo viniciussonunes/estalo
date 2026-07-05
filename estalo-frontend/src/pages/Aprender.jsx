@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import ReactMarkdown from "react-markdown";
 import { api } from "../api.js";
 import useStudySession from "../hooks/useStudySession.js";
 
@@ -117,6 +118,15 @@ export default function Aprender({ deck, aoVoltar, modoGlobal = false, folderId 
   const proximoRef        = useRef(null);
   const [acertosNaPrimeira, setAcertosNaPrimeira] = useState(0);
   const [tempoSessao, setTempoSessao] = useState(0);
+
+  // Tutor Inteligente: explicação sob demanda pra questão atual (ver
+  // botão "Perguntar ao Tutor" abaixo). tutorTexto fica em cache local por
+  // card_id enquanto a fila não avança — reabrir o modal pro mesmo card
+  // não refaz a chamada (ver pedirTutor).
+  const [tutorAberto, setTutorAberto]         = useState(false);
+  const [tutorCarregando, setTutorCarregando] = useState(false);
+  const [tutorTexto, setTutorTexto]           = useState("");
+  const [tutorErro, setTutorErro]             = useState("");
 
   function _iniciarComCards(cards) {
     const questoes = montarFila(cards);
@@ -254,6 +264,28 @@ export default function Aprender({ deck, aoVoltar, modoGlobal = false, folderId 
 
   const questaoAtual = fila[0] ?? null;
   const respondeu    = resposta !== null;
+
+  // Nova questão -> nova explicação do tutor (limpa o cache local anterior).
+  useEffect(() => {
+    setTutorAberto(false);
+    setTutorTexto("");
+    setTutorErro("");
+  }, [questaoAtual?.card_id]);
+
+  async function pedirTutor() {
+    setTutorAberto(true);
+    setTutorErro("");
+    if (tutorTexto) return; // já carregado pra este card, só reabre o modal
+    setTutorCarregando(true);
+    try {
+      const { explanation } = await api.tutorExplicarCard(questaoAtual.card_id);
+      setTutorTexto(explanation);
+    } catch (e) {
+      setTutorErro(e.message || "Não foi possível carregar a explicação do tutor.");
+    } finally {
+      setTutorCarregando(false);
+    }
+  }
 
   // Mantém ref atualizada para o handler de teclado (evita stale closure)
   useEffect(() => { proximoRef.current = proximo; });
@@ -704,6 +736,9 @@ export default function Aprender({ deck, aoVoltar, modoGlobal = false, folderId 
                   : `Incorreto — a certa é ${questaoAtual.correct_letter}. A questão volta ao final.`}
               </p>
               <p className="quiz-explicacao-texto">{questaoAtual.explanation}</p>
+              <button className="botao-texto tutor-botao" onClick={pedirTutor}>
+                Perguntar ao Tutor
+              </button>
               <button className="botao-principal" onClick={proximo} disabled={concluindoAnimacao}>
                 {acertouAtual && cardsConcluidos + 1 >= totalUnicos
                   ? "Ver resultado" : "Próxima →"}
@@ -713,6 +748,24 @@ export default function Aprender({ deck, aoVoltar, modoGlobal = false, folderId 
           )}
         </div>
       </main>
+
+      {tutorAberto && (
+        <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) setTutorAberto(false); }}>
+          <div className="modal-painel modal-tutor">
+            <div className="modal-cabecalho">
+              <h2 className="modal-titulo">Tutor Inteligente</h2>
+              <button className="modal-fechar" onClick={() => setTutorAberto(false)} aria-label="Fechar">×</button>
+            </div>
+            {tutorCarregando && <p className="tutor-status">Pensando na melhor forma de explicar…</p>}
+            {tutorErro && !tutorCarregando && <p className="tutor-status tutor-status-erro">{tutorErro}</p>}
+            {tutorTexto && !tutorCarregando && !tutorErro && (
+              <div className="tutor-conteudo">
+                <ReactMarkdown>{tutorTexto}</ReactMarkdown>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

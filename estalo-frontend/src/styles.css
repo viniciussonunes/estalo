@@ -511,6 +511,25 @@ body {
 .quiz-explicacao.acertou .quiz-explicacao-status { color: #2d8a4e; }
 .quiz-explicacao.errou   .quiz-explicacao-status { color: var(--perigo); }
 .quiz-explicacao-texto { font-size: 0.92rem; line-height: 1.55; color: var(--tinta); }
+.tutor-botao { align-self: flex-start; font-weight: 600; color: var(--violeta); }
+.tutor-botao:hover { background: var(--violeta-suave); color: var(--violeta-escuro); }
+
+/* ---------- Modal do Tutor Inteligente ---------- */
+.modal-tutor { max-width: 560px; }
+.tutor-status { font-size: 0.92rem; color: var(--tinta-suave); }
+.tutor-status-erro { color: var(--perigo); }
+.tutor-conteudo {
+  font-size: 0.94rem;
+  line-height: 1.65;
+  color: var(--tinta);
+}
+.tutor-conteudo > :first-child { margin-top: 0; }
+.tutor-conteudo > :last-child { margin-bottom: 0; }
+.tutor-conteudo p { margin: 0 0 0.85rem; }
+.tutor-conteudo strong { color: var(--violeta-escuro); font-weight: 700; }
+.tutor-conteudo ul, .tutor-conteudo ol { margin: 0 0 0.85rem; padding-left: 1.3rem; }
+.tutor-conteudo li { margin-bottom: 0.35rem; }
+.tutor-conteudo li:last-child { margin-bottom: 0; }
 
 /* ---------- Resultado final do quiz ---------- */
 .quiz-resultado-placar {
