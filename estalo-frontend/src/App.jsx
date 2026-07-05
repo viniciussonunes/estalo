@@ -106,7 +106,13 @@ function AprenderPage() {
   const deck = location.state?.deck;
 
   if (!deck) return <Navigate to="/" replace />;
-  return <Aprender deck={deck} aoVoltar={() => navigate(`/deck/${deck.id}`, { state: { deck } })} />;
+  return (
+    <Aprender
+      deck={deck}
+      aoVoltar={() => navigate(`/deck/${deck.id}`, { state: { deck } })}
+      aoEstudoClassico={() => navigate(`/deck/${deck.id}/estudo`, { state: { deck } })}
+    />
+  );
 }
 
 function RevelarPage() {

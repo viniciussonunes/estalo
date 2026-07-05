@@ -115,6 +115,12 @@ export const api = {
 
   historicoSessoes: () => request("/study/history"),
 
+  // Auto-cura: pede pro backend gerar quiz (options/explanation) pra cards
+  // que já existem mas nasceram sem alternativas. Ver Aprender.jsx (chamado
+  // quando a fila recém-carregada tem cards sem quiz pronto).
+  enriquecerCards: (cardIds) =>
+    request("/study/cards/enrich", { method: "POST", body: { card_ids: cardIds } }),
+
   // Carrega stats de vários decks numa única chamada; retorna Map<id, stats>.
   // Antes disparava 1 request HTTP por deck (statsMultiplos em paralelo) —
   // GET /study/decks/stats calcula tudo no backend com queries em

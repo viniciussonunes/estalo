@@ -47,7 +47,7 @@ function montarFila(cards) {
     });
 }
 
-export default function Aprender({ deck, aoVoltar, modoGlobal = false }) {
+export default function Aprender({ deck, aoVoltar, modoGlobal = false, aoEstudoClassico }) {
   // Na Fila Única não existe "o" deck — usa uma chave fixa própria pro
   // snapshot de F5, isolada de qualquer sessão por-deck real (ids de deck
   // são sempre numéricos, nunca colidem com essa string).
@@ -77,6 +77,10 @@ export default function Aprender({ deck, aoVoltar, modoGlobal = false }) {
   const [fila, setFila]               = useState([]);
   const [totalUnicos, setTotalUnicos] = useState(0);
   const [carregando, setCarregando]   = useState(!snapshotPendente);
+  // true só durante a chamada de auto-cura (POST /study/cards/enrich) —
+  // usada pra trocar a mensagem de "Carregando cards…" por algo que não
+  // vaze o detalhe de que alguns cards estavam sem quiz (ver _repararSemQuiz).
+  const [reparando, setReparando]     = useState(false);
   const [mostrarPrompt, setMostrarPrompt] = useState(!!snapshotPendente);
   const [erro, setErro]               = useState("");
   const [semQuiz, setSemQuiz]         = useState(false);
@@ -122,6 +126,47 @@ export default function Aprender({ deck, aoVoltar, modoGlobal = false }) {
     inicioSessao.current = Date.now();
   }
 
+  function _temQuizPronto(c) {
+    return Array.isArray(c.options) && c.options.length >= 3 && !!c.explanation;
+  }
+
+  // Auto-cura: cards sem quiz pré-gerado (tipicamente criados manualmente,
+  // nunca passaram por "Gerar com IA") seriam descartados em silêncio por
+  // montarFila(). Em vez disso, tenta reparar na hora via POST
+  // /study/cards/enrich antes de montar a fila — o usuário só percebe o
+  // tempo extra de IA, nunca a causa (card sem dado no banco).
+  async function _repararSemQuiz(cards) {
+    const semQuizIds = cards.filter(c => !_temQuizPronto(c)).map(c => c.id);
+    if (semQuizIds.length === 0) return cards;
+
+    setReparando(true);
+    try {
+      // O backend aceita até 20 ids por chamada (mesmo teto de
+      // /decks/{id}/quiz), pra manter o prompt e a resposta da IA previsíveis.
+      const lotes = [];
+      for (let i = 0; i < semQuizIds.length; i += 20) lotes.push(semQuizIds.slice(i, i + 20));
+
+      const corrigidos = new Map();
+      for (const lote of lotes) {
+        const { enriched } = await api.enriquecerCards(lote);
+        enriched.forEach(e => corrigidos.set(e.card_id, e));
+      }
+
+      return cards.map(c => {
+        const fix = corrigidos.get(c.id);
+        return fix ? { ...c, options: fix.options, explanation: fix.explanation } : c;
+      });
+    } catch {
+      // IA fora do ar ou erro de rede — não trava a tela: os cards que
+      // continuarem sem quiz são descartados por montarFila(), igual já
+      // acontecia antes da auto-cura existir (ver tela de "Sem questões
+      // disponíveis", que agora oferece o Modo Estudo clássico como saída).
+      return cards;
+    } finally {
+      setReparando(false);
+    }
+  }
+
   function _restaurarDeSnapshot(snap) {
     setFila(snap.fila);
     setTotalUnicos(snap.totalUnicos);
@@ -138,6 +183,7 @@ export default function Aprender({ deck, aoVoltar, modoGlobal = false }) {
   function _carregarDoServidor() {
     setCarregando(true);
     _buscarCards()
+      .then(_repararSemQuiz)
       .then(_iniciarComCards)
       .catch(err => setErro(err.message))
       .finally(() => setCarregando(false));
@@ -351,6 +397,7 @@ export default function Aprender({ deck, aoVoltar, modoGlobal = false }) {
     setConcluido(false);
     setCarregando(true);
     _buscarCards()
+      .then(_repararSemQuiz)
       .then(cards => { _iniciarComCards(cards); })
       .catch(err => setErro(err.message))
       .finally(() => setCarregando(false));
@@ -424,7 +471,9 @@ export default function Aprender({ deck, aoVoltar, modoGlobal = false }) {
     return (
       <div className="pagina">{cabecalho}
         <main className="conteudo estudo-centro">
-          <p className="vazio">Carregando cards…</p>
+          <p className="vazio">
+            {reparando ? "Preparando seu material de estudo…" : "Carregando cards…"}
+          </p>
         </main>
       </div>
     );
@@ -444,20 +493,30 @@ export default function Aprender({ deck, aoVoltar, modoGlobal = false }) {
   }
 
   if (semQuiz) {
+    // Chegou aqui depois de _repararSemQuiz() já ter tentado consertar
+    // sozinho — se ainda assim não sobrou nenhuma questão, a IA falhou ou
+    // está indisponível agora, não é falta de tentativa.
     return (
       <div className="pagina">{cabecalho}
         <main className="conteudo estudo-centro">
           <div className="estudo-concluido">
             <div className="estudo-concluido-icone">✦</div>
-            <h2 className="estudo-concluido-titulo">Sem questões disponíveis</h2>
+            <h2 className="estudo-concluido-titulo">Não foi possível preparar o quiz agora</h2>
             <p className="estudo-concluido-sub">
               {modoGlobal
-                ? 'Os cards vencidos ainda não têm alternativas geradas por IA. Entre em cada deck e use a aba "Gerar com IA" para criar questões com alternativas.'
-                : 'Este deck não tem cards gerados com IA. Vá até a tela de Cards e use a aba "Gerar com IA" para criar questões com alternativas.'}
+                ? 'Tentamos gerar as alternativas automaticamente pros cards vencidos, mas não deu certo agora (a IA pode estar indisponível). Tente de novo em instantes, ou entre em cada deck e use a aba "Gerar com IA".'
+                : 'Tentamos gerar as alternativas automaticamente, mas não deu certo agora (a IA pode estar indisponível). Tente de novo em instantes, use a aba "Gerar com IA" na tela de Cards, ou estude esses cards no modo clássico enquanto isso.'}
             </p>
-            <button className="botao-principal estudo-concluido-botao" onClick={sair}>
-              {modoGlobal ? "Voltar à Home" : "Voltar ao deck"}
-            </button>
+            <div className="gamificado-botoes">
+              <button className="botao-principal estudo-concluido-botao" onClick={sair}>
+                {modoGlobal ? "Voltar à Home" : "Voltar ao deck"}
+              </button>
+              {!modoGlobal && aoEstudoClassico && (
+                <button className="botao-texto" onClick={aoEstudoClassico}>
+                  Estudar no modo clássico
+                </button>
+              )}
+            </div>
           </div>
         </main>
       </div>
