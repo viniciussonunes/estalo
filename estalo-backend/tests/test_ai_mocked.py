@@ -19,6 +19,7 @@ from unittest.mock import Mock, patch
 
 from app.core.config import settings
 from app.services.ai import gerar_cards_completos
+from tests.factories import UserFactory
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
@@ -32,15 +33,16 @@ def _resposta_gemini_mock():
     return resp
 
 
-def test_gerar_cards_completos_com_gemini_mockado():
+def test_gerar_cards_completos_com_gemini_mockado(db_session):
     # patch.object na GEMINI_API_KEY também -- sem isso, o teste dependeria
     # de existir uma chave real configurada no ambiente (settings.py
     # levanta IAError antes mesmo de chamar httpx.post se a chave estiver
     # vazia), o que quebraria justamente o "determinístico, sem rede" que
     # este arquivo existe pra garantir.
+    user = UserFactory()
     with patch.object(settings, "GEMINI_API_KEY", "chave-fake-de-teste"), \
          patch("app.services.ai.httpx.post", return_value=_resposta_gemini_mock()) as mock_post:
-        cards = gerar_cards_completos("Geografia da Europa", 2)
+        cards = gerar_cards_completos("Geografia da Europa", 2, user.id, db_session)
 
     assert mock_post.called
     assert len(cards) == 2
@@ -51,14 +53,15 @@ def test_gerar_cards_completos_com_gemini_mockado():
     assert cards[1]["back"] == "Roma"
 
 
-def test_gerar_cards_completos_nao_faz_nenhuma_chamada_de_rede_real():
+def test_gerar_cards_completos_nao_faz_nenhuma_chamada_de_rede_real(db_session):
     """Prova que o teste acima é hermético: se o código tentasse mesmo
     assim ir pra rede (bug de patch mal aplicado), httpx.post real
     lançaria erro de conexão -- aqui garantimos que SÓ o mock é chamado."""
+    user = UserFactory()
     with patch.object(settings, "GEMINI_API_KEY", "chave-fake-de-teste"), \
          patch("app.services.ai.httpx.post") as mock_post:
         mock_post.return_value = _resposta_gemini_mock()
-        gerar_cards_completos("Qualquer texto", 2)
+        gerar_cards_completos("Qualquer texto", 2, user.id, db_session)
         mock_post.assert_called_once()
         # confirma que foi feita exatamente 1 chamada -- nenhum retry
         # aconteceu, porque o mock nunca "falhou" de propósito

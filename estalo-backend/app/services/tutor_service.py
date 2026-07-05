@@ -13,6 +13,8 @@ do SDK é feita manualmente em _chamar_gemini (app/services/ai.py): a persona
 vai no campo `systemInstruction` do payload, o conteúdo do card vai em
 `contents` -- os dois nunca se misturam num prompt só.
 """
+from sqlalchemy.orm import Session
+
 from app.services.ai import IAError, _chamar_gemini  # noqa: F401 (IAError reexportado p/ quem importar daqui)
 
 # Modelo dedicado do Tutor: mais rápido/barato que o padrão usado por
@@ -63,15 +65,16 @@ def _montar_mensagem_usuario(card_front: str, card_back: str) -> str:
     )
 
 
-def explicar_card(card_front: str, card_back: str, timeout: int = 25) -> str:
+def explicar_card(card_front: str, card_back: str, user_id: int, db: Session, timeout: int = 25) -> str:
     """Pede ao tutor uma explicação didática do card.
 
     Retorna markdown puro (não JSON) — diferente das outras funções de
     app/services/ai.py, aqui a resposta É o conteúdo mostrado ao usuário, não
-    dado estruturado pra outro código consumir. Lança IAError se algo der
-    errado (chave faltando, API fora do ar, etc.).
+    dado estruturado pra outro código consumir. Lança IAError (ou
+    QuotaExceededError, ver ai.py) se algo der errado (chave faltando, API
+    fora do ar, cota diária estourada, etc.).
     """
     mensagem = _montar_mensagem_usuario(card_front, card_back)
     return _chamar_gemini(
-        mensagem, timeout=timeout, instrucao_sistema=PERSONA_TUTOR, model=TUTOR_MODEL,
+        mensagem, user_id, db, timeout=timeout, instrucao_sistema=PERSONA_TUTOR, model=TUTOR_MODEL,
     )

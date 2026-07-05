@@ -19,7 +19,7 @@ from app.schemas.study import (
     ReviewAnswer, ReviewResult, SessaoConcluida, StreakOut, StudyCard,
     StudySessionLog, StudySessionOut, StudyStats, TutorResponse,
 )
-from app.services.ai import IAError, gerar_explicacoes, gerar_quiz
+from app.services.ai import IAError, QuotaExceededError, gerar_explicacoes, gerar_quiz
 from app.services.sm2 import SM2State, calcular_proxima_revisao
 from app.services.study_service import get_all_deck_ids_in_folder
 from app.services.tutor_service import explicar_card
@@ -682,7 +682,12 @@ def tutor_card(
     db.commit()
 
     try:
-        explicacao = explicar_card(front, back)
+        explicacao = explicar_card(front, back, user_id, db)
+    except QuotaExceededError as e:
+        # Precisa vir ANTES de "except IAError" -- QuotaExceededError é
+        # subclasse dela (ver ai.py), e a mensagem certa aqui é "espere até
+        # amanhã", não "tente de novo já", que o except genérico abaixo diz.
+        raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS, str(e))
     except IAError:
         raise HTTPException(
             status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -749,7 +754,7 @@ def enriquecer_cards(
     cards_data = [{"card_id": c.id, "front": c.front, "back": c.back} for c in cards]
 
     try:
-        resultado = gerar_quiz(cards_data)
+        resultado = gerar_quiz(cards_data, user_id, db)
     except IAError as e:
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(e))
 
@@ -795,7 +800,7 @@ def gerar_quiz_deck(
     ]
 
     try:
-        resultado = gerar_quiz(cards_data)
+        resultado = gerar_quiz(cards_data, user_id, db)
     except IAError as e:
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(e))
 
@@ -850,7 +855,7 @@ def gerar_reveal_deck(
     ]
 
     try:
-        resultado = gerar_explicacoes(cards_data)
+        resultado = gerar_explicacoes(cards_data, user_id, db)
     except IAError as e:
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(e))
 

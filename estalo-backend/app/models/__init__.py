@@ -10,8 +10,9 @@ from app.models.review import Review
 from app.models.review_history import ReviewHistory
 from app.models.study_session import StudySession
 from app.models.user import User
+from app.models.user_quota import UserQuota
 
 __all__ = [
     "User", "Folder", "Deck", "Card", "Review", "ReviewHistory",
-    "StudySession", "ImportStagingCard",
+    "StudySession", "ImportStagingCard", "UserQuota",
 ]

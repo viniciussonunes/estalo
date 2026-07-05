@@ -11,11 +11,14 @@ a resposta. É a diferença entre receber um formulário preenchido e um bilhete
 escrito à mão.
 """
 import json
+import math
 import time
 
 import httpx
+from sqlalchemy.orm import Session
 
 from app.core.config import settings
+from app.services.quota_service import check_and_consume_tokens
 
 GEMINI_URL = (
     "https://generativelanguage.googleapis.com/v1beta/models/"
@@ -27,11 +30,33 @@ class IAError(Exception):
     """Erro ao falar com a IA (chave faltando, API fora do ar, resposta estranha)."""
 
 
+class QuotaExceededError(IAError):
+    """Usuário estourou o limite diário de tokens de IA (Quota Manager).
+
+    Subclassa IAError (não Exception pura) de propósito: todo router que
+    já trata `except IAError` (cards.py, study.py) passa a tratar isso
+    também, de graça -- sem precisar de um `except QuotaExceededError`
+    novo em cada endpoint que chama IA.
+    """
+
+
 _RETRY_STATUS = {429, 500, 502, 503, 504}
+
+
+def _estimar_tokens(prompt: str, instrucao_sistema: str | None = None) -> int:
+    """Estimativa grosseira de propósito: ~4 caracteres por token (regra de
+    bolso comum, não a contagem exata do tokenizer do Gemini). O objetivo
+    aqui não é precisão -- é ter um teto que barre ANTES de gastar cota
+    numa chamada, mesmo com folga de margem de erro na estimativa.
+    """
+    total_chars = len(prompt) + len(instrucao_sistema or "")
+    return math.ceil(total_chars / 4)
 
 
 def _chamar_gemini(
     prompt: str,
+    user_id: int,
+    db: Session,
     timeout: int = 25,
     instrucao_sistema: str | None = None,
     model: str | None = None,
@@ -52,9 +77,20 @@ def _chamar_gemini(
     `model`, quando informado, sobrepõe settings.GEMINI_MODEL só nesta
     chamada — permite um serviço (ex: tutor_service) usar um modelo mais
     rápido/barato sem mudar o modelo padrão usado por gerar_cards/gerar_quiz.
+
+    `user_id`/`db` alimentam o Quota Manager (app/services/quota_service.py):
+    a estimativa de tokens é debitada da cota do usuário ANTES da chamada
+    HTTP -- se ele já estourou o limite diário, nem tentamos falar com o
+    Gemini (ver QuotaExceededError acima).
     """
     if not settings.GEMINI_API_KEY:
         raise IAError("Chave do Gemini não configurada. Preencha GEMINI_API_KEY no arquivo .env")
+
+    estimativa = _estimar_tokens(prompt, instrucao_sistema)
+    if not check_and_consume_tokens(user_id, estimativa, db):
+        raise QuotaExceededError(
+            "Limite diário de uso do Tutor/IA atingido. Tente novamente amanhã."
+        )
 
     url = GEMINI_URL.format(model=model or settings.GEMINI_MODEL)
     payload = {"contents": [{"parts": [{"text": prompt}]}]}
@@ -182,13 +218,13 @@ def _montar_prompt_revelar(cards: list[dict]) -> str:
     )
 
 
-def gerar_quiz(cards: list[dict]) -> list[dict]:
+def gerar_quiz(cards: list[dict], user_id: int, db: Session) -> list[dict]:
     """
     Recebe lista de {card_id, front, back} e devolve lista de
     {card_id, question, correct, distractors, explanation}.
-    Lança IAError se algo der errado.
+    Lança IAError (ou QuotaExceededError) se algo der errado.
     """
-    bruto = _chamar_gemini(_montar_prompt_quiz(cards))
+    bruto = _chamar_gemini(_montar_prompt_quiz(cards), user_id, db)
 
     try:
         resultado = json.loads(_limpar_json(bruto))
@@ -218,13 +254,13 @@ def gerar_quiz(cards: list[dict]) -> list[dict]:
     return validos
 
 
-def gerar_explicacoes(cards: list[dict]) -> list[dict]:
+def gerar_explicacoes(cards: list[dict], user_id: int, db: Session) -> list[dict]:
     """
     Recebe lista de {card_id, front, back} e devolve lista de
     {card_id, explanation}.
-    Lança IAError se algo der errado.
+    Lança IAError (ou QuotaExceededError) se algo der errado.
     """
-    bruto = _chamar_gemini(_montar_prompt_revelar(cards))
+    bruto = _chamar_gemini(_montar_prompt_revelar(cards), user_id, db)
 
     try:
         resultado = json.loads(_limpar_json(bruto))
@@ -245,12 +281,12 @@ def gerar_explicacoes(cards: list[dict]) -> list[dict]:
     return validos
 
 
-def gerar_cards_completos(texto: str, quantidade: int) -> list[dict]:
+def gerar_cards_completos(texto: str, quantidade: int, user_id: int, db: Session) -> list[dict]:
     """
     Gera cards com front, back, distractors e explanation em uma única chamada.
     Retorna lista de dicts com todas as chaves preenchidas.
     """
-    bruto = _chamar_gemini(_montar_prompt_completo(texto, quantidade), timeout=30)
+    bruto = _chamar_gemini(_montar_prompt_completo(texto, quantidade), user_id, db, timeout=30)
 
     try:
         cards = json.loads(_limpar_json(bruto))
@@ -279,12 +315,12 @@ def gerar_cards_completos(texto: str, quantidade: int) -> list[dict]:
     return validos
 
 
-def gerar_cards(texto: str, quantidade: int) -> list[dict]:
+def gerar_cards(texto: str, quantidade: int, user_id: int, db: Session) -> list[dict]:
     """
     Chama o Gemini e devolve uma lista de dicts: [{"front": ..., "back": ...}].
     Lança IAError se algo der errado.
     """
-    bruto = _chamar_gemini(_montar_prompt(texto, quantidade), timeout=20)
+    bruto = _chamar_gemini(_montar_prompt(texto, quantidade), user_id, db, timeout=20)
 
     try:
         cards = json.loads(_limpar_json(bruto))

@@ -98,7 +98,7 @@ def gerar_cards_ia(
     _deck_do_usuario(deck_id, user_id, db)
 
     try:
-        gerados = gerar_cards_completos(dados.text, dados.quantity)
+        gerados = gerar_cards_completos(dados.text, dados.quantity, user_id, db)
     except IAError as e:
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(e))
 
