@@ -8,7 +8,7 @@ from app.core.config import settings
 from app.core.database import Base, engine
 from app import models  # noqa: F401
 from app.models.card import calcular_content_hash
-from app.routers import auth, folders, decks, cards, study
+from app.routers import auth, folders, decks, cards, study, import_anki
 
 
 def _migrar():
@@ -115,6 +115,7 @@ app.include_router(folders.router)
 app.include_router(decks.router)
 app.include_router(cards.router)
 app.include_router(study.router)
+app.include_router(import_anki.router)
 
 
 @app.get("/")
