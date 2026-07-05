@@ -645,22 +645,6 @@ def logar_sessao(
     return sessao
 
 
-@router.get("/history", response_model=list[StudySessionOut])
-def historico_sessoes(
-    limit: int = Query(5, ge=1, le=30),
-    db: Session = Depends(get_db),
-    user_id: int = Depends(get_current_user_id),
-):
-    """Últimas rodadas encerradas do usuário, mais recente primeiro."""
-    return (
-        db.query(StudySession)
-        .filter(StudySession.user_id == user_id)
-        .order_by(StudySession.finished_at.desc())
-        .limit(limit)
-        .all()
-    )
-
-
 @router.post("/cards/enrich", response_model=EnrichCardsResponse)
 def enriquecer_cards(
     dados: EnrichCardsRequest,
