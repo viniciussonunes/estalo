@@ -1836,30 +1836,6 @@ kbd {
   color: var(--tinta-suave);
 }
 
-/* ---------- Dashboard V3 — evolução de sessões (sparkline) ---------- */
-.sessoes-bloco {
-  background: var(--superficie);
-  border: 1px solid var(--borda);
-  border-radius: var(--raio);
-  padding: 0.9rem 1rem;
-  margin-top: 0.75rem;
-  display: flex;
-  flex-direction: column;
-  gap: 0.55rem;
-}
-.sessoes-atual {
-  font-size: 0.78rem;
-  font-weight: 600;
-  color: var(--violeta);
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
-.sessoes-svg {
-  display: block;
-  overflow: visible;
-}
-.sessoes-svg circle { cursor: default; }
-
 /* ---------- Dashboard V2 — Visão Geral ---------- */
 .visao-geral {
   display: grid;

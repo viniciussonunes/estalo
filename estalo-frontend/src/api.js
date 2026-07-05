@@ -120,8 +120,6 @@ export const api = {
       body: { total_cards: totalCards, acertos_primeira: acertosPrimeira, duracao_seg: duracaoSeg, modo },
     }),
 
-  historicoSessoes: () => request("/study/history"),
-
   // Auto-cura: pede pro backend gerar quiz (options/explanation) pra cards
   // que já existem mas nasceram sem alternativas. Ver Aprender.jsx (chamado
   // quando a fila recém-carregada tem cards sem quiz pronto).

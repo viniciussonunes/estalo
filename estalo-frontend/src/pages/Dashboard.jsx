@@ -1152,11 +1152,6 @@ function VisaoGeral({ decks, pendentesReais }) {
     api.streak().then(setStreak).catch(() => setStreak(null));
   }, []);
 
-  const [historicoSessoes, setHistoricoSessoes] = useState([]);
-  useEffect(() => {
-    api.historicoSessoes().then(setHistoricoSessoes).catch(() => setHistoricoSessoes([]));
-  }, []);
-
   const dias = ultimosDias(30);
 
   return (
@@ -1216,53 +1211,6 @@ function VisaoGeral({ decks, pendentesReais }) {
           Mais
         </span>
       </div>
-
-      {historicoSessoes.length > 0 && <SparklineSessoes sessoes={historicoSessoes} />}
-    </div>
-  );
-}
-
-/** Evolução de acerto-de-primeira nas últimas sessões do Modo Aprender —
- * uma série só, então sem legenda (o título já nomeia a métrica). */
-function SparklineSessoes({ sessoes }) {
-  // GET /study/history vem mais recente primeiro; inverte pra ficar em
-  // ordem cronológica (esquerda = mais antiga, direita = mais recente).
-  const pontos = [...sessoes].reverse();
-  const valores = pontos.map(s =>
-    s.total_cards > 0 ? Math.round((s.acertos_primeira / s.total_cards) * 100) : 0
-  );
-
-  const W = 220, H = 56, PAD = 10;
-  const n = valores.length;
-  const x = i => (n <= 1 ? W / 2 : PAD + (i * (W - PAD * 2)) / (n - 1));
-  const y = v => PAD + (1 - v / 100) * (H - PAD * 2);
-  const linha = valores.map((v, i) => `${x(i)},${y(v)}`).join(" ");
-  const ultimo = valores[valores.length - 1];
-
-  return (
-    <div className="sessoes-bloco">
-      <div className="heatmap-cabecalho">
-        <span className="heatmap-titulo">
-          {n === 1 ? "Evolução — última sessão" : `Evolução — últimas ${n} sessões`}
-        </span>
-        <span className="sessoes-atual">{ultimo}% na última rodada</span>
-      </div>
-      <svg className="sessoes-svg" viewBox={`0 0 ${W} ${H}`} width="100%" height={H}
-        preserveAspectRatio="none" role="img" aria-label={`Percentual de acerto de primeira nas últimas ${n} sessões: ${valores.join(", ")}`}>
-        <polyline points={linha} fill="none" stroke="var(--violeta)" strokeWidth="2"
-          strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
-        {valores.map((v, i) => (
-          <circle key={pontos[i].id} cx={x(i)} cy={y(v)} r={i === n - 1 ? 4 : 3}
-            fill={i === n - 1 ? "var(--violeta)" : "var(--superficie)"}
-            stroke="var(--violeta)" strokeWidth="2" vectorEffect="non-scaling-stroke">
-            <title>
-              {(pontos[i].modo === "global" ? "Revisão Geral" : "Deck")} —{" "}
-              {new Date(pontos[i].finished_at).toLocaleDateString("pt-BR")} — {v}%
-              {" "}({pontos[i].acertos_primeira}/{pontos[i].total_cards})
-            </title>
-          </circle>
-        ))}
-      </svg>
     </div>
   );
 }
