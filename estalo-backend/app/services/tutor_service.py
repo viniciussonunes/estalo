@@ -19,7 +19,13 @@ from app.services.ai import IAError, _chamar_gemini  # noqa: F401 (IAError reexp
 # gerar_cards/gerar_quiz (settings.GEMINI_MODEL) -- resposta sob demanda
 # durante o estudo é sensível a latência de um jeito que geração em lote não
 # é. Fica isolado aqui, não em settings, pra não afetar as outras features.
-TUTOR_MODEL = "gemini-1.5-flash"
+#
+# "gemini-1.5-flash" (pedido originalmente) não existe mais -- a API
+# responde 404 (confirmado direto contra GET /v1beta/models com a chave de
+# produção). A linha 1.5 foi descontinuada; "gemini-2.5-flash-lite" é o
+# equivalente atual (variante lite do modelo já usado em gerar_cards/
+# gerar_quiz), mais leve/rápida que a 2.5-flash padrão sem trocar de geração.
+TUTOR_MODEL = "gemini-2.5-flash-lite"
 
 PERSONA_TUTOR = """\
 Você é um tutor acadêmico especializado em síntese, memorização e didática ativa.
