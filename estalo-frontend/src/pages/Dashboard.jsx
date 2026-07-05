@@ -262,7 +262,7 @@ function SeletorCorPasta({ corSelecionada, onSelecionar }) {
   );
 }
 
-export default function Dashboard({ usuario, aoSair, aoVerCards, aoEstudar, aoCriarDeck, aoEstudarTudo, tema, proximoTema }) {
+export default function Dashboard({ usuario, aoSair, aoVerCards, aoEstudar, aoCriarDeck, aoEstudarTudo, aoEstudarPasta, tema, proximoTema }) {
   const [arvore, setArvore]         = useState([]);
   const [todosDecks, setTodosDecks] = useState([]);
   const [statsMap, setStatsMap]     = useState({});   // { [deckId]: StudyStats }
@@ -475,6 +475,13 @@ export default function Dashboard({ usuario, aoSair, aoVerCards, aoEstudar, aoCr
     (soma, s) => soma + (s?.criticos ?? 0) + (s?.hoje ?? 0), 0
   );
 
+  // Mesmo número, mas só dos decks dentro da pasta atual (+ subpastas) —
+  // alimenta o Card Herói de "Estudar Pasta" quando não se está no Início.
+  const statsAgregadasPastaAtiva = pastaAtiva ? agregarStats(pastaAtiva, todosDecks, statsMap) : null;
+  const totalPendentesPastaAtiva = statsAgregadasPastaAtiva
+    ? statsAgregadasPastaAtiva.criticos + statsAgregadasPastaAtiva.hoje
+    : 0;
+
   return (
     <div className="pagina dashboard-layout">
       <header className="topo">
@@ -491,6 +498,18 @@ export default function Dashboard({ usuario, aoSair, aoVerCards, aoEstudar, aoCr
         <div className="hero-revisao-faixa">
           <div className="hero-revisao-container">
             <HeroRevisaoGlobal total={totalPendentes} aoEstudarTudo={aoEstudarTudo} />
+          </div>
+        </div>
+      )}
+
+      {pastaAtiva && !carregando && !emBusca && (
+        <div className="hero-revisao-faixa">
+          <div className="hero-revisao-container">
+            <HeroRevisaoGlobal
+              total={totalPendentesPastaAtiva}
+              aoEstudarTudo={() => aoEstudarPasta(pastaAtiva.id, pastaAtiva.name)}
+              pasta={pastaAtiva}
+            />
           </div>
         </div>
       )}
@@ -1084,16 +1103,22 @@ function rotuloPendentes(total) {
   return total > 15 ? "15+" : String(total);
 }
 
-/** Card Herói da Home — Fila Única de Revisão. Dois estados: com pendências
- * (convida a estudar tudo de uma vez) ou zerado (celebra o "em dia"). */
-function HeroRevisaoGlobal({ total, aoEstudarTudo }) {
+/** Card Herói — Fila Única de Revisão. Sem `pasta`, é a versão global da
+ * Home (todos os decks); com `pasta`, é a versão escopada a ela + subpastas
+ * ("Estudar Pasta"), mesmo componente só trocando texto/callback. Dois
+ * estados: com pendências (convida a estudar) ou zerado (celebra o "em dia"). */
+function HeroRevisaoGlobal({ total, aoEstudarTudo, pasta = null }) {
   if (total <= 0) {
     return (
       <div className="hero-revisao hero-revisao-limpo">
         <span className="hero-revisao-icone-limpo">✓</span>
         <div className="hero-revisao-texto">
-          <span className="hero-revisao-titulo">Parabéns! Está tudo em dia para hoje ✓</span>
-          <span className="hero-revisao-sub">Nenhuma pasta tem revisões pendentes agora.</span>
+          <span className="hero-revisao-titulo">
+            {pasta ? `"${pasta.name}" está em dia ✓` : "Parabéns! Está tudo em dia para hoje ✓"}
+          </span>
+          <span className="hero-revisao-sub">
+            {pasta ? "Nenhuma revisão pendente nesta pasta." : "Nenhuma pasta tem revisões pendentes agora."}
+          </span>
         </div>
       </div>
     );
@@ -1104,15 +1129,17 @@ function HeroRevisaoGlobal({ total, aoEstudarTudo }) {
       <span className="hero-revisao-icone"><IconePilha /></span>
       <div className="hero-revisao-texto">
         <span className="hero-revisao-titulo">
-          Revisão Geral do Dia
+          {pasta ? `Revisão do Dia — ${pasta.name}` : "Revisão Geral do Dia"}
           <span className="hero-revisao-contador">{rotulo}</span>
         </span>
         <span className="hero-revisao-sub">
-          {rotulo} card{total !== 1 ? "s" : ""} vencido{total !== 1 ? "s" : ""} esperando, juntando todas as suas pastas.
+          {rotulo} card{total !== 1 ? "s" : ""} vencido{total !== 1 ? "s" : ""} esperando{
+            pasta ? " nesta pasta e subpastas." : ", juntando todas as suas pastas."
+          }
         </span>
       </div>
       <button className="botao-principal hero-revisao-botao" onClick={aoEstudarTudo}>
-        Estudar Tudo
+        {pasta ? "Estudar Pasta" : "Estudar Tudo"}
       </button>
     </div>
   );

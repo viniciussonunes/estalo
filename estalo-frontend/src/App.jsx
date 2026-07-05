@@ -50,6 +50,8 @@ function DashboardPage({ usuario, sair, tema, proximoTema }) {
       aoEstudar={deck => navigate(`/deck/${deck.id}/aprender`, { state: { deck } })}
       aoCriarDeck={pastaId => navigate("/criar-deck", { state: { pastaId } })}
       aoEstudarTudo={() => navigate("/revisao-global")}
+      aoEstudarPasta={(folderId, folderName) =>
+        navigate("/revisao-global", { state: { folderId, folderName } })}
     />
   );
 }
@@ -97,7 +99,19 @@ function EstudoPage() {
 
 function RevisaoGlobalPage() {
   const navigate = useNavigate();
-  return <Aprender modoGlobal aoVoltar={() => navigate("/")} />;
+  const location = useLocation();
+  const folderId = location.state?.folderId ?? null;
+  const folderName = location.state?.folderName ?? null;
+  return (
+    <Aprender
+      modoGlobal
+      folderId={folderId}
+      folderName={folderName}
+      // Volta pra dentro da mesma pasta (se veio de uma) em vez de sempre
+      // pro Início — mais natural que "Estudar Pasta" te tirar dela.
+      aoVoltar={() => navigate(folderId ? `/?folder=${folderId}` : "/")}
+    />
+  );
 }
 
 function AprenderPage() {

@@ -97,7 +97,10 @@ export const api = {
   // Fila Única de Revisão ("Estudar Tudo"): mesmo contrato de proximoCard,
   // só que sem deckId — o backend varre todos os decks do usuário e devolve
   // 1 card por chamada, já agrupado por pasta/deck (ver GET /study/global-reviews).
-  proximaRevisaoGlobal: () => request("/study/global-reviews"),
+  // folderId opcional escopa a mesma fila pra uma pasta + subpastas
+  // ("Estudar Pasta") em vez de todos os decks do usuário.
+  proximaRevisaoGlobal: (folderId) =>
+    request(folderId ? `/study/global-reviews?folder_id=${folderId}` : "/study/global-reviews"),
 
   responderCard: (cardId, quality, ignorarElegibilidade = false) =>
     request(`/study/cards/${cardId}/answer`, {

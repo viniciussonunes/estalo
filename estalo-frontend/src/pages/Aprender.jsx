@@ -47,20 +47,24 @@ function montarFila(cards) {
     });
 }
 
-export default function Aprender({ deck, aoVoltar, modoGlobal = false, aoEstudoClassico }) {
+export default function Aprender({ deck, aoVoltar, modoGlobal = false, folderId = null, folderName = null, aoEstudoClassico }) {
   // Na Fila Única não existe "o" deck — usa uma chave fixa própria pro
   // snapshot de F5, isolada de qualquer sessão por-deck real (ids de deck
-  // são sempre numéricos, nunca colidem com essa string).
-  const { snapshotPendente, salvar, limpar, descartarPendente } = useStudySession(modoGlobal ? "global" : deck.id);
+  // são sempre numéricos, nunca colidem com essa string). Escopada por
+  // pasta quando "Estudar Pasta" (folderId) pra não colidir com a sessão
+  // salva da Fila Única de verdade nem com a de outra pasta.
+  const chaveSessao = modoGlobal ? (folderId ? `folder-${folderId}` : "global") : deck.id;
+  const { snapshotPendente, salvar, limpar, descartarPendente } = useStudySession(chaveSessao);
 
   // Busca os cards a estudar: de um deck só (Modo Aprender normal) ou o
-  // lote agrupado de até 15 vencidos de todas as pastas (Fila Única). Os
+  // lote agrupado de até 15 vencidos (Fila Única — todas as pastas, ou só
+  // uma + subpastas quando folderId vem preenchido, "Estudar Pasta"). Os
   // dois formatos convergem pro mesmo shape que montarFila() já espera
   // (id/front/back/options/explanation/repetitions), só a Fila Única
   // carrega junto deck_name/deck_color pra badge.
   function _buscarCards() {
     if (modoGlobal) {
-      return api.proximaRevisaoGlobal().then(lista => lista.map(c => ({
+      return api.proximaRevisaoGlobal(folderId).then(lista => lista.map(c => ({
         id:          c.card_id,
         front:       c.front,
         back:        c.back,
@@ -193,7 +197,7 @@ export default function Aprender({ deck, aoVoltar, modoGlobal = false, aoEstudoC
     if (mostrarPrompt) return; // aguarda decisão do usuário sobre a sessão salva
     _carregarDoServidor();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [deck?.id, modoGlobal]);
+  }, [deck?.id, modoGlobal, folderId]);
 
   function continuarSessaoSalva() {
     _restaurarDeSnapshot(snapshotPendente);
@@ -439,7 +443,9 @@ export default function Aprender({ deck, aoVoltar, modoGlobal = false, aoEstudoC
           {modoPraticaViloes ? "← Voltar ao resumo" : "← Voltar"}
         </button>
         <span className="estudo-deck-nome">
-          {modoGlobal ? "Revisão Geral do Dia" : deck.title}
+          {modoGlobal
+            ? (folderName ? `Revisão do Dia — ${folderName}` : "Revisão Geral do Dia")
+            : deck.title}
         </span>
       </div>
       <span className="modo-label">{modoPraticaViloes ? "Revisão de vilões" : "Múltipla escolha"}</span>
