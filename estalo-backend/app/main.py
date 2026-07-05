@@ -25,8 +25,16 @@ def _migrar():
     mesma chamada. SQLite e Postgres suportam DDL transacional, então isso
     vale tanto pra ALTER TABLE/CREATE TABLE quanto pros UPDATEs do backfill.
     """
-    inspector = inspect(engine)
     with engine.begin() as conn:
+        # inspect(conn) -- NÃO inspect(engine) -- de propósito: ligado à
+        # MESMA conexão que já está em transação aberta (ver comentário
+        # sobre BEGIN IMMEDIATE em database.py). inspect(engine) faria
+        # Inspector.get_columns() pedir uma conexão PRÓPRIA do pool — com
+        # BEGIN IMMEDIATE, essa segunda conexão trava esperando a primeira
+        # (que está parada esperando ELA terminar), autodeadlock. Achado
+        # testando o fix do busy_timeout/BEGIN IMMEDIATE contra concorrência
+        # real.
+        inspector = inspect(conn)
         colunas_cards = {c["name"] for c in inspector.get_columns("cards")}
         if "options" not in colunas_cards:
             conn.execute(text("ALTER TABLE cards ADD COLUMN options TEXT"))

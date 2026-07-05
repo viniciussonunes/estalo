@@ -74,8 +74,20 @@ if _is_sqlite:
     # driver e deixar o SQLAlchemy emitir BEGIN/COMMIT explicitamente.
     # Postgres (produção) não precisa disso — DDL transacional já é padrão.
     @event.listens_for(engine, "connect")
-    def _sqlite_sem_autocommit_implicito(dbapi_connection, connection_record):
+    def _sqlite_configurar_conexao(dbapi_connection, connection_record):
         dbapi_connection.isolation_level = None
+
+        # SQLite só permite UM escritor por vez, e por padrão não espera
+        # nada: a segunda transação que tenta escrever enquanto outra
+        # ainda está aberta falha na hora com "database is locked" — visto
+        # na prática quando _salvarProgresso() (Aprender.jsx) dispara
+        # várias respostas em paralelo via Promise.all, cada uma abrindo
+        # sua própria transação de escrita. busy_timeout faz o SQLite
+        # tentar de novo por até 5s antes de desistir, em vez de falhar na
+        # primeira colisão — cobre bem concorrência de vida curta como
+        # essa. Não é um substituto pra locking de linha de verdade
+        # (Postgres, em produção, já tem isso e não sofre desse problema).
+        dbapi_connection.execute("PRAGMA busy_timeout = 5000")
 
     @event.listens_for(engine, "begin")
     def _sqlite_begin_explicito(conn):
@@ -90,7 +102,21 @@ if _is_sqlite:
         # tende a ser uma conexão diferente — mas checar in_transaction
         # antes de sempre emitir o BEGIN é seguro e correto nos dois casos.
         if not conn.connection.dbapi_connection.in_transaction:
-            conn.exec_driver_sql("BEGIN")
+            # IMMEDIATE, não o "BEGIN" (deferred) puro: testando o
+            # busy_timeout acima, descobri que ele sozinho NÃO bastava sob
+            # concorrência real (Promise.all de 5-6 respostas simultâneas
+            # ainda derrubava algumas com "database is locked"). O motivo:
+            # BEGIN deferred não pega lock nenhum até o primeiro
+            # SELECT/UPDATE — várias transações concorrentes conseguem
+            # todas pegar o lock de LEITURA compartilhado, e quando cada
+            # uma tenta promover pra escrita ao mesmo tempo, ninguém cede
+            # (impasse circular que o retry do busy_timeout não desfaz
+            # sozinho). IMMEDIATE pega a intenção de escrita JÁ na largada
+            # — serializa quem quer escrever, sem bloquear quem só lê — e
+            # combinado com o busy_timeout, isso sim garante que todo mundo
+            # espera a vez em vez de falhar. Confirmado com teste de carga
+            # (múltiplas respostas HTTP concorrentes de verdade).
+            conn.exec_driver_sql("BEGIN IMMEDIATE")
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
