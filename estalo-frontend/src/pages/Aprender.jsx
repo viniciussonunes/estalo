@@ -98,6 +98,11 @@ export default function Aprender({ deck, aoVoltar, modoGlobal = false }) {
   // Set (só "errou ou não"). Agora contamos de verdade, pra graduar a nota
   // final em _salvarProgresso (Proposta 3) em vez de tratar todo erro igual.
   const errosPorCard      = useRef(new Map());
+  // Cards que já foram acertados durante o "Rever Vilões" — separado de
+  // errosPorCard de propósito: preserva a contagem original de erros (usada
+  // em _salvarProgresso) e só marca "resolvido" como uma dimensão à parte,
+  // consultada no filtro de `viloes` da tela de resumo.
+  const viloesResolvidos  = useRef(new Set());
   const startingReps      = useRef({});
   const questoesOriginais = useRef([]);
   const inicioSessao      = useRef(null);
@@ -238,6 +243,10 @@ export default function Aprender({ deck, aoVoltar, modoGlobal = false }) {
     setResposta(letter);
     if (letter !== fila[0].correct_letter) {
       _registrarErro(fila[0].card_id);
+    } else if (modoPraticaViloes) {
+      // Acertou um vilão durante a prática — marca resolvido sem tocar em
+      // errosPorCard (que precisa manter a contagem original de erros).
+      viloesResolvidos.current.add(fila[0].card_id);
     }
   }
 
@@ -335,6 +344,7 @@ export default function Aprender({ deck, aoVoltar, modoGlobal = false }) {
 
   function reiniciarSessao() {
     errosPorCard.current = new Map();
+    viloesResolvidos.current.clear();
     startingReps.current = {};
     setAcertosNaPrimeira(0);
     setResposta(null);
@@ -353,6 +363,7 @@ export default function Aprender({ deck, aoVoltar, modoGlobal = false }) {
   function reverViloes() {
     const viloes = questoesOriginais.current.filter(
       q => (errosPorCard.current.get(q.card_id) ?? 0) >= 2
+        && !viloesResolvidos.current.has(q.card_id)
     );
     if (viloes.length === 0) return;
     setModoPraticaViloes(true);
@@ -469,9 +480,13 @@ export default function Aprender({ deck, aoVoltar, modoGlobal = false }) {
       q => (startingReps.current[q.card_id] ?? 0) === 0
     ).length;
     // Vilões: cards que custaram 2+ erros nesta sessão — candidatos a uma
-    // segunda passada rápida, só em memória (ver reverViloes()).
+    // segunda passada rápida, só em memória (ver reverViloes()). Exclui quem
+    // já foi acertado numa rodada de "Rever Vilões" anterior nesta mesma
+    // sessão (viloesResolvidos), sem descontar de errosPorCard — a contagem
+    // original de erros continua intacta pra _salvarProgresso.
     const viloes = questoesOriginais.current.filter(
       q => (errosPorCard.current.get(q.card_id) ?? 0) >= 2
+        && !viloesResolvidos.current.has(q.card_id)
     );
 
     return (
@@ -657,10 +672,10 @@ function AnelProgresso({ pct }) {
         style={{ transition: "stroke-dasharray 0.9s cubic-bezier(.4,0,.2,1)" }}
       />
       <text x="50" y="47" textAnchor="middle" fontSize="19" fontWeight="700"
-        fill="#17161f" fontFamily="Fraunces, serif">
+        fill="var(--tinta)" fontFamily="Fraunces, serif">
         {Math.round(pct)}%
       </text>
-      <text x="50" y="61" textAnchor="middle" fontSize="9" fill="#56535f">
+      <text x="50" y="61" textAnchor="middle" fontSize="9" fill="var(--tinta-suave)">
         precisão
       </text>
     </svg>
