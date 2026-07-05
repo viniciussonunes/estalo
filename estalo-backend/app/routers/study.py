@@ -12,6 +12,7 @@ from app.models import Card, Deck, Folder, Review
 from app.models.review_history import ReviewHistory
 from app.models.study_session import StudySession
 from app.schemas.study import (
+    EnrichCardsRequest, EnrichCardsResponse, EnrichedCard,
     GlobalReviewCard, HistoryEntry, QuizOption, QuizQuestion, RevealCard,
     ReviewAnswer, ReviewResult, SessaoConcluida, StreakOut, StudyCard,
     StudySessionLog, StudySessionOut, StudyStats,
@@ -629,6 +630,60 @@ def historico_sessoes(
         .limit(limit)
         .all()
     )
+
+
+@router.post("/cards/enrich", response_model=EnrichCardsResponse)
+def enriquecer_cards(
+    dados: EnrichCardsRequest,
+    db: Session = Depends(get_db),
+    user_id: int = Depends(get_current_user_id),
+):
+    """Auto-cura: gera quiz (options/explanation) pra cards que já existem
+    mas nasceram sem alternativas (criados manualmente, nunca passaram por
+    "Gerar com IA"). Chamado pelo Aprender.jsx quando encontra, na fila que
+    acabou de carregar, cards sem quiz pronto — em vez de simplesmente
+    descartá-los, tenta reparar na hora.
+
+    Reaproveita gerar_quiz() (services/ai.py), a mesma função já usada por
+    POST /decks/{id}/quiz — a diferença é que aqui o resultado é persistido
+    de volta no Card, não descartado ao fim da resposta.
+    """
+    cards = (
+        db.query(Card)
+        .join(Deck, Card.deck_id == Deck.id)
+        .filter(Card.id.in_(dados.card_ids), Deck.owner_id == user_id)
+        .all()
+    )
+    if not cards:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Nenhum card encontrado")
+
+    cards_data = [{"card_id": c.id, "front": c.front, "back": c.back} for c in cards]
+
+    try:
+        resultado = gerar_quiz(cards_data)
+    except IAError as e:
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(e))
+
+    cards_por_id = {c.id: c for c in cards}
+    enriquecidos = []
+    for item in resultado:
+        card = cards_por_id.get(item["card_id"])
+        if card is None:
+            continue
+        card.options = item["distractors"]
+        card.explanation = item["explanation"]
+        enriquecidos.append(EnrichedCard(
+            card_id=item["card_id"],
+            options=item["distractors"],
+            explanation=item["explanation"],
+        ))
+    db.commit()
+
+    ids_pedidos = {c.id for c in cards}
+    ids_resolvidos = {e.card_id for e in enriquecidos}
+    falhas = sorted(ids_pedidos - ids_resolvidos)
+
+    return EnrichCardsResponse(enriched=enriquecidos, falhas=falhas)
 
 
 @router.post("/decks/{deck_id}/quiz", response_model=list[QuizQuestion])

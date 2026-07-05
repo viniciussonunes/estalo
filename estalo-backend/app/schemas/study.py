@@ -114,6 +114,23 @@ class StudySessionOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+# --- Auto-cura: backfill de quiz para cards sem options/explanation ---
+
+class EnrichCardsRequest(BaseModel):
+    card_ids: list[int] = Field(..., min_length=1, max_length=20)
+
+
+class EnrichedCard(BaseModel):
+    card_id: int
+    options: list[str]
+    explanation: str
+
+
+class EnrichCardsResponse(BaseModel):
+    enriched: list[EnrichedCard]
+    falhas: list[int]  # card_ids pedidos que a IA não devolveu — seguem sem quiz
+
+
 # --- Modo Aprender (múltipla escolha gerada por IA) ---
 
 class QuizOption(BaseModel):
