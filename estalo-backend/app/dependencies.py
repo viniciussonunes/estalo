@@ -9,7 +9,9 @@ get_current_user é a função que protege os endpoints. Ela:
 
 Qualquer endpoint que quiser ser "só pra logado" é só pedir essa dependência.
 """
-from fastapi import Depends, HTTPException, status
+from zoneinfo import ZoneInfo, available_timezones
+
+from fastapi import Depends, Header, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 
@@ -19,6 +21,28 @@ from app.models import User
 
 # Diz ao FastAPI: o crachá chega via login no endpoint /auth/login.
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
+
+# Calculado uma vez no import (não a cada request) — available_timezones()
+# varre a base de fusos do sistema operacional.
+_TIMEZONES_VALIDAS = available_timezones()
+
+
+def get_user_timezone(
+    x_user_timezone: str | None = Header(None, alias="X-User-Timezone"),
+) -> ZoneInfo:
+    """Fuso horário do usuário, mandado pelo frontend a cada request (ver
+    api.js — Intl.DateTimeFormat().resolvedOptions().timeZone). Usado só
+    pra calcular fronteiras de "dia" (streak, crítico/hoje, elegibilidade
+    de resposta) — o armazenamento continua sempre UTC, isso nunca entra
+    no banco.
+
+    Sem header ou com valor que não bate com nenhum fuso IANA conhecido,
+    cai pra UTC — mais seguro que travar a request (clientes antigos,
+    testes automatizados e chamadas diretas à API não mandam esse header).
+    """
+    if x_user_timezone and x_user_timezone in _TIMEZONES_VALIDAS:
+        return ZoneInfo(x_user_timezone)
+    return ZoneInfo("UTC")
 
 
 def get_current_user(

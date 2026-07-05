@@ -1,13 +1,14 @@
 import random
 from datetime import date, datetime, timedelta, timezone
 from typing import Union
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
-from sqlalchemy import case, func
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.dependencies import get_current_user_id
+from app.dependencies import get_current_user_id, get_user_timezone
 from app.models import Card, Deck, Folder, Review
 from app.models.review_history import ReviewHistory
 from app.models.study_session import StudySession
@@ -34,6 +35,18 @@ def _deck_do_usuario(deck_id: int, user_id: int, db: Session) -> Deck:
     return deck
 
 
+def _hoje_no_fuso(tz: ZoneInfo) -> date:
+    """'Hoje' no fuso do usuário — a virada acontece à meia-noite local
+    dele, não à meia-noite UTC."""
+    return datetime.now(tz).date()
+
+
+def _data_no_fuso(dt: datetime, tz: ZoneInfo) -> date:
+    """Converte um datetime armazenado (naive, convenção UTC em todo o
+    projeto) pra data de calendário no fuso do usuário."""
+    return dt.replace(tzinfo=timezone.utc).astimezone(tz).date()
+
+
 
 @router.get("/decks/{deck_id}/next", response_model=Union[StudyCard, SessaoConcluida])
 def proximo_card(
@@ -42,10 +55,14 @@ def proximo_card(
     limite_diario: int = Query(50, ge=1, le=500, description="Máximo de cards revisados por dia"),
     db: Session = Depends(get_db),
     user_id: int = Depends(get_current_user_id),
+    tz: ZoneInfo = Depends(get_user_timezone),
 ):
     _deck_do_usuario(deck_id, user_id, db)
-    hoje = datetime.utcnow().date()
-    inicio_do_dia = datetime(hoje.year, hoje.month, hoje.day, 0, 0, 0)
+    hoje = _hoje_no_fuso(tz)
+    # Meia-noite LOCAL do usuário, convertida pra UTC naive — é isso que
+    # compara contra avaliado_em (sempre armazenado em UTC).
+    inicio_do_dia_local = datetime(hoje.year, hoje.month, hoje.day, tzinfo=tz)
+    inicio_do_dia = inicio_do_dia_local.astimezone(timezone.utc).replace(tzinfo=None)
 
     # --- Tarefa 3: conta revisões feitas hoje neste deck ---
     revisoes_hoje = (
@@ -66,35 +83,30 @@ def proximo_card(
             limite_diario=limite_diario,
         )
 
-    # --- Prioridade via CASE WHEN ---
-    # 0=Crítico, 1=Hoje, 2=Novo, 3=Validando
-    prioridade_com_novo = case(
-        (Review.id.is_(None),                2),  # Novo (sem review)
-        (func.date(Review.due_date) < hoje,  0),  # Crítico
-        (func.date(Review.due_date) == hoje, 1),  # Hoje
-        else_=3,                                   # Validando
-    )
-
-    query = (
-        db.query(Card, Review, prioridade_com_novo.label("prio"))
-        .outerjoin(
-            Review,
-            (Review.card_id == Card.id) & (Review.user_id == user_id),
-        )
+    # --- Prioridade e elegibilidade calculadas em Python, não em SQL ---
+    # func.date(Review.due_date) truncaria a data DENTRO do banco, no fuso
+    # de armazenamento (UTC) — não dá pra deslocar isso por usuário de forma
+    # portável entre SQLite e Postgres. Carrega os candidatos do deck
+    # (escopo pequeno, um deck por vez) e decide tudo aqui.
+    linhas = (
+        db.query(Card, Review)
+        .outerjoin(Review, (Review.card_id == Card.id) & (Review.user_id == user_id))
         .filter(Card.deck_id == deck_id)
+        .all()
     )
 
-    if not incluir_dominados:
-        query = query.filter(
-            (Review.id.is_(None))
-            | (Review.repetitions < 2)
-            | (func.date(Review.due_date) <= hoje)
-        )
-
-    # --- Tarefa 2: randomização dentro da mesma prioridade ---
-    # Carrega todos os candidatos para descobrir a menor prioridade disponível,
-    # depois sorteia aleatoriamente entre os que estão nessa prioridade.
-    candidatos = query.all()
+    # 0=Crítico, 1=Hoje, 2=Novo, 3=Validando
+    candidatos = []
+    for card, review in linhas:
+        if review is None:
+            prio = 2
+            elegivel = True
+        else:
+            due_local = _data_no_fuso(review.due_date, tz)
+            prio = 0 if due_local < hoje else 1 if due_local == hoje else 3
+            elegivel = incluir_dominados or review.repetitions < 2 or due_local <= hoje
+        if elegivel:
+            candidatos.append((card, review, prio))
 
     if not candidatos:
         return SessaoConcluida(
@@ -183,26 +195,26 @@ def revisao_global(
     ]
 
 
-def _classificar_status(repetitions: int, due_date: datetime, hoje: "date") -> str:
+def _classificar_status(repetitions: int, due_date: datetime, hoje: date, tz: ZoneInfo) -> str:
     if repetitions == 0:
         return "novo"
     if repetitions == 1:
         return "validando"
-    if due_date.date() < hoje:
+    if _data_no_fuso(due_date, tz) < hoje:
         return "critico"
     return "dominado"
 
 
-def _history_para_result(h: ReviewHistory) -> ReviewResult:
+def _history_para_result(h: ReviewHistory, tz: ZoneInfo) -> ReviewResult:
     """Reconstrói um ReviewResult a partir de uma entrada de histórico (resposta idempotente)."""
-    hoje = datetime.utcnow().date()
+    hoje = _hoje_no_fuso(tz)
     return ReviewResult(
         card_id=h.card_id,
         interval=h.intervalo_depois,
         ease_factor=h.ease_factor_depois,
         repetitions=h.reps_depois,
         next_due=h.nova_due_date,
-        status=_classificar_status(h.reps_depois, h.nova_due_date, hoje),
+        status=_classificar_status(h.reps_depois, h.nova_due_date, hoje, tz),
         difficulty_usada=h.difficulty,
         idempotente=True,
     )
@@ -214,6 +226,7 @@ def responder_card(
     resposta: ReviewAnswer,
     db: Session = Depends(get_db),
     user_id: int = Depends(get_current_user_id),
+    tz: ZoneInfo = Depends(get_user_timezone),
     x_request_id: str | None = Header(None, alias="X-Request-ID"),
 ):
     # --- Tarefa 1: Idempotência via X-Request-ID ---
@@ -229,7 +242,7 @@ def responder_card(
             .first()
         )
         if entrada_existente:
-            return _history_para_result(entrada_existente)
+            return _history_para_result(entrada_existente, tz)
 
     # --- Verifica existência e posse do card ---
     card = (
@@ -260,7 +273,7 @@ def responder_card(
     )
 
     agora = datetime.utcnow()
-    hoje = agora.date()
+    hoje = _hoje_no_fuso(tz)
 
     if review is None:
         # Card nunca estudado — cria o estado inicial dentro da transação atual
@@ -279,13 +292,13 @@ def responder_card(
     # sessão no mesmo dia. Por isso ignorar_elegibilidade existe.
     card_elegivel = (
         resposta.ignorar_elegibilidade
-        or review.repetitions == 0           # Novo — sempre pode
-        or review.due_date.date() <= hoje    # due venceu hoje ou antes
+        or review.repetitions == 0                          # Novo — sempre pode
+        or _data_no_fuso(review.due_date, tz) <= hoje        # due venceu hoje (local) ou antes
     )
     if not card_elegivel:
         raise HTTPException(
             status.HTTP_409_CONFLICT,
-            f"Card não está na fila de estudo. Próxima revisão: {review.due_date.date().isoformat()}",
+            f"Card não está na fila de estudo. Próxima revisão: {_data_no_fuso(review.due_date, tz).isoformat()}",
         )
 
     # --- Cálculo SM-2 ---
@@ -306,7 +319,7 @@ def responder_card(
             due_date=agora,
         )
 
-    status_novo = _classificar_status(novo.repetitions, novo.due_date, hoje)
+    status_novo = _classificar_status(novo.repetitions, novo.due_date, hoje, tz)
 
     # --- Bloco atômico: histórico + atualização do estado ---
     # Tudo no mesmo commit; se qualquer parte falhar, o banco reverte.
@@ -348,10 +361,10 @@ def estatisticas(
     deck_id: int,
     db: Session = Depends(get_db),
     user_id: int = Depends(get_current_user_id),
+    tz: ZoneInfo = Depends(get_user_timezone),
 ):
     _deck_do_usuario(deck_id, user_id, db)
-    agora = datetime.utcnow()
-    hoje_data = agora.date()
+    hoje_data = _hoje_no_fuso(tz)
 
     cards = db.query(Card).filter(Card.deck_id == deck_id).all()
 
@@ -393,7 +406,7 @@ def estatisticas(
         # está genuinamente vencido ficava invisível pra criticos/hoje —
         # contava só como "novo", igual um card nunca estudado, embora os
         # dois sejam bem diferentes (um tem histórico e prioridade real).
-        due_data = due.date()
+        due_data = _data_no_fuso(due, tz)
         if due_data < hoje_data:
             # Venceu antes de hoje → Crítico (prioridade máxima)
             criticos += 1
@@ -424,6 +437,7 @@ def estatisticas_varios_decks(
     ids: str = Query(..., description="IDs de deck separados por vírgula, ex: 1,2,3"),
     db: Session = Depends(get_db),
     user_id: int = Depends(get_current_user_id),
+    tz: ZoneInfo = Depends(get_user_timezone),
 ):
     """Versão em lote de GET /decks/{id}/stats — calcula pra vários decks
     de uma vez com quantidade FIXA de queries (independente de quantos
@@ -443,8 +457,7 @@ def estatisticas_varios_decks(
     if not deck_ids:
         return {}
 
-    agora = datetime.utcnow()
-    hoje_data = agora.date()
+    hoje_data = _hoje_no_fuso(tz)
 
     cards = db.query(Card).filter(Card.deck_id.in_(deck_ids)).all()
     card_ids = [c.id for c in cards]
@@ -483,7 +496,7 @@ def estatisticas_varios_decks(
         # Ver comentário equivalente em estatisticas(): status temporal
         # independe da fase, senão um card resetado pelo Crítico Imediato
         # (reps=0, due_date=agora) fica invisível pra criticos/hoje.
-        due_data = due.date()
+        due_data = _data_no_fuso(due, tz)
         if due_data < hoje_data:
             acc["criticos"] += 1
             acc["due_now"] += 1
@@ -512,33 +525,49 @@ def estatisticas_varios_decks(
 def heatmap_stats(
     db: Session = Depends(get_db),
     user_id: int = Depends(get_current_user_id),
+    tz: ZoneInfo = Depends(get_user_timezone),
 ):
-    """Quantidade de avaliações do usuário por dia (YYYY-MM-DD), últimos 30 dias."""
-    desde = datetime.utcnow() - timedelta(days=30)
-    dia = func.date(ReviewHistory.avaliado_em)
+    """Quantidade de avaliações do usuário por dia (YYYY-MM-DD, no fuso do
+    usuário), últimos 30 dias.
+
+    func.date() truncaria a data DENTRO do banco, no fuso de armazenamento
+    (UTC) — não dá pra deslocar isso por usuário de forma portável entre
+    SQLite e Postgres. Por isso busca uma janela um pouco mais larga em UTC
+    (32 dias, pra cobrir a borda que o fuso do usuário desloca) e agrupa em
+    Python, já convertido pro fuso certo.
+    """
+    desde = datetime.utcnow() - timedelta(days=32)
     linhas = (
-        db.query(dia.label("dia"), func.count(ReviewHistory.id))
+        db.query(ReviewHistory.avaliado_em)
         .filter(ReviewHistory.user_id == user_id, ReviewHistory.avaliado_em >= desde)
-        .group_by(dia)
         .all()
     )
-    return {str(d): total for d, total in linhas}
+    limite = _hoje_no_fuso(tz) - timedelta(days=30)
+    contagem: dict[str, int] = {}
+    for (avaliado_em,) in linhas:
+        dia_local = _data_no_fuso(avaliado_em, tz)
+        if dia_local < limite:
+            continue
+        chave = dia_local.isoformat()
+        contagem[chave] = contagem.get(chave, 0) + 1
+    return contagem
 
 
 @router.get("/streak", response_model=StreakOut)
 def streak(
     db: Session = Depends(get_db),
     user_id: int = Depends(get_current_user_id),
+    tz: ZoneInfo = Depends(get_user_timezone),
 ):
-    """Sequência de dias seguidos com pelo menos uma avaliação (ReviewHistory)."""
-    dia = func.date(ReviewHistory.avaliado_em)
+    """Sequência de dias seguidos com pelo menos uma avaliação (ReviewHistory),
+    no fuso do usuário. Ver heatmap_stats() acima sobre por que a truncagem
+    por dia acontece em Python, não em func.date()."""
     linhas = (
-        db.query(dia)
+        db.query(ReviewHistory.avaliado_em)
         .filter(ReviewHistory.user_id == user_id)
-        .distinct()
         .all()
     )
-    dias = sorted(date.fromisoformat(str(d)) for (d,) in linhas)
+    dias = sorted({_data_no_fuso(avaliado_em, tz) for (avaliado_em,) in linhas})
     if not dias:
         return StreakOut(current_streak=0, longest_streak=0)
 
@@ -550,7 +579,7 @@ def streak(
 
     # Sequência atual: só conta se o último dia estudado foi hoje ou ontem;
     # senão a sequência "quebrou" e current_streak é 0.
-    hoje = datetime.utcnow().date()
+    hoje = _hoje_no_fuso(tz)
     if dias[-1] < hoje - timedelta(days=1):
         atual_streak = 0
     else:
