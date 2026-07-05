@@ -6,7 +6,7 @@ Aqui a gente cria:
 - SessionLocal: cada requisição abre uma sessão (uma conversa) e fecha no fim
 - Base: a classe-mãe que todos os modelos herdam
 """
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, event
 from sqlalchemy.orm import declarative_base, sessionmaker
 
 from app.core.config import settings
@@ -41,6 +41,26 @@ _pool_kwargs = {} if _is_sqlite else {
 }
 
 engine = create_engine(DATABASE_URL, connect_args=connect_args, **_pool_kwargs)
+
+if _is_sqlite:
+    # Sem isso, o driver stdlib `sqlite3` do Python comita implicitamente
+    # ANTES de rodar qualquer DDL (ALTER TABLE, CREATE TABLE, CREATE INDEX)
+    # mesmo dentro de uma transação SQLAlchemy aberta com `engine.begin()`.
+    # Descoberto testando o rollback de _migrar() (main.py): um ALTER TABLE
+    # ficava commitado mesmo quando um passo POSTERIOR da mesma migração
+    # falhava — o SQLite em si suporta DDL transacional de verdade, o
+    # comportamento legado é só do driver Python. Esta é a correção que o
+    # próprio SQLAlchemy recomenda: desligar o autocommit implícito do
+    # driver e deixar o SQLAlchemy emitir BEGIN/COMMIT explicitamente.
+    # Postgres (produção) não precisa disso — DDL transacional já é padrão.
+    @event.listens_for(engine, "connect")
+    def _sqlite_sem_autocommit_implicito(dbapi_connection, connection_record):
+        dbapi_connection.isolation_level = None
+
+    @event.listens_for(engine, "begin")
+    def _sqlite_begin_explicito(conn):
+        conn.exec_driver_sql("BEGIN")
+
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 

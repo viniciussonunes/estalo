@@ -7,6 +7,7 @@ from sqlalchemy import inspect, text
 from app.core.config import settings
 from app.core.database import Base, engine
 from app import models  # noqa: F401
+from app.models.card import calcular_content_hash
 from app.routers import auth, folders, decks, cards, study
 
 
@@ -17,6 +18,12 @@ def _migrar():
     bancos já populados (Neon em produção, ou o SQLite local de quem já
     rodou o projeto antes), as tabelas já estão lá e create_all() não mexe
     nelas. Por isso os índices também entram aqui, não só nos models.
+
+    Tudo dentro do MESMO `with engine.begin() as conn:` — é o que garante a
+    atomicidade: se qualquer passo (ALTER, backfill, CREATE INDEX) falhar,
+    a transação inteira volta atrás, incluindo os passos anteriores desta
+    mesma chamada. SQLite e Postgres suportam DDL transacional, então isso
+    vale tanto pra ALTER TABLE/CREATE TABLE quanto pros UPDATEs do backfill.
     """
     inspector = inspect(engine)
     with engine.begin() as conn:
@@ -25,10 +32,24 @@ def _migrar():
             conn.execute(text("ALTER TABLE cards ADD COLUMN options TEXT"))
         if "explanation" not in colunas_cards:
             conn.execute(text("ALTER TABLE cards ADD COLUMN explanation TEXT"))
+        if "content_hash" not in colunas_cards:
+            conn.execute(text("ALTER TABLE cards ADD COLUMN content_hash VARCHAR(64)"))
 
         colunas_pastas = {c["name"] for c in inspector.get_columns("folders")}
         if "color" not in colunas_pastas:
             conn.execute(text("ALTER TABLE folders ADD COLUMN color TEXT"))
+
+        # Backfill do content_hash pra cards que ainda não têm — SHA-256
+        # não é nativo nem em SQLite nem em Postgres sem extensão, então
+        # roda em Python (calcular_content_hash), não em SQL puro.
+        linhas = conn.execute(
+            text("SELECT id, front, back FROM cards WHERE content_hash IS NULL")
+        ).fetchall()
+        for linha in linhas:
+            conn.execute(
+                text("UPDATE cards SET content_hash = :hash WHERE id = :id"),
+                {"hash": calcular_content_hash(linha.front, linha.back), "id": linha.id},
+            )
 
         # Índices — nomes iguais aos que o SQLAlchemy geraria sozinho num
         # banco novo (ix_<tabela>_<coluna>), pra ficar consistente entre
@@ -44,6 +65,14 @@ def _migrar():
         conn.execute(text(
             "CREATE INDEX IF NOT EXISTS ix_review_history_user_avaliado "
             "ON review_history (user_id, avaliado_em)"
+        ))
+        # Não-único de propósito — ver comentário em models/card.py sobre
+        # por que duplicata é definida por deck, não por uma constraint
+        # global (evita quebrar a migração se já existir duplicata hoje, e
+        # evita vazar entre usuários/decks diferentes).
+        conn.execute(text(
+            "CREATE INDEX IF NOT EXISTS ix_cards_deck_content_hash "
+            "ON cards (deck_id, content_hash)"
         ))
 
 

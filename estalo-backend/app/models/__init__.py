@@ -5,9 +5,13 @@ quando for criar as tabelas.
 from app.models.card import Card
 from app.models.deck import Deck
 from app.models.folder import Folder
+from app.models.import_staging import ImportStagingCard
 from app.models.review import Review
 from app.models.review_history import ReviewHistory
 from app.models.study_session import StudySession
 from app.models.user import User
 
-__all__ = ["User", "Folder", "Deck", "Card", "Review", "ReviewHistory", "StudySession"]
+__all__ = [
+    "User", "Folder", "Deck", "Card", "Review", "ReviewHistory",
+    "StudySession", "ImportStagingCard",
+]
