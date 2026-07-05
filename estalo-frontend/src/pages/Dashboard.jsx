@@ -1048,12 +1048,22 @@ function nivelHeatmap(qtd) {
   return 4;
 }
 
+// YYYY-MM-DD no fuso LOCAL do navegador — toISOString() converteria pra
+// UTC, o que desalinharia essas chaves com o heatmap que o backend agora
+// devolve agrupado por dia no fuso do usuário (ver GET /study/heatmap-stats).
+function formatarDataLocal(d) {
+  const ano = d.getFullYear();
+  const mes = String(d.getMonth() + 1).padStart(2, "0");
+  const dia = String(d.getDate()).padStart(2, "0");
+  return `${ano}-${mes}-${dia}`;
+}
+
 // Últimos `n` dias (YYYY-MM-DD), do mais antigo pro mais recente.
 function ultimosDias(n) {
   return Array.from({ length: n }, (_, i) => {
     const d = new Date();
     d.setDate(d.getDate() - (n - 1 - i));
-    return d.toISOString().slice(0, 10);
+    return formatarDataLocal(d);
   });
 }
 

@@ -5,6 +5,13 @@
 
 const BASE = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
+// Calculado uma vez (não muda durante a sessão) — nome IANA do fuso do
+// navegador (ex: "America/Sao_Paulo"), mandado em toda request pra o
+// backend saber onde cai a meia-noite de "hoje" pra esse usuário (streak,
+// crítico/hoje, elegibilidade de resposta). Nunca é usado pra armazenar
+// nada — o banco continua sempre em UTC.
+const FUSO_HORARIO = Intl.DateTimeFormat().resolvedOptions().timeZone;
+
 // O crachá fica guardado no navegador (localStorage), então o login
 // "gruda" mesmo se você recarregar a página.
 export const token = {
@@ -15,7 +22,7 @@ export const token = {
 
 // Função base: monta a requisição, anexa o crachá e trata erro.
 async function request(path, { method = "GET", body, form } = {}) {
-  const headers = {};
+  const headers = { "X-User-Timezone": FUSO_HORARIO };
   const t = token.get();
   if (t) headers["Authorization"] = `Bearer ${t}`;
 
