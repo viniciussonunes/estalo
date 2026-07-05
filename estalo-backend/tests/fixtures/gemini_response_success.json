@@ -1,0 +1,13 @@
+{
+  "candidates": [
+    {
+      "content": {
+        "parts": [
+          {
+            "text": "[{\"front\": \"Qual é a capital da França?\", \"back\": \"Paris\", \"distractors\": [\"Lyon\", \"Marselha\", \"Nice\"], \"explanation\": \"Paris é a capital e a cidade mais populosa da França desde o século XII.\"}, {\"front\": \"Qual é a capital da Itália?\", \"back\": \"Roma\", \"distractors\": [\"Milão\", \"Nápoles\", \"Turim\"], \"explanation\": \"Roma é a capital da Itália e sede do Vaticano, um estado independente dentro da cidade.\"}]"
+          }
+        ]
+      }
+    }
+  ]
+}

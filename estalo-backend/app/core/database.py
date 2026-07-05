@@ -6,39 +6,59 @@ Aqui a gente cria:
 - SessionLocal: cada requisição abre uma sessão (uma conversa) e fecha no fim
 - Base: a classe-mãe que todos os modelos herdam
 """
+import os
+
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import declarative_base, sessionmaker
+from sqlalchemy.pool import StaticPool
 
 from app.core.config import settings
 
-# DATABASE_URL_POOL (endpoint "-pooler" do Neon, via PgBouncer) tem prioridade
-# se estiver setada; senão cai pra DATABASE_URL de sempre — sem mudar nada
-# pra quem não configurar a variável nova. Nota: _migrar() (main.py) usa esse
-# mesmo engine, então migrações também passam pelo pooler quando ativo; o
-# PgBouncer do Neon em modo transaction lida bem com o DDL simples usado lá
-# (ALTER TABLE, CREATE INDEX IF NOT EXISTS).
-DATABASE_URL = settings.DATABASE_URL_POOL or settings.DATABASE_URL
+# TESTING=true força SQLite em memória, isolado por processo — usado pela
+# suíte pytest em tests/ (ver tests/conftest.py), nunca em dev/produção.
+# Precisa ser setado ANTES deste módulo ser importado pela primeira vez
+# (engine é construído uma única vez, no import).
+TESTING = os.getenv("TESTING", "").lower() == "true"
 
-_is_sqlite = DATABASE_URL.startswith("sqlite")
+if TESTING:
+    DATABASE_URL = "sqlite:///:memory:"
+    _is_sqlite = True
+    connect_args = {"check_same_thread": False}
+    # StaticPool é obrigatório aqui: sem ele, cada conexão nova do pool
+    # abriria um :memory: DIFERENTE (SQLite cria um banco em memória por
+    # conexão, não um banco compartilhado) — a segunda query do teste
+    # veria um banco vazio. StaticPool faz o engine reusar SEMPRE a mesma
+    # única conexão.
+    _pool_kwargs = {"poolclass": StaticPool}
+else:
+    # DATABASE_URL_POOL (endpoint "-pooler" do Neon, via PgBouncer) tem prioridade
+    # se estiver setada; senão cai pra DATABASE_URL de sempre — sem mudar nada
+    # pra quem não configurar a variável nova. Nota: _migrar() (main.py) usa esse
+    # mesmo engine, então migrações também passam pelo pooler quando ativo; o
+    # PgBouncer do Neon em modo transaction lida bem com o DDL simples usado lá
+    # (ALTER TABLE, CREATE INDEX IF NOT EXISTS).
+    DATABASE_URL = settings.DATABASE_URL_POOL or settings.DATABASE_URL
 
-# O connect_args só é necessário pro SQLite. Em PostgreSQL ele é ignorado.
-connect_args = {"check_same_thread": False} if _is_sqlite else {}
+    _is_sqlite = DATABASE_URL.startswith("sqlite")
 
-# Sem esse tuning, o QueuePool padrão do SQLAlchemy abre até 15 conexões
-# (5 + 10 de overflow) POR INSTÂNCIA — e na Vercel serverless cada cold
-# start recria o engine do zero. Sob carga, várias instâncias simultâneas
-# multiplicam isso rápido contra o limite de conexões do Neon. Um pool
-# pequeno é o certo aqui: cada instância vive pouco tempo e atende poucas
-# requisições, então não precisa (nem deve) seguar muitas conexões presas.
-# pool_pre_ping evita usar uma conexão que o Neon já fechou por trás
-# (comum depois de idle); pool_recycle descarta conexões antigas antes
-# que isso aconteça.
-_pool_kwargs = {} if _is_sqlite else {
-    "pool_size": 3,
-    "max_overflow": 2,
-    "pool_pre_ping": True,
-    "pool_recycle": 300,
-}
+    # O connect_args só é necessário pro SQLite. Em PostgreSQL ele é ignorado.
+    connect_args = {"check_same_thread": False} if _is_sqlite else {}
+
+    # Sem esse tuning, o QueuePool padrão do SQLAlchemy abre até 15 conexões
+    # (5 + 10 de overflow) POR INSTÂNCIA — e na Vercel serverless cada cold
+    # start recria o engine do zero. Sob carga, várias instâncias simultâneas
+    # multiplicam isso rápido contra o limite de conexões do Neon. Um pool
+    # pequeno é o certo aqui: cada instância vive pouco tempo e atende poucas
+    # requisições, então não precisa (nem deve) seguar muitas conexões presas.
+    # pool_pre_ping evita usar uma conexão que o Neon já fechou por trás
+    # (comum depois de idle); pool_recycle descarta conexões antigas antes
+    # que isso aconteça.
+    _pool_kwargs = {} if _is_sqlite else {
+        "pool_size": 3,
+        "max_overflow": 2,
+        "pool_pre_ping": True,
+        "pool_recycle": 300,
+    }
 
 engine = create_engine(DATABASE_URL, connect_args=connect_args, **_pool_kwargs)
 
@@ -59,7 +79,18 @@ if _is_sqlite:
 
     @event.listens_for(engine, "begin")
     def _sqlite_begin_explicito(conn):
-        conn.exec_driver_sql("BEGIN")
+        # Com StaticPool (usado em TESTING=true — ver acima), a MESMA
+        # conexão física é compartilhada por tudo, inclusive por
+        # ferramentas internas do SQLAlchemy (ex: Inspector.get_columns(),
+        # usado em main.py:_migrar()) que pedem uma conexão "nova" do pool
+        # no meio de uma transação já aberta — StaticPool devolve essa
+        # MESMA conexão, e sem essa checagem o "BEGIN" duplicado quebra
+        # com "cannot start a transaction within a transaction". Com pool
+        # normal (dev/produção) isso nunca colide, porque cada checkout
+        # tende a ser uma conexão diferente — mas checar in_transaction
+        # antes de sempre emitir o BEGIN é seguro e correto nos dois casos.
+        if not conn.connection.dbapi_connection.in_transaction:
+            conn.exec_driver_sql("BEGIN")
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
