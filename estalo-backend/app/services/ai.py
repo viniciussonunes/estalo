@@ -30,7 +30,12 @@ class IAError(Exception):
 _RETRY_STATUS = {429, 500, 502, 503, 504}
 
 
-def _chamar_gemini(prompt: str, timeout: int = 25, instrucao_sistema: str | None = None) -> str:
+def _chamar_gemini(
+    prompt: str,
+    timeout: int = 25,
+    instrucao_sistema: str | None = None,
+    model: str | None = None,
+) -> str:
     """Chama o Gemini e retorna o texto gerado. Tenta até 2 vezes em erros transitórios.
 
     Orçamento de tempo pensado pra caber numa função serverless: 2 tentativas
@@ -43,11 +48,15 @@ def _chamar_gemini(prompt: str, timeout: int = 25, instrucao_sistema: str | None
     própria API — separado de `contents` de propósito. É o que faz a persona
     (tom, regras, formatação) ficar estável entre chamadas, sem competir com o
     conteúdo específico de cada prompt nem precisar ser reforçada em cada um.
+
+    `model`, quando informado, sobrepõe settings.GEMINI_MODEL só nesta
+    chamada — permite um serviço (ex: tutor_service) usar um modelo mais
+    rápido/barato sem mudar o modelo padrão usado por gerar_cards/gerar_quiz.
     """
     if not settings.GEMINI_API_KEY:
         raise IAError("Chave do Gemini não configurada. Preencha GEMINI_API_KEY no arquivo .env")
 
-    url = GEMINI_URL.format(model=settings.GEMINI_MODEL)
+    url = GEMINI_URL.format(model=model or settings.GEMINI_MODEL)
     payload = {"contents": [{"parts": [{"text": prompt}]}]}
     if instrucao_sistema:
         payload["systemInstruction"] = {"parts": [{"text": instrucao_sistema}]}

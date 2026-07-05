@@ -5,8 +5,21 @@ acadêmico, em vez de só repetir o verso do card.
 A persona (papel, tom, regra de ouro, formatação, idioma) vai como
 `instrucao_sistema` em TODA chamada ao Gemini feita por este serviço — fica
 definida uma vez aqui, não espalhada/repetida em cada prompt de card.
+
+Nota de arquitetura: este projeto fala com o Gemini via REST cru (httpx),
+não via SDK `google-generativeai`. A separação equivalente a
+`GenerativeModel(system_instruction=...)` + `model.generate_content(prompt)`
+do SDK é feita manualmente em _chamar_gemini (app/services/ai.py): a persona
+vai no campo `systemInstruction` do payload, o conteúdo do card vai em
+`contents` -- os dois nunca se misturam num prompt só.
 """
 from app.services.ai import IAError, _chamar_gemini  # noqa: F401 (IAError reexportado p/ quem importar daqui)
+
+# Modelo dedicado do Tutor: mais rápido/barato que o padrão usado por
+# gerar_cards/gerar_quiz (settings.GEMINI_MODEL) -- resposta sob demanda
+# durante o estudo é sensível a latência de um jeito que geração em lote não
+# é. Fica isolado aqui, não em settings, pra não afetar as outras features.
+TUTOR_MODEL = "gemini-1.5-flash"
 
 PERSONA_TUTOR = """\
 Você é um tutor acadêmico especializado em síntese, memorização e didática ativa.
@@ -20,6 +33,9 @@ analogias do dia a dia ou conceitos que o aluno já deve conhecer.
 
 Formatação: use Markdown para facilitar a leitura. Negrito para termos-chave, \
 listas para processos.
+
+Seja conciso. Resposta máxima de 2 parágrafos. Use listas para detalhamentos \
+e prefira explicações diretas. Mantenha o tom entusiasta.
 
 Se o conteúdo do card for ambíguo ou muito técnico sem contexto, peça \
 gentilmente para o usuário fornecer um pouco mais de detalhes, ou pergunte \
@@ -50,4 +66,6 @@ def explicar_card(card_front: str, card_back: str, timeout: int = 25) -> str:
     errado (chave faltando, API fora do ar, etc.).
     """
     mensagem = _montar_mensagem_usuario(card_front, card_back)
-    return _chamar_gemini(mensagem, timeout=timeout, instrucao_sistema=PERSONA_TUTOR)
+    return _chamar_gemini(
+        mensagem, timeout=timeout, instrucao_sistema=PERSONA_TUTOR, model=TUTOR_MODEL,
+    )
