@@ -50,6 +50,12 @@ class Card(Base):
     # coluna só ganham isso via backfill da migração (main.py:_migrar()).
     content_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
+    # Explicação do Tutor Inteligente (ver app/services/tutor_service.py),
+    # cacheada no card na primeira vez que é gerada — a mesma pergunta não
+    # volta a chamar o Gemini nas próximas vezes que o usuário errar/pedir
+    # ajuda neste card.
+    tutor_explanation: Mapped[str | None] = mapped_column(Text, nullable=True, default=None)
+
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     deck:    Mapped["Deck"]         = relationship(back_populates="cards")

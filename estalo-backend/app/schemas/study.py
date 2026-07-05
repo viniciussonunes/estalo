@@ -114,6 +114,12 @@ class StudySessionOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+# --- Tutor Inteligente: explicação sob demanda (ver app/services/tutor_service.py) ---
+
+class TutorResponse(BaseModel):
+    explanation: str
+
+
 # --- Auto-cura: backfill de quiz para cards sem options/explanation ---
 
 class EnrichCardsRequest(BaseModel):

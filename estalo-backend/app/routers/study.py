@@ -17,11 +17,12 @@ from app.schemas.study import (
     EnrichCardsRequest, EnrichCardsResponse, EnrichedCard,
     GlobalReviewCard, HistoryEntry, QuizOption, QuizQuestion, RevealCard,
     ReviewAnswer, ReviewResult, SessaoConcluida, StreakOut, StudyCard,
-    StudySessionLog, StudySessionOut, StudyStats,
+    StudySessionLog, StudySessionOut, StudyStats, TutorResponse,
 )
 from app.services.ai import IAError, gerar_explicacoes, gerar_quiz
 from app.services.sm2 import SM2State, calcular_proxima_revisao
 from app.services.study_service import get_all_deck_ids_in_folder
+from app.services.tutor_service import explicar_card
 
 router = APIRouter(prefix="/study", tags=["Estudo"])
 
@@ -35,6 +36,18 @@ def _deck_do_usuario(deck_id: int, user_id: int, db: Session) -> Deck:
     if deck is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Deck não encontrado")
     return deck
+
+
+def _card_do_usuario(card_id: int, user_id: int, db: Session) -> Card:
+    card = (
+        db.query(Card)
+        .join(Deck, Card.deck_id == Deck.id)
+        .filter(Card.id == card_id, Deck.owner_id == user_id)
+        .first()
+    )
+    if card is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Card não encontrado")
+    return card
 
 
 def _hoje_no_fuso(tz: ZoneInfo) -> date:
@@ -641,6 +654,45 @@ def historico_card(
         .limit(limit)
         .all()
     )
+
+
+@router.post("/cards/{card_id}/tutor", response_model=TutorResponse)
+def tutor_card(
+    card_id: int,
+    db: Session = Depends(get_db),
+    user_id: int = Depends(get_current_user_id),
+):
+    """Explicação didática sob demanda (Tutor Inteligente — ver
+    app/services/tutor_service.py). Cacheada em Card.tutor_explanation: da
+    segunda vez em diante que o usuário pedir ajuda neste card, a resposta
+    já salva volta na hora, sem chamar o Gemini de novo."""
+    card = _card_do_usuario(card_id, user_id, db)
+
+    if card.tutor_explanation:
+        return TutorResponse(explanation=card.tutor_explanation)
+
+    front, back = card.front, card.back
+    # Encerra a transação de leitura ANTES da chamada à IA (até ~52s no pior
+    # caso: 2 tentativas de 25s). Achado testando de verdade: o listener de
+    # "begin" do SQLite (database.py) emite BEGIN IMMEDIATE em QUALQUER
+    # transação, leitura incluída — segurar a sessão aberta até aqui trava
+    # (por até busy_timeout=5s, depois falha) qualquer outra request que
+    # toque o banco enquanto o Gemini responde. Sem efeito em produção
+    # (Postgres não serializa leituras assim), mas evitava até testar local.
+    db.commit()
+
+    try:
+        explicacao = explicar_card(front, back)
+    except IAError:
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            "Tutor indisponível no momento. Tente novamente em instantes.",
+        )
+
+    card.tutor_explanation = explicacao
+    db.commit()
+
+    return TutorResponse(explanation=explicacao)
 
 
 @router.post("/session/log", response_model=StudySessionOut, status_code=status.HTTP_201_CREATED)

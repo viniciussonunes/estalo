@@ -42,6 +42,8 @@ def _migrar():
             conn.execute(text("ALTER TABLE cards ADD COLUMN explanation TEXT"))
         if "content_hash" not in colunas_cards:
             conn.execute(text("ALTER TABLE cards ADD COLUMN content_hash VARCHAR(64)"))
+        if "tutor_explanation" not in colunas_cards:
+            conn.execute(text("ALTER TABLE cards ADD COLUMN tutor_explanation TEXT"))
 
         colunas_pastas = {c["name"] for c in inspector.get_columns("folders")}
         if "color" not in colunas_pastas:
