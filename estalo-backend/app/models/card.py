@@ -65,3 +65,6 @@ class Card(Base):
     review_history: Mapped[list["ReviewHistory"]] = relationship(
         back_populates="card", cascade="all, delete-orphan"
     )
+    explanation_cache: Mapped[list["ExplanationCache"]] = relationship(
+        back_populates="card", cascade="all, delete-orphan"
+    )

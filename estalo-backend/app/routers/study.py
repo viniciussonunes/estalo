@@ -10,9 +10,13 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.dependencies import get_current_user_id, get_user_timezone
 from app.models import Card, Deck, Folder, Review
+from app.models.explanation_cache import ExplanationCache
 from app.models.review_history import ReviewHistory
 from app.models.study_session import StudySession
 from app.routers.folders import _buscar_pasta_do_usuario
+from app.schemas.error_explanation import (
+    ExplanationFeedbackRequest, ExplanationOut, ExplanationRequest,
+)
 from app.schemas.study import (
     EnrichCardsRequest, EnrichCardsResponse, EnrichedCard,
     GlobalReviewCard, HistoryEntry, QuizOption, QuizQuestion, RevealCard,
@@ -20,6 +24,7 @@ from app.schemas.study import (
     StudySessionLog, StudySessionOut, StudyStats, TutorResponse,
 )
 from app.services.ai import IAError, QuotaExceededError, gerar_explicacoes, gerar_quiz
+from app.services.error_explanation_service import explicar_erro, refinar_explicacao
 from app.services.sm2 import SM2State, calcular_proxima_revisao
 from app.services.study_service import get_all_deck_ids_in_folder
 from app.services.tutor_service import explicar_card
@@ -698,6 +703,89 @@ def tutor_card(
     db.commit()
 
     return TutorResponse(explanation=explicacao)
+
+
+def _explanation_cache_do_usuario(
+    card_id: int, alternativa_escolhida: str, user_id: int, db: Session,
+) -> ExplanationCache:
+    cache = (
+        db.query(ExplanationCache)
+        .join(Card, ExplanationCache.card_id == Card.id)
+        .join(Deck, Card.deck_id == Deck.id)
+        .filter(
+            ExplanationCache.card_id == card_id,
+            ExplanationCache.alternativa_escolhida == alternativa_escolhida,
+            Deck.owner_id == user_id,
+        )
+        .first()
+    )
+    if cache is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Nenhuma explicação encontrada pra dar feedback")
+    return cache
+
+
+@router.post("/cards/{card_id}/error-explanation", response_model=ExplanationOut)
+def explicar_erro_card(
+    card_id: int,
+    dados: ExplanationRequest,
+    db: Session = Depends(get_db),
+    user_id: int = Depends(get_current_user_id),
+):
+    """Tutor Inteligente Evolutivo (ver app/services/error_explanation_service.py):
+    explica por que UMA alternativa específica está errada, com cache
+    versionado por (card, alternativa) que evolui via feedback (ver
+    /error-explanation/feedback abaixo)."""
+    card = _card_do_usuario(card_id, user_id, db)
+    front, back = card.front, card.back
+    # Mesmo motivo do tutor_card acima: não segura a transação aberta
+    # durante a chamada lenta à IA. Sem efeito aqui na prática, já que um
+    # Hit de cache nem chega a chamar o Gemini -- mas mantém o mesmo hábito
+    # defensivo em todo endpoint que pode acabar chamando _chamar_gemini.
+    db.commit()
+
+    try:
+        return explicar_erro(card_id, front, back, dados.alternativa_escolhida, user_id, db)
+    except QuotaExceededError as e:
+        raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS, str(e))
+    except IAError:
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            "Explicação indisponível no momento. Tente novamente em instantes.",
+        )
+
+
+@router.post("/cards/{card_id}/error-explanation/feedback", response_model=ExplanationOut)
+def feedback_explicacao_erro(
+    card_id: int,
+    dados: ExplanationFeedbackRequest,
+    db: Session = Depends(get_db),
+    user_id: int = Depends(get_current_user_id),
+):
+    """👍: não muda nada, a explicação em cache já está boa como está.
+    👎 (com motivo): pede uma versão refinada ao Gemini (ver
+    error_explanation_service.refinar_explicacao — idempotente por
+    conteúdo e limitado a MAX_VERSAO tentativas por alternativa)."""
+    cache = _explanation_cache_do_usuario(card_id, dados.alternativa_escolhida, user_id, db)
+
+    if dados.positivo:
+        return ExplanationOut(explanation=cache.texto_explicacao_atual, versao=cache.versao)
+
+    if not dados.motivo:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Feedback negativo precisa de um motivo")
+
+    card = db.get(Card, card_id)
+    front, back = card.front, card.back
+    db.commit()
+
+    try:
+        return refinar_explicacao(cache, front, back, dados.motivo, user_id, db)
+    except QuotaExceededError as e:
+        raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS, str(e))
+    except IAError:
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            "Não foi possível refinar a explicação agora. Tente novamente em instantes.",
+        )
 
 
 @router.post("/session/log", response_model=StudySessionOut, status_code=status.HTTP_201_CREATED)

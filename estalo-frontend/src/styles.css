@@ -513,6 +513,7 @@ body {
 .quiz-explicacao-texto { font-size: 0.92rem; line-height: 1.55; color: var(--tinta); }
 .tutor-botao { align-self: flex-start; font-weight: 600; color: var(--violeta); }
 .tutor-botao:hover { background: var(--violeta-suave); color: var(--violeta-escuro); }
+.quiz-explicacao-acoes { display: flex; gap: 0.4rem; flex-wrap: wrap; }
 
 /* ---------- Modal do Tutor Inteligente ---------- */
 .modal-tutor { max-width: 560px; }
@@ -530,6 +531,72 @@ body {
 .tutor-conteudo ul, .tutor-conteudo ol { margin: 0 0 0.85rem; padding-left: 1.3rem; }
 .tutor-conteudo li { margin-bottom: 0.35rem; }
 .tutor-conteudo li:last-child { margin-bottom: 0; }
+
+.erro-feedback-versao {
+  display: inline-block;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--tinta-suave);
+  margin-bottom: 0.6rem;
+}
+.erro-feedback-botoes {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 1rem;
+  padding-top: 0.9rem;
+  border-top: 1px solid var(--borda);
+}
+.erro-feedback-pergunta { font-size: 0.85rem; color: var(--tinta-suave); margin-right: auto; }
+.erro-feedback-btn {
+  border: 1.5px solid var(--borda);
+  background: var(--papel);
+  border-radius: 8px;
+  font-size: 1.1rem;
+  line-height: 1;
+  padding: 0.4rem 0.65rem;
+  cursor: pointer;
+  transition: background var(--transicao), transform var(--transicao);
+}
+.erro-feedback-btn:hover { background: var(--violeta-suave); }
+.erro-feedback-btn:active { transform: scale(0.94); }
+.erro-feedback-btn:disabled { opacity: 0.5; cursor: default; }
+.erro-feedback-obrigado {
+  font-size: 0.85rem;
+  color: var(--tinta-suave);
+  margin-top: 1rem;
+  padding-top: 0.9rem;
+  border-top: 1px solid var(--borda);
+}
+.erro-feedback-limite {
+  font-size: 0.85rem;
+  color: var(--tinta-suave);
+  font-style: italic;
+  margin-top: 1rem;
+  padding-top: 0.9rem;
+  border-top: 1px solid var(--borda);
+}
+.erro-feedback-motivo {
+  margin-top: 1rem;
+  padding-top: 0.9rem;
+  border-top: 1px solid var(--borda);
+}
+.erro-feedback-textarea {
+  width: 100%;
+  min-height: 70px;
+  resize: vertical;
+  padding: 0.6rem 0.7rem;
+  border: 1.5px solid var(--borda);
+  border-radius: 9px;
+  font: inherit;
+  font-size: 0.88rem;
+  color: var(--tinta);
+  background: var(--papel);
+}
+.erro-feedback-textarea:focus { outline: none; border-color: var(--violeta); }
+.erro-feedback-motivo-botoes { display: flex; gap: 0.5rem; align-items: center; margin-top: 0.6rem; }
 
 /* ---------- Modal de limite de cota (QuotaLimitModal) ---------- */
 .modal-cota { max-width: 420px; }

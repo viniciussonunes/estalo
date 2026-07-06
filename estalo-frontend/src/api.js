@@ -183,4 +183,23 @@ export const api = {
       method: "PATCH",
       body: { daily_limit: dailyLimit },
     }),
+
+  // Tutor Inteligente Evolutivo: explica por que UMA alternativa errada
+  // específica está incorreta (diferente de tutorExplicarCard, que explica
+  // o card em geral). Cache versionado por (card, alternativa) no backend
+  // -- a mesma pergunta pro mesmo erro não gasta IA de novo.
+  explicarErroCard: (cardId, alternativaEscolhida) =>
+    request(`/study/cards/${cardId}/error-explanation`, {
+      method: "POST",
+      body: { alternativa_escolhida: alternativaEscolhida },
+    }),
+
+  // Feedback (👍/👎) sobre a explicação de erro atual. 👎 exige `motivo` e
+  // pode devolver uma versão refinada (ver `versao`/`limite_atingido` na
+  // resposta).
+  feedbackErroCard: (cardId, alternativaEscolhida, positivo, motivo = null) =>
+    request(`/study/cards/${cardId}/error-explanation/feedback`, {
+      method: "POST",
+      body: { alternativa_escolhida: alternativaEscolhida, positivo, motivo },
+    }),
 };

@@ -133,6 +133,21 @@ export default function Aprender({ deck, aoVoltar, modoGlobal = false, folderId 
   // dedicado em vez de aparecer como texto de erro dentro do modal do tutor.
   const [isQuotaModalOpen, setIsQuotaModalOpen] = useState(false);
 
+  // Tutor Inteligente Evolutivo: explica por que a alternativa ERRADA
+  // escolhida está incorreta (diferente do Tutor geral acima), com cache
+  // versionado + feedback 👍/👎 no backend (ver pedirExplicacaoErro).
+  const [erroExplicacaoAberto, setErroExplicacaoAberto]         = useState(false);
+  const [erroExplicacaoCarregando, setErroExplicacaoCarregando] = useState(false);
+  const [erroExplicacaoTexto, setErroExplicacaoTexto]           = useState("");
+  const [erroExplicacaoVersao, setErroExplicacaoVersao]         = useState(1);
+  const [erroExplicacaoLimite, setErroExplicacaoLimite]         = useState(false);
+  const [erroExplicacaoErro, setErroExplicacaoErro]             = useState("");
+  // Controla a UI de feedback: null = ainda não decidiu, "motivo" = abriu
+  // o campo de texto do 👎, "enviado" = já mandou feedback (👍 ou 👎).
+  const [feedbackEstado, setFeedbackEstado]     = useState(null);
+  const [motivoTexto, setMotivoTexto]           = useState("");
+  const [enviandoFeedback, setEnviandoFeedback] = useState(false);
+
   function _iniciarComCards(cards) {
     const questoes = montarFila(cards);
     if (questoes.length === 0) { setSemQuiz(true); return; }
@@ -275,6 +290,13 @@ export default function Aprender({ deck, aoVoltar, modoGlobal = false, folderId 
     setTutorAberto(false);
     setTutorTexto("");
     setTutorErro("");
+    setErroExplicacaoAberto(false);
+    setErroExplicacaoTexto("");
+    setErroExplicacaoErro("");
+    setErroExplicacaoVersao(1);
+    setErroExplicacaoLimite(false);
+    setFeedbackEstado(null);
+    setMotivoTexto("");
   }, [questaoAtual?.card_id]);
 
   async function pedirTutor() {
@@ -296,6 +318,73 @@ export default function Aprender({ deck, aoVoltar, modoGlobal = false, folderId 
       }
     } finally {
       setTutorCarregando(false);
+    }
+  }
+
+  // Texto da alternativa ERRADA que o usuário escolheu (a letra sozinha
+  // não serve de chave -- é embaralhada a cada carregamento, ver
+  // montarFila -- por isso o backend cacheia pelo texto).
+  function _alternativaEscolhidaTexto() {
+    return questaoAtual?.options.find(o => o.letter === resposta)?.text ?? "";
+  }
+
+  async function pedirExplicacaoErro() {
+    setErroExplicacaoAberto(true);
+    setErroExplicacaoErro("");
+    if (erroExplicacaoTexto) return; // já carregado pra este card+alternativa
+    setErroExplicacaoCarregando(true);
+    try {
+      const { explanation, versao } = await api.explicarErroCard(questaoAtual.card_id, _alternativaEscolhidaTexto());
+      setErroExplicacaoTexto(explanation);
+      setErroExplicacaoVersao(versao);
+    } catch (e) {
+      if (e instanceof QuotaExceededException) {
+        setErroExplicacaoAberto(false);
+        setIsQuotaModalOpen(true);
+      } else {
+        setErroExplicacaoErro(e.message || "Não foi possível carregar a explicação.");
+      }
+    } finally {
+      setErroExplicacaoCarregando(false);
+    }
+  }
+
+  async function enviarFeedbackPositivo() {
+    setEnviandoFeedback(true);
+    try {
+      await api.feedbackErroCard(questaoAtual.card_id, _alternativaEscolhidaTexto(), true);
+      setFeedbackEstado("enviado");
+    } catch {
+      // Feedback positivo é best-effort -- não vale interromper o fluxo
+      // de estudo por um 👍 que não salvou; a explicação já foi mostrada.
+      setFeedbackEstado("enviado");
+    } finally {
+      setEnviandoFeedback(false);
+    }
+  }
+
+  async function enviarMotivoNegativo() {
+    if (!motivoTexto.trim()) return;
+    setEnviandoFeedback(true);
+    setErroExplicacaoErro("");
+    try {
+      const { explanation, versao, limite_atingido } = await api.feedbackErroCard(
+        questaoAtual.card_id, _alternativaEscolhidaTexto(), false, motivoTexto.trim(),
+      );
+      setErroExplicacaoTexto(explanation);
+      setErroExplicacaoVersao(versao);
+      setErroExplicacaoLimite(!!limite_atingido);
+      setFeedbackEstado("enviado");
+      setMotivoTexto("");
+    } catch (e) {
+      if (e instanceof QuotaExceededException) {
+        setErroExplicacaoAberto(false);
+        setIsQuotaModalOpen(true);
+      } else {
+        setErroExplicacaoErro(e.message || "Não foi possível enviar o feedback.");
+      }
+    } finally {
+      setEnviandoFeedback(false);
     }
   }
 
@@ -748,9 +837,16 @@ export default function Aprender({ deck, aoVoltar, modoGlobal = false, folderId 
                   : `Incorreto — a certa é ${questaoAtual.correct_letter}. A questão volta ao final.`}
               </p>
               <p className="quiz-explicacao-texto">{questaoAtual.explanation}</p>
-              <button className="botao-texto tutor-botao" onClick={pedirTutor}>
-                Perguntar ao Tutor
-              </button>
+              <div className="quiz-explicacao-acoes">
+                <button className="botao-texto tutor-botao" onClick={pedirTutor}>
+                  Perguntar ao Tutor
+                </button>
+                {!acertouAtual && (
+                  <button className="botao-texto tutor-botao" onClick={pedirExplicacaoErro}>
+                    Por que errei?
+                  </button>
+                )}
+              </div>
               <button className="botao-principal" onClick={proximo} disabled={concluindoAnimacao}>
                 {acertouAtual && cardsConcluidos + 1 >= totalUnicos
                   ? "Ver resultado" : "Próxima →"}
@@ -774,6 +870,74 @@ export default function Aprender({ deck, aoVoltar, modoGlobal = false, folderId 
               <div className="tutor-conteudo">
                 <ReactMarkdown>{tutorTexto}</ReactMarkdown>
               </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {erroExplicacaoAberto && (
+        <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) setErroExplicacaoAberto(false); }}>
+          <div className="modal-painel modal-tutor">
+            <div className="modal-cabecalho">
+              <h2 className="modal-titulo">Por que essa alternativa está errada?</h2>
+              <button className="modal-fechar" onClick={() => setErroExplicacaoAberto(false)} aria-label="Fechar">×</button>
+            </div>
+            {erroExplicacaoVersao > 1 && !erroExplicacaoCarregando && (
+              <span className="erro-feedback-versao">explicação refinada — v{erroExplicacaoVersao}</span>
+            )}
+            {erroExplicacaoCarregando && <p className="tutor-status">Pensando na melhor forma de explicar…</p>}
+            {erroExplicacaoErro && !erroExplicacaoCarregando && (
+              <p className="tutor-status tutor-status-erro">{erroExplicacaoErro}</p>
+            )}
+            {erroExplicacaoTexto && !erroExplicacaoCarregando && !erroExplicacaoErro && (
+              <>
+                <div className="tutor-conteudo">
+                  <ReactMarkdown>{erroExplicacaoTexto}</ReactMarkdown>
+                </div>
+
+                {erroExplicacaoLimite ? (
+                  <p className="erro-feedback-limite">
+                    Já refinamos essa explicação o máximo possível por hoje.
+                  </p>
+                ) : feedbackEstado === "enviado" ? (
+                  <p className="erro-feedback-obrigado">Obrigado pelo feedback!</p>
+                ) : feedbackEstado === "motivo" ? (
+                  <div className="erro-feedback-motivo">
+                    <textarea
+                      className="erro-feedback-textarea"
+                      placeholder="O que faltou nessa explicação?"
+                      value={motivoTexto}
+                      onChange={e => setMotivoTexto(e.target.value)}
+                    />
+                    <div className="erro-feedback-motivo-botoes">
+                      <button
+                        className="botao-principal"
+                        disabled={enviandoFeedback || !motivoTexto.trim()}
+                        onClick={enviarMotivoNegativo}
+                      >
+                        {enviandoFeedback ? "Enviando…" : "Enviar"}
+                      </button>
+                      <button className="botao-texto" onClick={() => setFeedbackEstado(null)}>Cancelar</button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="erro-feedback-botoes">
+                    <span className="erro-feedback-pergunta">Essa explicação te ajudou?</span>
+                    <button
+                      className="erro-feedback-btn"
+                      onClick={enviarFeedbackPositivo}
+                      disabled={enviandoFeedback}
+                      aria-label="Gostei"
+                    >👍</button>
+                    <button
+                      className="erro-feedback-btn"
+                      onClick={() => setFeedbackEstado("motivo")}
+                      disabled={enviandoFeedback}
+                      aria-label="Não gostei"
+                    >👎</button>
+                  </div>
+                )}
+              </>
             )}
           </div>
         </div>
