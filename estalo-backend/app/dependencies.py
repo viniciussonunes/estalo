@@ -15,6 +15,7 @@ from fastapi import Depends, Header, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.core.database import get_db
 from app.core.security import decode_access_token
 from app.models import User
@@ -95,3 +96,23 @@ def get_current_user_id(token: str = Depends(oauth2_scheme)) -> int:
         raise erro
 
     return int(user_id)
+
+
+def require_admin(user: User = Depends(get_current_user)) -> User:
+    """Catraca extra pros endpoints de /admin/* (gestão de cotas).
+
+    O pedido original dizia só "protegido por autenticação" -- mas isso
+    sozinho deixaria QUALQUER usuário cadastrado listar e alterar a cota
+    de todo mundo (GET /admin/users devolve dados de todos, PATCH altera
+    o limite de qualquer user_id). Pra uma rota assim, "logado" não é
+    proteção suficiente -- é preciso ser especificamente um admin.
+
+    ADMIN_EMAILS (settings) é a lista de quem pode entrar, separada por
+    vírgula; vazio por padrão (ninguém entra até configurar). Comparação
+    é feita contra o email do token decodificado, não algo vindo do
+    cliente -- não dá pra forjar.
+    """
+    admins = {e.strip().lower() for e in settings.ADMIN_EMAILS.split(",") if e.strip()}
+    if user.email.lower() not in admins:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Acesso restrito a administradores")
+    return user

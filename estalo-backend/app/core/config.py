@@ -30,5 +30,13 @@ class Settings(BaseSettings):
     # Localmente a origem http://localhost:5173 é sempre permitida.
     FRONTEND_URL: str = ""
 
+    # Admin — emails com acesso a /admin/* (gestão de cotas), separados por
+    # vírgula. Vazio por padrão = ninguém entra (não existe "admin de
+    # fábrica"). Decisão consciente: nada no pedido original especificava
+    # QUEM pode acessar /admin, e "protegido por autenticação" sozinho
+    # deixaria qualquer usuário cadastrado ver e alterar a cota de todo
+    # mundo -- ver comentário em app/dependencies.py/require_admin.
+    ADMIN_EMAILS: str = ""
+
 
 settings = Settings()

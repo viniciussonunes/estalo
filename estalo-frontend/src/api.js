@@ -173,4 +173,14 @@ export const api = {
 
   gerarRevelar: (deckId) =>
     request(`/study/decks/${deckId}/reveal`, { method: "POST" }),
+
+  // Painel /admin: gestão de cota de IA por usuário. Backend exige estar
+  // em ADMIN_EMAILS (403 pra qualquer outro logado) -- ver AdminPage.jsx.
+  adminListarUsuarios: () => request("/admin/users"),
+
+  adminAtualizarLimite: (userId, dailyLimit) =>
+    request(`/admin/users/${userId}/limit`, {
+      method: "PATCH",
+      body: { daily_limit: dailyLimit },
+    }),
 };

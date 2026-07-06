@@ -9,6 +9,7 @@ import CriarDeck from "./pages/CriarDeck.jsx";
 import Estudo from "./pages/Estudo.jsx";
 import Aprender from "./pages/Aprender.jsx";
 import Revelar from "./pages/Revelar.jsx";
+import Admin from "./pages/Admin.jsx";
 
 function useAuth() {
   const [usuario, setUsuario] = useState(null);
@@ -138,6 +139,11 @@ function RevelarPage() {
   return <Revelar deck={deck} aoVoltar={() => navigate(`/deck/${deck.id}`, { state: { deck } })} />;
 }
 
+function AdminPage() {
+  const navigate = useNavigate();
+  return <Admin aoVoltar={() => navigate("/")} />;
+}
+
 // ─── App root ──────────────────────────────────────────────────────────────
 
 export default function App() {
@@ -180,6 +186,10 @@ export default function App() {
 
       <Route path="/deck/:id/revelar" element={
         <RequireAuth usuario={usuario}><RevelarPage /></RequireAuth>
+      } />
+
+      <Route path="/admin" element={
+        <RequireAuth usuario={usuario}><AdminPage /></RequireAuth>
       } />
 
       <Route path="*" element={<Navigate to="/" replace />} />

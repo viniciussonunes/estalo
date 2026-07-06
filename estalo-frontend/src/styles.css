@@ -1711,6 +1711,49 @@ kbd {
   border-color: var(--verde);
 }
 
+/* ---------- Admin (/admin — gestão de cota de IA) ---------- */
+.admin-conteudo { max-width: 900px; }
+.admin-tabela-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--borda);
+  border-radius: 12px;
+  background: var(--superficie);
+}
+.admin-tabela {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+.admin-tabela th {
+  text-align: left;
+  padding: 0.75rem 1rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--tinta-suave);
+  border-bottom: 1px solid var(--borda);
+}
+.admin-tabela td {
+  padding: 0.65rem 1rem;
+  border-bottom: 1px solid var(--borda);
+  color: var(--tinta);
+  vertical-align: middle;
+}
+.admin-tabela tr:last-child td { border-bottom: none; }
+.admin-tabela-numero { font-variant-numeric: tabular-nums; color: var(--tinta-suave); }
+.admin-input-limite {
+  width: 110px;
+  padding: 0.4rem 0.6rem;
+  border: 1.5px solid var(--borda);
+  border-radius: 7px;
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+  color: var(--tinta);
+  background: var(--papel);
+}
+.admin-input-limite:focus { outline: none; border-color: var(--violeta); }
+
 @media (max-width: 640px) {
   .hero-revisao { flex-wrap: wrap; }
   .hero-revisao-botao { width: 100%; }
