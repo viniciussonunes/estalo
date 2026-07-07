@@ -16,7 +16,7 @@ Esta função é "pura": recebe o estado atual e a nota, devolve o estado novo.
 Ela não toca no banco — quem salva é o service. Isso facilita testar.
 """
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 
 @dataclass
@@ -31,7 +31,10 @@ def calcular_proxima_revisao(estado: SM2State, quality: int, hoje: datetime | No
     if not 0 <= quality <= 5:
         raise ValueError("quality precisa estar entre 0 e 5")
 
-    hoje = hoje or datetime.utcnow()
+    # .replace(tzinfo=None): equivalente não-deprecated de datetime.utcnow()
+    # que preserva naive-UTC (ver comentário igual em app/core/security.py)
+    # -- devolve exatamente o mesmo valor, só sem o aviso de depreciação.
+    hoje = hoje or datetime.now(timezone.utc).replace(tzinfo=None)
     ease = estado.ease_factor
     interval = estado.interval
     reps = estado.repetitions

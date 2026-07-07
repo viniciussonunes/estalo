@@ -55,6 +55,15 @@ def _card_do_usuario(card_id: int, user_id: int, db: Session) -> Card:
     return card
 
 
+def _agora_utc() -> datetime:
+    """Equivalente não-deprecated de datetime.utcnow() que preserva
+    naive-UTC: datetime.now(timezone.utc) devolve um datetime AWARE, mas
+    toda coluna DateTime deste projeto é naive — .replace(tzinfo=None)
+    descarta a tzinfo, devolvendo o MESMO valor que utcnow() já devolvia,
+    sem risco de TypeError comparando com o que vem do banco."""
+    return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
 def _hoje_no_fuso(tz: ZoneInfo) -> date:
     """'Hoje' no fuso do usuário — a virada acontece à meia-noite local
     dele, não à meia-noite UTC."""
@@ -142,7 +151,7 @@ def proximo_card(
     # Shuffle pseudo-aleatório dentro do tier para evitar previsibilidade
     card, review, _ = random.choice(top_tier)
 
-    due = review.due_date if review else datetime.utcnow()
+    due = review.due_date if review else _agora_utc()
     reps = review.repetitions if review else 0
 
     return StudyCard(
@@ -187,7 +196,7 @@ def revisao_global(
     pasta não existir ou não for do usuário; lista vazia (sem erro) se a
     pasta existir mas não tiver nenhum deck com cards vencidos.
     """
-    agora = datetime.utcnow()
+    agora = _agora_utc()
 
     deck_ids_da_pasta = None
     if folder_id is not None:
@@ -314,7 +323,7 @@ def responder_card(
         .first()
     )
 
-    agora = datetime.utcnow()
+    agora = _agora_utc()
     hoje = _hoje_no_fuso(tz)
 
     if review is None:
@@ -578,7 +587,7 @@ def heatmap_stats(
     (32 dias, pra cobrir a borda que o fuso do usuário desloca) e agrupa em
     Python, já convertido pro fuso certo.
     """
-    desde = datetime.utcnow() - timedelta(days=32)
+    desde = _agora_utc() - timedelta(days=32)
     linhas = (
         db.query(ReviewHistory.avaliado_em)
         .filter(ReviewHistory.user_id == user_id, ReviewHistory.avaliado_em >= desde)

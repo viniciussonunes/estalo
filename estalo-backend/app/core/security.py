@@ -9,7 +9,7 @@ Duas responsabilidades aqui:
    requisição ele mostra o crachá, e a gente confere a assinatura sem precisar
    consultar o banco toda hora.
 """
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 import bcrypt
 from jose import JWTError, jwt
@@ -37,7 +37,14 @@ def verify_password(senha: str, hash_guardado: str) -> bool:
 # ---------- Token JWT ----------
 def create_access_token(subject: str) -> str:
     """Cria o crachá. 'subject' é o id do usuário, que vai dentro do token."""
-    expira_em = datetime.utcnow() + timedelta(
+    # datetime.utcnow() está deprecated; o equivalente não-deprecated é
+    # datetime.now(timezone.utc), mas isso devolve um datetime AWARE — e
+    # todo o resto do projeto assume naive-UTC (colunas DateTime sem
+    # timezone=True, comparações diretas com valores vindos do banco).
+    # .replace(tzinfo=None) descarta a tzinfo, preservando o MESMO valor
+    # que utcnow() já devolvia, sem arriscar TypeError de "naive vs aware"
+    # em nenhuma comparação existente.
+    expira_em = datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(
         minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES
     )
     payload = {"sub": subject, "exp": expira_em}

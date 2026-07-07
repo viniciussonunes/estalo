@@ -38,5 +38,10 @@ class Settings(BaseSettings):
     # mundo -- ver comentário em app/dependencies.py/require_admin.
     ADMIN_EMAILS: str = ""
 
+    # Observabilidade — Sentry (ver app/main.py). Vazio por padrão = SDK
+    # desabilitado, mesmo padrão do frontend (src/sentry.js): dá pra rodar
+    # local/CI sem precisar de conta no Sentry nem de mockar nada.
+    SENTRY_DSN: str = ""
+
 
 settings = Settings()

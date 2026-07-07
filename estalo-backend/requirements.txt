@@ -16,6 +16,12 @@ bcrypt==4.2.0
 # ── Cliente HTTP (Gemini) e testes ─────────────────────────────────────────
 httpx==0.27.2
 
+# ── Observabilidade ────────────────────────────────────────────────────────
+# Sem SENTRY_DSN configurado, o SDK fica "enabled: False" e não manda nada
+# (mesmo padrão do frontend, ver src/sentry.js) -- seguro rodar sem conta
+# no Sentry em dev/CI.
+sentry-sdk==2.64.0
+
 # ── Importador Anki ────────────────────────────────────────────────────────
 zstandard==0.25.0             # descomprime collection.anki21b (Anki 23.10+)
 nh3==0.3.6                    # sanitização de HTML (binding do Ammonia/html5ever) — não dá pra sanitizar HTML com regex

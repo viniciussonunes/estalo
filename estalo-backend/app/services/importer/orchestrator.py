@@ -37,7 +37,7 @@ Duas decisões de design que a especificação original deixava em aberto:
    mais direto.
 """
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy.orm import Session
 
@@ -180,7 +180,10 @@ class ImportOrchestrator:
         self.db.add(card)
         self.db.flush()  # precisa do card.id antes de criar o Review
 
-        agora = datetime.utcnow()
+        # .replace(tzinfo=None): equivalente não-deprecated de
+        # datetime.utcnow() que preserva naive-UTC (ver comentário igual em
+        # app/core/security.py) -- due_date é uma coluna DateTime naive.
+        agora = datetime.now(timezone.utc).replace(tzinfo=None)
         if payload.interval > 0:
             repetitions, due_date = 1, agora + timedelta(days=payload.interval)
         else:

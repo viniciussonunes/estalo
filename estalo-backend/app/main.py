@@ -1,7 +1,10 @@
 import os
 
+import sentry_sdk
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from sentry_sdk.integrations.fastapi import FastApiIntegration
+from sentry_sdk.integrations.starlette import StarletteIntegration
 from sqlalchemy import inspect, text
 
 from app.core.config import settings
@@ -9,6 +12,27 @@ from app.core.database import Base, engine
 from app import models  # noqa: F401
 from app.models.card import calcular_content_hash
 from app.routers import admin, auth, folders, decks, cards, study, import_anki
+
+# Precisa vir ANTES de tudo (inclusive de _migrar()/create_all() logo
+# abaixo) -- assim uma falha na migração no cold start também é capturada,
+# não só exceções dentro de requests. Diferente do SDK JS (frontend, ver
+# src/sentry.js), o SDK Python não tem uma opção `enabled` -- ele já vira
+# no-op sozinho com dsn="" (nada é validado/enviado), então é seguro
+# chamar init() incondicionalmente mesmo sem conta no Sentry (dev/CI).
+#
+# environment usa VERCEL_ENV (injetada automaticamente pela própria
+# Vercel: "production" | "preview" | "development") -- não precisa de
+# variável própria pra isso, e não existe localmente (cai pro default).
+#
+# send_default_pii=False é explícito de propósito: não queremos que o SDK
+# infira e envie dados de usuário (email, IP) sozinho pros eventos.
+sentry_sdk.init(
+    dsn=settings.SENTRY_DSN,
+    environment=os.getenv("VERCEL_ENV", "development"),
+    integrations=[StarletteIntegration(), FastApiIntegration()],
+    traces_sample_rate=0.1,
+    send_default_pii=False,
+)
 
 
 def _migrar():
