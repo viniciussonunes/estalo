@@ -9,7 +9,7 @@ Modo Aprender.
 from datetime import datetime, timezone
 
 from sqlalchemy import DateTime, ForeignKey, Integer, Text
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
 
@@ -37,3 +37,5 @@ class ExplanationLog(Base):
     motivo_rejeicao: Mapped[str | None] = mapped_column(Text, nullable=True, default=None)
 
     criado_em: Mapped[datetime] = mapped_column(DateTime, default=_agora_utc)
+
+    cache: Mapped["ExplanationCache"] = relationship(back_populates="logs")

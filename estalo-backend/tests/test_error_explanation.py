@@ -163,6 +163,34 @@ def test_indice_unico_card_alternativa_e_real_no_banco(db_session):
         db_session.rollback()
 
 
+def test_excluir_card_apaga_explanation_cache_e_log_em_cascata(db_session):
+    """Regressão: achado testando exclusão de deck de ponta a ponta em
+    produção. Apagar um card (e por cascata seu ExplanationCache) quebrava
+    no Postgres real com ForeignKeyViolation -- explanation_log ainda
+    referenciava a linha que o SQLAlchemy tentou apagar (faltava o
+    relationship com cascade="all, delete-orphan" entre as duas tabelas).
+
+    SQLite (usado aqui) não enforce FK por padrão, então o bug NUNCA
+    lançava exceção neste ambiente -- por isso o teste confere o efeito
+    que realmente importa (nenhuma linha órfã sobra em nenhuma das duas
+    tabelas), não só "não deu erro"."""
+    user = UserFactory()
+    card = CardFactory()
+    with patch.object(settings, "GEMINI_API_KEY", "chave-fake"), \
+         patch("app.services.ai.httpx.post", return_value=_resposta_gemini_mock()):
+        explicar_erro(card.id, "Pergunta?", "Certa", "Errada", user.id, db_session)
+
+    cache = db_session.query(ExplanationCache).filter_by(card_id=card.id).first()
+    assert cache is not None
+    assert db_session.query(ExplanationLog).filter_by(explanation_cache_id=cache.id).count() == 1
+
+    db_session.delete(card)
+    db_session.commit()  # não pode lançar IntegrityError
+
+    assert db_session.query(ExplanationCache).filter_by(card_id=card.id).count() == 0
+    assert db_session.query(ExplanationLog).filter_by(explanation_cache_id=cache.id).count() == 0
+
+
 # --- Nível de endpoint (integração via HTTP) ---
 
 def test_endpoint_explain_error_cria_e_reusa_cache(client):

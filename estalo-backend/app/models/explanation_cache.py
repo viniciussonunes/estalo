@@ -32,3 +32,12 @@ class ExplanationCache(Base):
     versao: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
 
     card: Mapped["Card"] = relationship(back_populates="explanation_cache")
+    # cascade="all, delete-orphan" -- sem isso, apagar um card (e por
+    # cascata, seu ExplanationCache) quebra em produção (Postgres) com
+    # ForeignKeyViolation: explanation_log ainda referencia a linha que o
+    # SQLAlchemy tentou apagar. SQLite (dev/testes) não enforça FK por
+    # padrão, então esse bug só aparecia contra o banco real -- achado
+    # testando exclusão de deck de ponta a ponta em produção.
+    logs: Mapped[list["ExplanationLog"]] = relationship(
+        back_populates="cache", cascade="all, delete-orphan"
+    )
