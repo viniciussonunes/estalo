@@ -172,16 +172,29 @@ def revisao_global(
     ),
     db: Session = Depends(get_db),
     user_id: int = Depends(get_current_user_id),
+    tz: ZoneInfo = Depends(get_user_timezone),
 ):
     """Fila Única de Revisão ("Estudar Tudo"), pra alimentar o Modo Aprender.
 
-    Só cards que JÁ têm progresso e estão vencidos (Review.due_date <=
-    agora) — cards nunca estudados ficam de fora de propósito. Eles moram
-    só dentro de cada pasta; misturá-los aqui é o que causava a ansiedade
-    do "número gigante" que motivou esse ajuste. Como o card precisa ter
-    Review pra entrar, o JOIN é interno (não outer) — sem prioridade SM-2
-    pra calcular, o due_date sozinho já ordena "mais vencido primeiro"
-    dentro do mesmo deck.
+    Só cards que JÁ têm progresso e estão vencidos até o FIM do dia local
+    do usuário — cards nunca estudados ficam de fora de propósito. Eles
+    moram só dentro de cada pasta; misturá-los aqui é o que causava a
+    ansiedade do "número gigante" que motivou esse ajuste. Como o card
+    precisa ter Review pra entrar, o JOIN é interno (não outer) — sem
+    prioridade SM-2 pra calcular, o due_date sozinho já ordena "mais
+    vencido primeiro" dentro do mesmo deck.
+
+    Bug real encontrado testando em produção: antes comparava
+    `Review.due_date <= agora` (instante UTC exato) -- diferente de
+    estatisticas()/estatisticas_varios_decks(), que já usam
+    `_data_no_fuso(due, tz) <= hoje_data` (dia de calendário no fuso do
+    usuário). Um card vencendo "hoje à noite" no fuso do usuário contava
+    no badge "N pendentes" do Dashboard (que lê dessas duas funções) mas
+    ficava de fora daqui, porque o instante exato ainda não tinha
+    chegado -- Estudar Tudo aparentava "vazio" com o badge dizendo o
+    contrário. Corrigido comparando contra a MEIA-NOITE de amanhã no
+    fuso do usuário, convertida pra UTC naive (mesmo padrão já usado em
+    proximo_card() pro início do dia).
 
     Devolve até 15 de uma vez (não é mais 1-por-chamada como o /next): o
     Modo Aprender consome lote, não fila stateless. Cada item já inclui
@@ -196,7 +209,9 @@ def revisao_global(
     pasta não existir ou não for do usuário; lista vazia (sem erro) se a
     pasta existir mas não tiver nenhum deck com cards vencidos.
     """
-    agora = _agora_utc()
+    hoje = _hoje_no_fuso(tz)
+    inicio_do_dia_local = datetime(hoje.year, hoje.month, hoje.day, tzinfo=tz)
+    fim_do_dia = (inicio_do_dia_local + timedelta(days=1)).astimezone(timezone.utc).replace(tzinfo=None)
 
     deck_ids_da_pasta = None
     if folder_id is not None:
@@ -210,7 +225,7 @@ def revisao_global(
         .join(Deck, Card.deck_id == Deck.id)
         .join(Review, (Review.card_id == Card.id) & (Review.user_id == user_id))
         .outerjoin(Folder, Deck.folder_id == Folder.id)
-        .filter(Deck.owner_id == user_id, Review.due_date <= agora)
+        .filter(Deck.owner_id == user_id, Review.due_date < fim_do_dia)
     )
     if deck_ids_da_pasta is not None:
         query = query.filter(Deck.id.in_(deck_ids_da_pasta))

@@ -13,6 +13,7 @@ Hierarquia usada em quase todos os testes:
     (sem pasta nenhuma) — cada um com 1 card + 1 Review já vencido.
 """
 from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 
 from app.models import User
 from app.services.study_service import get_all_deck_ids_in_folder
@@ -135,3 +136,40 @@ def test_endpoint_folder_id_de_outro_usuario_ou_inexistente_da_404(client, db_se
 
     r = client.get("/study/global-reviews?folder_id=999999", headers=auth)
     assert r.status_code == 404
+
+
+def test_endpoint_inclui_card_vencendo_mais_tarde_hoje_no_fuso_do_usuario(client, db_session):
+    """Regressão de um bug real encontrado em produção: um card com
+    due_date ainda no FUTURO em termos de instante UTC exato, mas dentro
+    do dia de calendário LOCAL do usuário, precisa aparecer em Estudar
+    Tudo -- é exatamente o que estatisticas()/estatisticas_varios_decks()
+    já contam como "hoje" (due_data == hoje_data), e o badge do Dashboard
+    lê dessas duas funções. Antes do fix, a comparação era só
+    `Review.due_date <= agora` (instante exato), deixando esse card de
+    fora mesmo com o badge "N pendentes" contando ele -- Estudar Tudo
+    aparentava vazio com o resto da tela dizendo o contrário.
+
+    Nota de determinismo: usa 23h no fuso de teste como "devido mais
+    tarde hoje" -- só ficaria flaky se o teste rodasse no último minuto
+    do dia nesse fuso, risco aceitável."""
+    auth, user = _registrar_e_logar(client, db_session, "study_service_tzbug@estalo.dev")
+    deck = DeckFactory(owner=user)
+    card = CardFactory(deck=deck)
+
+    tz = ZoneInfo("America/Sao_Paulo")
+    agora_local = datetime.now(tz)
+    mais_tarde_hoje_local = datetime(
+        agora_local.year, agora_local.month, agora_local.day, 23, 0, tzinfo=tz,
+    )
+    due_date_utc = mais_tarde_hoje_local.astimezone(ZoneInfo("UTC")).replace(tzinfo=None)
+
+    ReviewFactory(user=user, card=card, due_date=due_date_utc, repetitions=1)
+    db_session.commit()
+
+    r = client.get(
+        "/study/global-reviews",
+        headers={**auth, "X-User-Timezone": "America/Sao_Paulo"},
+    )
+    assert r.status_code == 200
+    ids = [c["card_id"] for c in r.json()]
+    assert card.id in ids
