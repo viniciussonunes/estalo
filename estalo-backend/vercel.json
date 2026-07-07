@@ -2,7 +2,12 @@
   "services": {
     "web": {
       "root": ".",
-      "entrypoint": "app/main.py"
+      "entrypoint": "app/main.py",
+      "functions": {
+        "app/main.py": {
+          "maxDuration": 60
+        }
+      }
     }
   },
   "rewrites": [
