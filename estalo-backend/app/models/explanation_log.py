@@ -6,12 +6,20 @@ criação da v1 e cada refinamento subsequente por feedback negativo. Nunca
 explicação chegou nesse nível"), não é consultado no fluxo normal do
 Modo Aprender.
 """
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import DateTime, ForeignKey, Integer, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
+
+
+def _agora_utc() -> datetime:
+    """Equivalente não-deprecated de datetime.utcnow() que preserva
+    naive-UTC (mesmo padrão adotado em app/routers/study.py e afins) --
+    datetime.now(timezone.utc) sozinho devolveria um datetime AWARE, e
+    esta coluna (como todas no projeto) é DateTime naive."""
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 class ExplanationLog(Base):
@@ -28,4 +36,4 @@ class ExplanationLog(Base):
     # em cada refinamento seguinte (o 👎 que motivou a mudança).
     motivo_rejeicao: Mapped[str | None] = mapped_column(Text, nullable=True, default=None)
 
-    criado_em: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    criado_em: Mapped[datetime] = mapped_column(DateTime, default=_agora_utc)
