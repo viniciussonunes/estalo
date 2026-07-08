@@ -27,9 +27,18 @@ adaptador, uma única vez, ANTES de escolher o provedor -- não dentro de
 cada _chamar_<provedor>_raw(), pra não arriscar debitar a cota duas vezes
 (ou nenhuma) dependendo de qual branch fosse seguida.
 """
+import os
 import time
 
-import httpx
+import sentry_sdk
+from openai import (
+    APIConnectionError,
+    APITimeoutError,
+    InternalServerError,
+    OpenAI,
+    OpenAIError,
+    RateLimitError,
+)
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -37,7 +46,7 @@ from app.core.config import settings
 from app.models.explanation_cache import ExplanationCache
 from app.models.explanation_log import ExplanationLog
 from app.schemas.error_explanation import ExplanationOut
-from app.services.ai import IAError, QuotaExceededError, _RETRY_STATUS, _chamar_gemini_raw, _estimar_tokens
+from app.services.ai import IAError, QuotaExceededError, _chamar_gemini_raw, _estimar_tokens
 from app.services.quota_service import check_and_consume_tokens
 from app.services.tutor_service import PERSONA_TUTOR, TUTOR_MODEL
 
@@ -48,11 +57,17 @@ from app.services.tutor_service import PERSONA_TUTOR, TUTOR_MODEL
 # esse par especificamente (outros pares continuam livres).
 MAX_VERSAO = 5
 
-OPENAI_URL = "https://api.openai.com/v1/chat/completions"
 # gpt-4o-mini: equivalente de custo/latência ao gemini-2.5-flash-lite já
 # usado no Gemini -- resposta sob demanda durante o estudo é sensível a
 # latência, não é geração em lote.
 OPENAI_MODEL = "gpt-4o-mini"
+
+# Erros transitórios (rate limit, timeout, falha de conexão, 5xx do lado
+# da OpenAI) valem uma 2ª tentativa -- mesmo espírito do _RETRY_STATUS
+# usado pro Gemini (app/services/ai.py). Qualquer outro OpenAIError
+# (chave inválida, saldo zerado, prompt rejeitado etc.) tentar de novo
+# não muda o resultado, então é levantado na hora.
+_OPENAI_RETRYAVEL = (RateLimitError, APITimeoutError, APIConnectionError, InternalServerError)
 
 
 def _chamar_openai_raw(
@@ -62,14 +77,20 @@ def _chamar_openai_raw(
     model: str = OPENAI_MODEL,
 ) -> str:
     """Equivalente a _chamar_gemini_raw (app/services/ai.py), mas pra
-    OpenAI -- MESMA entrada (prompt/instrucao_sistema) e saída (texto
-    puro) que o adaptador espera, só a implementação por trás muda.
+    OpenAI via biblioteca oficial `openai` -- MESMA entrada
+    (prompt/instrucao_sistema) e saída (texto puro) que o adaptador
+    espera, só a implementação por trás muda.
 
-    A chave só é validada AQUI, no momento em que o provedor "openai" é
-    de fato escolhido -- rodar com IA_PROVIDER=gemini (padrão) nunca
-    exige OPENAI_API_KEY configurada.
+    A chave é lida do ambiente com os.getenv primeiro -- em produção
+    (Vercel) OPENAI_API_KEY já é uma env var de verdade, então resolve
+    direto; localmente, quando só existe no .env (pydantic-settings não
+    exporta pro processo), cai no fallback settings.OPENAI_API_KEY. Só é
+    validada/lida AQUI, no momento em que o provedor "openai" é de fato
+    escolhido -- rodar com IA_PROVIDER=gemini (padrão) nunca exige
+    OPENAI_API_KEY configurada.
     """
-    if not settings.OPENAI_API_KEY:
+    api_key = os.getenv("OPENAI_API_KEY") or settings.OPENAI_API_KEY
+    if not api_key:
         raise IAError("Chave da OpenAI não configurada. Preencha OPENAI_API_KEY no arquivo .env")
 
     # instrucao_sistema vira a mensagem "system" -- equivalente ao
@@ -80,36 +101,34 @@ def _chamar_openai_raw(
         messages.append({"role": "system", "content": instrucao_sistema})
     messages.append({"role": "user", "content": prompt})
 
-    payload = {"model": model, "messages": messages}
-    headers = {
-        "Content-Type": "application/json",
-        "Authorization": f"Bearer {settings.OPENAI_API_KEY}",
-    }
+    cliente = OpenAI(api_key=api_key, timeout=timeout)
 
     ultimo_erro: Exception | None = None
     for tentativa in range(2):
         if tentativa > 0:
             time.sleep(2)
         try:
-            resp = httpx.post(OPENAI_URL, json=payload, headers=headers, timeout=timeout)
-        except httpx.RequestError as e:
-            raise IAError(f"Falha ao conectar na OpenAI: {e}") from e
-
-        if resp.status_code in _RETRY_STATUS:
-            ultimo_erro = Exception(f"status {resp.status_code}")
+            resposta = cliente.chat.completions.create(model=model, messages=messages)
+        except _OPENAI_RETRYAVEL as e:
+            # Captura explícita no Sentry ANTES de virar IAError: o
+            # router (study.py) sempre pega IAError e devolve um
+            # 503/429 genérico ao usuário -- sem esse capture aqui, o
+            # Sentry nunca veria o erro real da OpenAI (rate limit,
+            # timeout, 5xx), porque a exceção nunca escapa não-tratada.
+            sentry_sdk.capture_exception(e)
+            ultimo_erro = e
             if tentativa < 1:
                 continue
             break
+        except OpenAIError as e:
+            # Não-retryable: chave inválida, saldo/cota esgotados,
+            # prompt rejeitado etc. -- tentar de novo não resolve.
+            sentry_sdk.capture_exception(e)
+            raise IAError(f"OpenAI respondeu com erro: {e}") from e
 
         try:
-            resp.raise_for_status()
-        except httpx.HTTPStatusError as e:
-            raise IAError(f"OpenAI respondeu com erro {e.response.status_code}") from e
-
-        try:
-            dados = resp.json()
-            return dados["choices"][0]["message"]["content"]
-        except (KeyError, IndexError) as e:
+            return resposta.choices[0].message.content
+        except (IndexError, AttributeError) as e:
             raise IAError("Resposta da OpenAI veio em formato inesperado") from e
 
     raise IAError(f"OpenAI indisponível após 2 tentativas ({ultimo_erro})")

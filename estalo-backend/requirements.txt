@@ -16,6 +16,10 @@ bcrypt==4.2.0
 # ── Cliente HTTP (Gemini) e testes ─────────────────────────────────────────
 httpx==0.27.2
 
+# ── IA (Tutor Inteligente Evolutivo — provedor OpenAI, ver
+# app/services/error_explanation_service.py) ────────────────────────────────
+openai==2.44.0
+
 # ── Observabilidade ────────────────────────────────────────────────────────
 # Sem SENTRY_DSN configurado, o SDK fica "enabled: False" e não manda nada
 # (mesmo padrão do frontend, ver src/sentry.js) -- seguro rodar sem conta

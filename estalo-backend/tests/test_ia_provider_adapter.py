@@ -6,7 +6,9 @@ formato de entrada/saída, nem exigir a chave do provedor inativo.
 """
 from unittest.mock import Mock, patch
 
+import httpx
 import pytest
+from openai import APIConnectionError, AuthenticationError
 
 from app.core.config import settings
 from app.services.ai import IAError, QuotaExceededError
@@ -24,12 +26,14 @@ def _resposta_gemini_mock(texto="resposta do gemini"):
     return resp
 
 
-def _resposta_openai_mock(texto="resposta da openai"):
-    resp = Mock()
-    resp.status_code = 200
-    resp.json.return_value = {"choices": [{"message": {"content": texto}}]}
-    resp.raise_for_status.return_value = None
-    return resp
+def _cliente_openai_mock(texto="resposta da openai"):
+    """Mock do client oficial `openai.OpenAI` -- resposta com o mesmo
+    shape de cliente.chat.completions.create(...)."""
+    resposta = Mock()
+    resposta.choices = [Mock(message=Mock(content=texto))]
+    cliente = Mock()
+    cliente.chat.completions.create.return_value = resposta
+    return cliente
 
 
 def test_adapter_usa_gemini_por_padrao(db_session):
@@ -61,31 +65,34 @@ def test_adapter_troca_pra_openai_via_settings(db_session):
     """Mesma função (_chamar_ia), mesma entrada/saída -- só
     IA_PROVIDER muda, e o Gemini nem é tocado.
 
-    Aqui sim dá pra usar httpx.post (só UM alvo, sem o conflito descrito
-    acima) porque também precisamos inspecionar o payload/headers reais
-    da chamada HTTP -- _chamar_gemini_raw é mockado à parte, como função,
-    pra confirmar que não foi tocado."""
+    Mocka a classe OpenAI (biblioteca oficial) em vez de httpx.post,
+    já que _chamar_openai_raw agora fala com a API via `openai.OpenAI`,
+    não HTTP cru -- inspeciona o payload real (model/messages) passado
+    pra client.chat.completions.create(...)."""
     user = UserFactory()
+    cliente_mock = _cliente_openai_mock("v2")
 
     with patch.object(settings, "IA_PROVIDER", "openai"), \
          patch.object(settings, "OPENAI_API_KEY", "sk-fake"), \
-         patch("app.services.error_explanation_service.httpx.post", return_value=_resposta_openai_mock("v2")) as mock_openai, \
+         patch("app.services.error_explanation_service.OpenAI", return_value=cliente_mock) as mock_cls, \
          patch("app.services.error_explanation_service._chamar_gemini_raw") as mock_gemini:
         texto = _chamar_ia("prompt de teste", user.id, db_session, instrucao_sistema="persona")
 
     assert texto == "v2"
-    assert mock_openai.called
+    assert cliente_mock.chat.completions.create.called
     assert not mock_gemini.called
 
     # Confere o formato real da requisição -- modelo certo, persona como
     # mensagem "system" separada do conteúdo (mesma separação persona/
     # conteúdo do Gemini, só que no formato de mensagens da OpenAI).
-    _, kwargs = mock_openai.call_args
-    payload = kwargs["json"]
-    assert payload["model"] == OPENAI_MODEL
-    assert payload["messages"][0] == {"role": "system", "content": "persona"}
-    assert payload["messages"][1] == {"role": "user", "content": "prompt de teste"}
-    assert kwargs["headers"]["Authorization"] == "Bearer sk-fake"
+    _, kwargs = cliente_mock.chat.completions.create.call_args
+    assert kwargs["model"] == OPENAI_MODEL
+    assert kwargs["messages"][0] == {"role": "system", "content": "persona"}
+    assert kwargs["messages"][1] == {"role": "user", "content": "prompt de teste"}
+
+    # Confere que o client foi construído com a chave certa.
+    _, client_kwargs = mock_cls.call_args
+    assert client_kwargs["api_key"] == "sk-fake"
 
 
 def test_openai_sem_chave_configurada_da_erro_claro(db_session):
@@ -129,7 +136,7 @@ def test_quota_bloqueia_independente_do_provedor(db_session):
 
     with patch.object(settings, "IA_PROVIDER", "openai"), \
          patch.object(settings, "OPENAI_API_KEY", "sk-fake"), \
-         patch("app.services.error_explanation_service.httpx.post") as mock_openai:
+         patch("app.services.error_explanation_service._chamar_openai_raw") as mock_openai:
         with pytest.raises(QuotaExceededError):
             _chamar_ia("prompt", user.id, db_session)
 
@@ -142,11 +149,59 @@ def test_explicar_erro_ponta_a_ponta_com_openai(db_session):
     IA_PROVIDER=openai."""
     user = UserFactory()
     card = CardFactory()
+    cliente_mock = _cliente_openai_mock("explicação via openai")
 
     with patch.object(settings, "IA_PROVIDER", "openai"), \
          patch.object(settings, "OPENAI_API_KEY", "sk-fake"), \
-         patch("app.services.error_explanation_service.httpx.post", return_value=_resposta_openai_mock("explicação via openai")):
+         patch("app.services.error_explanation_service.OpenAI", return_value=cliente_mock):
         resultado = explicar_erro(card.id, "Pergunta?", "Certa", "Errada", user.id, db_session)
 
     assert resultado.explanation == "explicação via openai"
     assert resultado.versao == 1
+
+
+def test_erro_nao_retryable_da_openai_e_capturado_pelo_sentry(db_session):
+    """Chave inválida, saldo/cota esgotados etc. -- o router (study.py)
+    sempre converte IAError num 503/429 genérico pro usuário, então sem
+    captura explícita aqui o Sentry NUNCA veria o erro real da OpenAI.
+    Cobre o pedido explícito: "caso o saldo acabe ou a API falhe, o
+    Sentry capture o erro corretamente"."""
+    user = UserFactory()
+    request = httpx.Request("POST", "https://api.openai.com/v1/chat/completions")
+    response = httpx.Response(401, request=request, json={"error": {"message": "saldo esgotado"}})
+    erro = AuthenticationError("saldo esgotado", response=response, body=None)
+
+    cliente_mock = Mock()
+    cliente_mock.chat.completions.create.side_effect = erro
+
+    with patch.object(settings, "IA_PROVIDER", "openai"), \
+         patch.object(settings, "OPENAI_API_KEY", "sk-fake"), \
+         patch("app.services.error_explanation_service.OpenAI", return_value=cliente_mock), \
+         patch("app.services.error_explanation_service.sentry_sdk.capture_exception") as mock_capture:
+        with pytest.raises(IAError):
+            _chamar_ia("prompt", user.id, db_session)
+
+    mock_capture.assert_called_once_with(erro)
+    # Erro não-retryable: só UMA tentativa, não duas.
+    assert cliente_mock.chat.completions.create.call_count == 1
+
+
+def test_erro_retryable_da_openai_tenta_de_novo_e_captura_no_sentry(db_session):
+    """Falha de conexão/timeout/rate-limit vale uma 2ª tentativa -- mas
+    cada tentativa que falhar ainda precisa ir pro Sentry."""
+    user = UserFactory()
+    erro = APIConnectionError(request=httpx.Request("POST", "https://api.openai.com/v1/chat/completions"))
+
+    cliente_mock = Mock()
+    cliente_mock.chat.completions.create.side_effect = erro
+
+    with patch.object(settings, "IA_PROVIDER", "openai"), \
+         patch.object(settings, "OPENAI_API_KEY", "sk-fake"), \
+         patch("app.services.error_explanation_service.OpenAI", return_value=cliente_mock), \
+         patch("app.services.error_explanation_service.sentry_sdk.capture_exception") as mock_capture, \
+         patch("app.services.error_explanation_service.time.sleep"):
+        with pytest.raises(IAError, match="2 tentativas"):
+            _chamar_ia("prompt", user.id, db_session)
+
+    assert cliente_mock.chat.completions.create.call_count == 2
+    assert mock_capture.call_count == 2
