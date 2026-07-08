@@ -763,8 +763,8 @@ def explicar_erro_card(
     front, back = card.front, card.back
     # Mesmo motivo do tutor_card acima: não segura a transação aberta
     # durante a chamada lenta à IA. Sem efeito aqui na prática, já que um
-    # Hit de cache nem chega a chamar o Gemini -- mas mantém o mesmo hábito
-    # defensivo em todo endpoint que pode acabar chamando _chamar_gemini.
+    # Hit de cache nem chega a chamar a IA -- mas mantém o mesmo hábito
+    # defensivo em todo endpoint que pode acabar chamando _chamar_ia.
     db.commit()
 
     try:

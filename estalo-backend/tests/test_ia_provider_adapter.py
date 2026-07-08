@@ -1,8 +1,11 @@
 """
-Testes do Adaptador de provedor de IA (_chamar_ia, em
-error_explanation_service.py) — confirma que trocar IA_PROVIDER
-("gemini" | "openai") muda só QUAL API é chamada, sem alterar quota,
-formato de entrada/saída, nem exigir a chave do provedor inativo.
+Testes do Adaptador de provedor de IA (_chamar_ia, em app/services/ai.py)
+— confirma que trocar IA_PROVIDER ("gemini" | "openai") muda só QUAL API é
+chamada, sem alterar quota, formato de entrada/saída, nem exigir a chave
+do provedor inativo. Cobre também os pontos de entrada que passaram a
+usar o adaptador: error_explanation_service.explicar_erro, tutor_service.
+explicar_card e ai.gerar_cards_completos -- provando que a troca de
+IA_PROVIDER é global pra plataforma, não só pro Tutor de erro.
 """
 from unittest.mock import Mock, patch
 
@@ -11,10 +14,9 @@ import pytest
 from openai import APIConnectionError, AuthenticationError
 
 from app.core.config import settings
-from app.services.ai import IAError, QuotaExceededError
-from app.services.error_explanation_service import (
-    OPENAI_MODEL, _chamar_ia, explicar_erro,
-)
+from app.services.ai import OPENAI_MODEL, IAError, QuotaExceededError, _chamar_ia
+from app.services.error_explanation_service import explicar_erro
+from app.services.tutor_service import explicar_card
 from tests.factories import CardFactory, UserFactory
 
 
@@ -41,19 +43,17 @@ def test_adapter_usa_gemini_por_padrao(db_session):
     o comportamento de sempre.
 
     Mocka _chamar_gemini_raw/_chamar_openai_raw diretamente (não
-    httpx.post): "app.services.ai.httpx" e
-    "app.services.error_explanation_service.httpx" são o MESMO objeto de
-    módulo (import cacheado em sys.modules), então patchear os dois
-    "...httpx.post" ao mesmo tempo não cria dois mocks independentes --
-    o patch aplicado por último vence e mascara o primeiro pro bloco
-    `with` inteiro. Mockar as funções _chamar_<provedor>_raw evita essa
-    pegadinha, já que são atributos distintos no namespace de
-    error_explanation_service."""
+    httpx.post): patchear "httpx.post" ao mesmo tempo por dois caminhos
+    diferentes que resolvem pro MESMO módulo `httpx` cacheado não cria
+    dois mocks independentes -- o patch aplicado por último vence e
+    mascara o primeiro pro bloco `with` inteiro. Mockar as funções
+    _chamar_<provedor>_raw evita essa pegadinha, já que são atributos
+    distintos no namespace de app.services.ai."""
     user = UserFactory()
     assert settings.IA_PROVIDER == "gemini"
 
-    with patch("app.services.error_explanation_service._chamar_gemini_raw", return_value="v1") as mock_gemini, \
-         patch("app.services.error_explanation_service._chamar_openai_raw") as mock_openai:
+    with patch("app.services.ai._chamar_gemini_raw", return_value="v1") as mock_gemini, \
+         patch("app.services.ai._chamar_openai_raw") as mock_openai:
         texto = _chamar_ia("prompt de teste", user.id, db_session, instrucao_sistema="persona")
 
     assert texto == "v1"
@@ -74,8 +74,8 @@ def test_adapter_troca_pra_openai_via_settings(db_session):
 
     with patch.object(settings, "IA_PROVIDER", "openai"), \
          patch.object(settings, "OPENAI_API_KEY", "sk-fake"), \
-         patch("app.services.error_explanation_service.OpenAI", return_value=cliente_mock) as mock_cls, \
-         patch("app.services.error_explanation_service._chamar_gemini_raw") as mock_gemini:
+         patch("app.services.ai.OpenAI", return_value=cliente_mock) as mock_cls, \
+         patch("app.services.ai._chamar_gemini_raw") as mock_gemini:
         texto = _chamar_ia("prompt de teste", user.id, db_session, instrucao_sistema="persona")
 
     assert texto == "v2"
@@ -93,6 +93,19 @@ def test_adapter_troca_pra_openai_via_settings(db_session):
     # Confere que o client foi construído com a chave certa.
     _, client_kwargs = mock_cls.call_args
     assert client_kwargs["api_key"] == "sk-fake"
+
+
+def test_adapter_respeita_override_de_model_so_no_gemini(db_session):
+    """`model=` (ex: TUTOR_MODEL usado por tutor_service/
+    error_explanation_service) sobrepõe o modelo padrão só no Gemini -- a
+    OpenAI usa sempre OPENAI_MODEL, sem variação por serviço."""
+    user = UserFactory()
+
+    with patch("app.services.ai._chamar_gemini_raw", return_value="ok") as mock_gemini:
+        _chamar_ia("prompt", user.id, db_session, model="gemini-2.5-flash-lite")
+
+    _, kwargs = mock_gemini.call_args
+    assert kwargs["model"] == "gemini-2.5-flash-lite"
 
 
 def test_openai_sem_chave_configurada_da_erro_claro(db_session):
@@ -136,7 +149,7 @@ def test_quota_bloqueia_independente_do_provedor(db_session):
 
     with patch.object(settings, "IA_PROVIDER", "openai"), \
          patch.object(settings, "OPENAI_API_KEY", "sk-fake"), \
-         patch("app.services.error_explanation_service._chamar_openai_raw") as mock_openai:
+         patch("app.services.ai._chamar_openai_raw") as mock_openai:
         with pytest.raises(QuotaExceededError):
             _chamar_ia("prompt", user.id, db_session)
 
@@ -153,16 +166,55 @@ def test_explicar_erro_ponta_a_ponta_com_openai(db_session):
 
     with patch.object(settings, "IA_PROVIDER", "openai"), \
          patch.object(settings, "OPENAI_API_KEY", "sk-fake"), \
-         patch("app.services.error_explanation_service.OpenAI", return_value=cliente_mock):
+         patch("app.services.ai.OpenAI", return_value=cliente_mock):
         resultado = explicar_erro(card.id, "Pergunta?", "Certa", "Errada", user.id, db_session)
 
     assert resultado.explanation == "explicação via openai"
     assert resultado.versao == 1
 
 
+def test_explicar_card_ponta_a_ponta_com_openai(db_session):
+    """tutor_service.explicar_card (Tutor geral, não o de erro) também
+    passou a usar o adaptador -- essa é a prova de que IA_PROVIDER na
+    Vercel troca a plataforma inteira, não só o Tutor de erro."""
+    user = UserFactory()
+    cliente_mock = _cliente_openai_mock("explicação do tutor geral via openai")
+
+    with patch.object(settings, "IA_PROVIDER", "openai"), \
+         patch.object(settings, "OPENAI_API_KEY", "sk-fake"), \
+         patch("app.services.ai.OpenAI", return_value=cliente_mock):
+        resultado = explicar_card("Front do card", "Back do card", user.id, db_session)
+
+    assert resultado == "explicação do tutor geral via openai"
+
+
+def test_gerar_cards_completos_ponta_a_ponta_com_openai(db_session):
+    """ai.gerar_cards_completos (geração de cards/quiz) também passou a
+    usar o adaptador -- confirma que o parsing de JSON continua
+    funcionando igual, independente do provedor por trás."""
+    from app.services.ai import gerar_cards_completos
+
+    user = UserFactory()
+    bruto = (
+        '[{"front":"P1","back":"R1","distractors":["d1","d2","d3"],'
+        '"explanation":"exp1"}]'
+    )
+    cliente_mock = _cliente_openai_mock(bruto)
+
+    with patch.object(settings, "IA_PROVIDER", "openai"), \
+         patch.object(settings, "OPENAI_API_KEY", "sk-fake"), \
+         patch("app.services.ai.OpenAI", return_value=cliente_mock):
+        cards = gerar_cards_completos("texto de estudo", 1, user.id, db_session)
+
+    assert cards == [{
+        "front": "P1", "back": "R1",
+        "distractors": ["d1", "d2", "d3"], "explanation": "exp1",
+    }]
+
+
 def test_erro_nao_retryable_da_openai_e_capturado_pelo_sentry(db_session):
-    """Chave inválida, saldo/cota esgotados etc. -- o router (study.py)
-    sempre converte IAError num 503/429 genérico pro usuário, então sem
+    """Chave inválida, saldo/cota esgotados etc. -- os routers sempre
+    convertem IAError num 503/429 genérico pro usuário, então sem
     captura explícita aqui o Sentry NUNCA veria o erro real da OpenAI.
     Cobre o pedido explícito: "caso o saldo acabe ou a API falhe, o
     Sentry capture o erro corretamente"."""
@@ -176,8 +228,8 @@ def test_erro_nao_retryable_da_openai_e_capturado_pelo_sentry(db_session):
 
     with patch.object(settings, "IA_PROVIDER", "openai"), \
          patch.object(settings, "OPENAI_API_KEY", "sk-fake"), \
-         patch("app.services.error_explanation_service.OpenAI", return_value=cliente_mock), \
-         patch("app.services.error_explanation_service.sentry_sdk.capture_exception") as mock_capture:
+         patch("app.services.ai.OpenAI", return_value=cliente_mock), \
+         patch("app.services.ai.sentry_sdk.capture_exception") as mock_capture:
         with pytest.raises(IAError):
             _chamar_ia("prompt", user.id, db_session)
 
@@ -197,9 +249,9 @@ def test_erro_retryable_da_openai_tenta_de_novo_e_captura_no_sentry(db_session):
 
     with patch.object(settings, "IA_PROVIDER", "openai"), \
          patch.object(settings, "OPENAI_API_KEY", "sk-fake"), \
-         patch("app.services.error_explanation_service.OpenAI", return_value=cliente_mock), \
-         patch("app.services.error_explanation_service.sentry_sdk.capture_exception") as mock_capture, \
-         patch("app.services.error_explanation_service.time.sleep"):
+         patch("app.services.ai.OpenAI", return_value=cliente_mock), \
+         patch("app.services.ai.sentry_sdk.capture_exception") as mock_capture, \
+         patch("app.services.ai.time.sleep"):
         with pytest.raises(IAError, match="2 tentativas"):
             _chamar_ia("prompt", user.id, db_session)
 

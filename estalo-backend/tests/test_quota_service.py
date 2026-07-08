@@ -2,16 +2,16 @@
 Testes do Quota Manager (app/services/quota_service.py + integração em
 app/services/ai.py). Cobre: criação automática da cota no primeiro uso,
 consumo/bloqueio por limite diário, reset por virada de dia, e o disparo
-de QuotaExceededError dentro de _chamar_gemini quando a cota já estourou
-(sem sequer tentar a chamada HTTP -- ver assert de que httpx.post nunca
-é chamado nesse caso).
+de QuotaExceededError dentro de _chamar_ia (Adaptador de provedor de IA)
+quando a cota já estourou (sem sequer tentar a chamada HTTP -- ver assert
+de que httpx.post nunca é chamado nesse caso).
 """
 from datetime import date, timedelta
 from unittest.mock import patch
 
 from app.core.config import settings
 from app.models.user_quota import UserQuota
-from app.services.ai import QuotaExceededError, _chamar_gemini
+from app.services.ai import QuotaExceededError, _chamar_ia
 from app.services.quota_service import check_and_consume_tokens, reset_quotas_if_needed
 from tests.factories import UserFactory
 
@@ -98,9 +98,10 @@ def test_cota_estourada_e_reset_permite_consumir_de_novo(db_session):
     assert db_session.get(UserQuota, user.id).daily_tokens_consumed == 100
 
 
-def test_chamar_gemini_lanca_quota_exceeded_sem_ir_pra_rede(db_session):
-    """O ponto central do pedido: se a cota já estourou, _chamar_gemini
-    nem tenta a chamada HTTP -- confirma via mock nunca chamado."""
+def test_chamar_ia_lanca_quota_exceeded_sem_ir_pra_rede(db_session):
+    """O ponto central do pedido: se a cota já estourou, _chamar_ia (o
+    Adaptador, independente do provedor ativo) nem tenta a chamada HTTP --
+    confirma via mock nunca chamado."""
     user = UserFactory()
     db_session.add(UserQuota(user_id=user.id, daily_tokens_consumed=50_000, daily_limit=50_000, last_reset_date=date.today()))
     db_session.commit()
@@ -108,7 +109,7 @@ def test_chamar_gemini_lanca_quota_exceeded_sem_ir_pra_rede(db_session):
     with patch.object(settings, "GEMINI_API_KEY", "chave-fake-de-teste"), \
          patch("app.services.ai.httpx.post") as mock_post:
         try:
-            _chamar_gemini("qualquer prompt", user.id, db_session)
+            _chamar_ia("qualquer prompt", user.id, db_session)
             assert False, "deveria ter lançado QuotaExceededError"
         except QuotaExceededError:
             pass
@@ -116,7 +117,7 @@ def test_chamar_gemini_lanca_quota_exceeded_sem_ir_pra_rede(db_session):
     assert not mock_post.called
 
 
-def test_chamar_gemini_debita_a_estimativa_antes_da_chamada(db_session):
+def test_chamar_ia_debita_a_estimativa_antes_da_chamada(db_session):
     from unittest.mock import Mock
 
     user = UserFactory()
@@ -128,7 +129,7 @@ def test_chamar_gemini_debita_a_estimativa_antes_da_chamada(db_session):
     prompt = "x" * 400  # ~100 tokens (400 chars / 4)
     with patch.object(settings, "GEMINI_API_KEY", "chave-fake-de-teste"), \
          patch("app.services.ai.httpx.post", return_value=resp):
-        _chamar_gemini(prompt, user.id, db_session)
+        _chamar_ia(prompt, user.id, db_session)
 
     quota = db_session.get(UserQuota, user.id)
     assert quota.daily_tokens_consumed == 100

@@ -6,21 +6,22 @@ A persona (papel, tom, regra de ouro, formatação, idioma) vai como
 `instrucao_sistema` em TODA chamada ao Gemini feita por este serviço — fica
 definida uma vez aqui, não espalhada/repetida em cada prompt de card.
 
-Nota de arquitetura: este projeto fala com o Gemini via REST cru (httpx),
-não via SDK `google-generativeai`. A separação equivalente a
-`GenerativeModel(system_instruction=...)` + `model.generate_content(prompt)`
-do SDK é feita manualmente em _chamar_gemini (app/services/ai.py): a persona
-vai no campo `systemInstruction` do payload, o conteúdo do card vai em
-`contents` -- os dois nunca se misturam num prompt só.
+Nota de arquitetura: a chamada de verdade passa por _chamar_ia
+(app/services/ai.py) -- o Adaptador de provedor de IA (Gemini/OpenAI). Este
+serviço não sabe qual dos dois está por trás; só monta a persona/mensagem e
+delega. Pro Gemini especificamente, a persona vai no campo `systemInstruction`
+do payload REST cru (não via SDK `google-generativeai`), o conteúdo do card
+vai em `contents` -- os dois nunca se misturam num prompt só.
 """
 from sqlalchemy.orm import Session
 
-from app.services.ai import IAError, _chamar_gemini  # noqa: F401 (IAError reexportado p/ quem importar daqui)
+from app.services.ai import IAError, _chamar_ia  # noqa: F401 (IAError reexportado p/ quem importar daqui)
 
 # Modelo dedicado do Tutor: mais rápido/barato que o padrão usado por
 # gerar_cards/gerar_quiz (settings.GEMINI_MODEL) -- resposta sob demanda
 # durante o estudo é sensível a latência de um jeito que geração em lote não
 # é. Fica isolado aqui, não em settings, pra não afetar as outras features.
+# Só se aplica ao Gemini -- a OpenAI usa sempre OPENAI_MODEL (ver ai.py).
 #
 # "gemini-1.5-flash" (pedido originalmente) não existe mais -- a API
 # responde 404 (confirmado direto contra GET /v1beta/models com a chave de
@@ -75,6 +76,6 @@ def explicar_card(card_front: str, card_back: str, user_id: int, db: Session, ti
     fora do ar, cota diária estourada, etc.).
     """
     mensagem = _montar_mensagem_usuario(card_front, card_back)
-    return _chamar_gemini(
+    return _chamar_ia(
         mensagem, user_id, db, timeout=timeout, instrucao_sistema=PERSONA_TUTOR, model=TUTOR_MODEL,
     )

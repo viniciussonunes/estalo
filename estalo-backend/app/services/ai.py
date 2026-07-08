@@ -1,20 +1,48 @@
 """
-Serviço de IA — gera cards a partir de um texto, usando o Gemini.
+Serviço de IA — gera cards a partir de um texto, e concentra o Adaptador de
+provedor de IA (Gemini/OpenAI) usado por toda a plataforma.
 
 A ideia (sua dor #1): você entrega um texto de estudo e a IA devolve pares
-pergunta/resposta prontos. O "monitor" (Gemini) lê suas anotações e cria as
-perguntas de revisão.
+pergunta/resposta prontos. O "monitor" lê suas anotações e cria as perguntas
+de revisão.
 
 Decisão importante: pedimos a resposta em JSON ESTRUTURADO, não texto solto.
 Assim o código lê com segurança, sem adivinhar onde acaba a pergunta e começa
 a resposta. É a diferença entre receber um formulário preenchido e um bilhete
 escrito à mão.
+
+--- Padrão Adaptador (provedor de IA) ---
+_chamar_ia() é o único ponto de todo o backend que sabe que existe mais de um
+provedor de IA -- gerar_quiz/gerar_explicacoes/gerar_cards_completos/
+gerar_cards (abaixo), tutor_service.explicar_card e
+error_explanation_service.explicar_erro/refinar_explicacao chamam só ela,
+nunca _chamar_gemini_raw/_chamar_openai_raw diretamente. Ela decide, com base
+em settings.IA_PROVIDER ("gemini" ou "openai"), pra qual _chamar_<provedor>_raw()
+despachar -- mas sempre recebe um prompt (+ instrucao_sistema opcional) e
+devolve texto puro, não importa o provedor por trás. Trocar de IA pra toda a
+plataforma de uma vez é mudar IA_PROVIDER (env var) e reiniciar; nenhuma
+linha de código de negócio muda.
+
+O quota-check (Quota Manager, ver quota_service.py) acontece DENTRO do
+adaptador, uma única vez, ANTES de escolher o provedor -- não dentro de cada
+_chamar_<provedor>_raw(), pra não arriscar debitar a cota duas vezes (ou
+nenhuma) dependendo de qual branch fosse seguida.
 """
 import json
 import math
+import os
 import time
 
 import httpx
+import sentry_sdk
+from openai import (
+    APIConnectionError,
+    APITimeoutError,
+    InternalServerError,
+    OpenAI,
+    OpenAIError,
+    RateLimitError,
+)
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -24,6 +52,11 @@ GEMINI_URL = (
     "https://generativelanguage.googleapis.com/v1beta/models/"
     "{model}:generateContent"
 )
+
+# gpt-4o-mini: equivalente de custo/latência ao gemini-2.5-flash-lite já
+# usado nos serviços sensíveis a latência (tutor_service, error_explanation_
+# service) -- resposta sob demanda durante o estudo não pode ser lenta.
+OPENAI_MODEL = "gpt-4o-mini"
 
 
 class IAError(Exception):
@@ -59,13 +92,12 @@ def _chamar_gemini_raw(
     instrucao_sistema: str | None = None,
     model: str | None = None,
 ) -> str:
-    """Só a chamada HTTP ao Gemini, SEM quota-check -- extraída de
-    _chamar_gemini() (abaixo) pra poder ser reaproveitada por um
-    adaptador de provedor de IA (ver app/services/error_explanation_service.py)
-    que faz seu PRÓPRIO quota-check uma única vez antes de escolher pra
-    qual provedor despachar. Se essa função fizesse o quota-check
-    internamente, trocar de provedor ali arriscaria debitar a cota duas
-    vezes (uma no adaptador, outra aqui).
+    """Só a chamada HTTP ao Gemini, SEM quota-check -- usada por _chamar_ia()
+    (abaixo), o Adaptador de provedor de IA, que faz o quota-check UMA
+    única vez antes de escolher pra qual provedor despachar. Se essa
+    função fizesse o quota-check internamente, trocar de provedor no
+    adaptador arriscaria debitar a cota duas vezes (uma no adaptador,
+    outra aqui).
 
     Tenta até 2 vezes em erros transitórios. Orçamento de tempo pensado
     pra caber numa função serverless: 2 tentativas de até `timeout`s
@@ -121,7 +153,79 @@ def _chamar_gemini_raw(
     raise IAError(f"Gemini indisponível após 2 tentativas ({ultimo_erro})")
 
 
-def _chamar_gemini(
+# Erros transitórios (rate limit, timeout, falha de conexão, 5xx do lado da
+# OpenAI) valem uma 2ª tentativa -- mesmo espírito do _RETRY_STATUS usado pro
+# Gemini acima. Qualquer outro OpenAIError (chave inválida, saldo zerado,
+# prompt rejeitado etc.) tentar de novo não muda o resultado, então é
+# levantado na hora.
+_OPENAI_RETRYAVEL = (RateLimitError, APITimeoutError, APIConnectionError, InternalServerError)
+
+
+def _chamar_openai_raw(
+    prompt: str,
+    timeout: int = 25,
+    instrucao_sistema: str | None = None,
+    model: str = OPENAI_MODEL,
+) -> str:
+    """Equivalente a _chamar_gemini_raw acima, mas pra OpenAI via
+    biblioteca oficial `openai` -- MESMA entrada (prompt/instrucao_sistema)
+    e saída (texto puro) que o adaptador espera, só a implementação por
+    trás muda.
+
+    A chave é lida do ambiente com os.getenv primeiro -- em produção
+    (Vercel) OPENAI_API_KEY já é uma env var de verdade, então resolve
+    direto; localmente, quando só existe no .env (pydantic-settings não
+    exporta pro processo), cai no fallback settings.OPENAI_API_KEY. Só é
+    validada/lida AQUI, no momento em que o provedor "openai" é de fato
+    escolhido -- rodar com IA_PROVIDER=gemini (padrão) nunca exige
+    OPENAI_API_KEY configurada.
+    """
+    api_key = os.getenv("OPENAI_API_KEY") or settings.OPENAI_API_KEY
+    if not api_key:
+        raise IAError("Chave da OpenAI não configurada. Preencha OPENAI_API_KEY no arquivo .env")
+
+    # instrucao_sistema vira a mensagem "system" -- equivalente ao
+    # systemInstruction separado do Gemini, mesma separação persona/
+    # conteúdo, só que no formato de mensagens da OpenAI.
+    messages = []
+    if instrucao_sistema:
+        messages.append({"role": "system", "content": instrucao_sistema})
+    messages.append({"role": "user", "content": prompt})
+
+    cliente = OpenAI(api_key=api_key, timeout=timeout)
+
+    ultimo_erro: Exception | None = None
+    for tentativa in range(2):
+        if tentativa > 0:
+            time.sleep(2)
+        try:
+            resposta = cliente.chat.completions.create(model=model, messages=messages)
+        except _OPENAI_RETRYAVEL as e:
+            # Captura explícita no Sentry ANTES de virar IAError: os
+            # routers sempre pegam IAError e devolvem um 503/429 genérico
+            # ao usuário -- sem esse capture aqui, o Sentry nunca veria o
+            # erro real da OpenAI (rate limit, timeout, 5xx), porque a
+            # exceção nunca escapa não-tratada.
+            sentry_sdk.capture_exception(e)
+            ultimo_erro = e
+            if tentativa < 1:
+                continue
+            break
+        except OpenAIError as e:
+            # Não-retryable: chave inválida, saldo/cota esgotados, prompt
+            # rejeitado etc. -- tentar de novo não resolve.
+            sentry_sdk.capture_exception(e)
+            raise IAError(f"OpenAI respondeu com erro: {e}") from e
+
+        try:
+            return resposta.choices[0].message.content
+        except (IndexError, AttributeError) as e:
+            raise IAError("Resposta da OpenAI veio em formato inesperado") from e
+
+    raise IAError(f"OpenAI indisponível após 2 tentativas ({ultimo_erro})")
+
+
+def _chamar_ia(
     prompt: str,
     user_id: int,
     db: Session,
@@ -129,16 +233,19 @@ def _chamar_gemini(
     instrucao_sistema: str | None = None,
     model: str | None = None,
 ) -> str:
-    """_chamar_gemini_raw() + Quota Manager. Mantida como está (assinatura
-    e comportamento inalterados) pra não quebrar quem já chama isso direto
-    (gerar_quiz, gerar_explicacoes, gerar_cards_completos, gerar_cards,
-    tutor_service.explicar_card) -- só o corpo da chamada HTTP em si foi
-    extraído pra _chamar_gemini_raw acima.
+    """O Adaptador. Único ponto que decide pra qual provedor despachar --
+    todo o resto do backend chama isto, nunca _chamar_gemini_raw/
+    _chamar_openai_raw diretamente.
 
     `user_id`/`db` alimentam o Quota Manager (app/services/quota_service.py):
     a estimativa de tokens é debitada da cota do usuário ANTES da chamada
-    HTTP -- se ele já estourou o limite diário, nem tentamos falar com o
-    Gemini (ver QuotaExceededError acima).
+    à IA -- se ele já estourou o limite diário, nem tentamos falar com o
+    provedor (ver QuotaExceededError acima).
+
+    `model`, quando informado, sobrepõe o modelo padrão só pro Gemini (ex:
+    tutor_service usa um modelo mais rápido/barato que gerar_cards/
+    gerar_quiz) -- a OpenAI usa sempre OPENAI_MODEL, sem variação por
+    serviço (não há necessidade disso hoje).
     """
     estimativa = _estimar_tokens(prompt, instrucao_sistema)
     if not check_and_consume_tokens(user_id, estimativa, db):
@@ -146,7 +253,12 @@ def _chamar_gemini(
             "Limite diário de uso do Tutor/IA atingido. Tente novamente amanhã."
         )
 
-    return _chamar_gemini_raw(prompt, timeout=timeout, instrucao_sistema=instrucao_sistema, model=model)
+    provider = settings.IA_PROVIDER.strip().lower()
+    if provider == "openai":
+        return _chamar_openai_raw(prompt, timeout=timeout, instrucao_sistema=instrucao_sistema)
+    if provider == "gemini":
+        return _chamar_gemini_raw(prompt, timeout=timeout, instrucao_sistema=instrucao_sistema, model=model)
+    raise IAError(f"IA_PROVIDER '{provider}' desconhecido -- use 'gemini' ou 'openai'.")
 
 
 def _montar_prompt(texto: str, quantidade: int) -> str:
@@ -243,7 +355,7 @@ def gerar_quiz(cards: list[dict], user_id: int, db: Session) -> list[dict]:
     {card_id, question, correct, distractors, explanation}.
     Lança IAError (ou QuotaExceededError) se algo der errado.
     """
-    bruto = _chamar_gemini(_montar_prompt_quiz(cards), user_id, db)
+    bruto = _chamar_ia(_montar_prompt_quiz(cards), user_id, db)
 
     try:
         resultado = json.loads(_limpar_json(bruto))
@@ -279,7 +391,7 @@ def gerar_explicacoes(cards: list[dict], user_id: int, db: Session) -> list[dict
     {card_id, explanation}.
     Lança IAError (ou QuotaExceededError) se algo der errado.
     """
-    bruto = _chamar_gemini(_montar_prompt_revelar(cards), user_id, db)
+    bruto = _chamar_ia(_montar_prompt_revelar(cards), user_id, db)
 
     try:
         resultado = json.loads(_limpar_json(bruto))
@@ -305,7 +417,7 @@ def gerar_cards_completos(texto: str, quantidade: int, user_id: int, db: Session
     Gera cards com front, back, distractors e explanation em uma única chamada.
     Retorna lista de dicts com todas as chaves preenchidas.
     """
-    bruto = _chamar_gemini(_montar_prompt_completo(texto, quantidade), user_id, db, timeout=30)
+    bruto = _chamar_ia(_montar_prompt_completo(texto, quantidade), user_id, db, timeout=30)
 
     try:
         cards = json.loads(_limpar_json(bruto))
@@ -339,7 +451,7 @@ def gerar_cards(texto: str, quantidade: int, user_id: int, db: Session) -> list[
     Chama o Gemini e devolve uma lista de dicts: [{"front": ..., "back": ...}].
     Lança IAError se algo der errado.
     """
-    bruto = _chamar_gemini(_montar_prompt(texto, quantidade), user_id, db, timeout=20)
+    bruto = _chamar_ia(_montar_prompt(texto, quantidade), user_id, db, timeout=20)
 
     try:
         cards = json.loads(_limpar_json(bruto))

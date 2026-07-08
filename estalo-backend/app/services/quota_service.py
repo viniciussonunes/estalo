@@ -15,10 +15,11 @@ from sqlalchemy.orm import Session
 from app.models.user_quota import UserQuota
 
 # QuotaExceededError mora em app/services/ai.py (não aqui) -- é lá que
-# _chamar_gemini a levanta quando check_and_consume_tokens devolve False.
-# Deixá-la em ai.py evita import circular (ai.py já importa deste módulo)
-# e permite que ela subclasse IAError, reaproveitando o `except IAError`
-# que os routers já têm, sem precisar mexer em cada endpoint.
+# _chamar_ia (o Adaptador de provedor de IA) a levanta quando
+# check_and_consume_tokens devolve False. Deixá-la em ai.py evita import
+# circular (ai.py já importa deste módulo) e permite que ela subclasse
+# IAError, reaproveitando o `except IAError` que os routers já têm, sem
+# precisar mexer em cada endpoint.
 
 
 def _buscar_ou_criar(user_id: int, db: Session) -> UserQuota:
@@ -50,7 +51,7 @@ def reset_quotas_if_needed(user_id: int, db: Session) -> UserQuota:
 def check_and_consume_tokens(user_id: int, estimated_tokens: int, db: Session) -> bool:
     """Se o usuário ainda tem cota hoje, já debita estimated_tokens e
     retorna True. Se não tem, retorna False SEM debitar nada -- a chamada
-    que motivou a estimativa não deve ser feita (ver ai.py/_chamar_gemini).
+    que motivou a estimativa não deve ser feita (ver ai.py/_chamar_ia).
     """
     quota = reset_quotas_if_needed(user_id, db)
     if quota.daily_tokens_consumed + estimated_tokens > quota.daily_limit:
