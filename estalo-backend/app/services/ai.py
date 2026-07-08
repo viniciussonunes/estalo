@@ -53,44 +53,35 @@ def _estimar_tokens(prompt: str, instrucao_sistema: str | None = None) -> int:
     return math.ceil(total_chars / 4)
 
 
-def _chamar_gemini(
+def _chamar_gemini_raw(
     prompt: str,
-    user_id: int,
-    db: Session,
     timeout: int = 25,
     instrucao_sistema: str | None = None,
     model: str | None = None,
 ) -> str:
-    """Chama o Gemini e retorna o texto gerado. Tenta até 2 vezes em erros transitórios.
+    """Só a chamada HTTP ao Gemini, SEM quota-check -- extraída de
+    _chamar_gemini() (abaixo) pra poder ser reaproveitada por um
+    adaptador de provedor de IA (ver app/services/error_explanation_service.py)
+    que faz seu PRÓPRIO quota-check uma única vez antes de escolher pra
+    qual provedor despachar. Se essa função fizesse o quota-check
+    internamente, trocar de provedor ali arriscaria debitar a cota duas
+    vezes (uma no adaptador, outra aqui).
 
-    Orçamento de tempo pensado pra caber numa função serverless: 2 tentativas
-    de até `timeout`s cada, com 2s de espera entre elas — pior caso
-    ~2*timeout + 2s. Antes eram 3 tentativas de até 90s com backoff 2s/4s
-    (pior caso ~276s), o que estourava qualquer limite de duração de função
-    plausível bem antes da 3ª tentativa terminar.
+    Tenta até 2 vezes em erros transitórios. Orçamento de tempo pensado
+    pra caber numa função serverless: 2 tentativas de até `timeout`s
+    cada, com 2s de espera entre elas — pior caso ~2*timeout + 2s.
 
-    `instrucao_sistema`, quando informado, vai no campo `systemInstruction` da
-    própria API — separado de `contents` de propósito. É o que faz a persona
-    (tom, regras, formatação) ficar estável entre chamadas, sem competir com o
-    conteúdo específico de cada prompt nem precisar ser reforçada em cada um.
+    `instrucao_sistema`, quando informado, vai no campo `systemInstruction`
+    da própria API — separado de `contents` de propósito. É o que faz a
+    persona (tom, regras, formatação) ficar estável entre chamadas, sem
+    competir com o conteúdo específico de cada prompt.
 
     `model`, quando informado, sobrepõe settings.GEMINI_MODEL só nesta
     chamada — permite um serviço (ex: tutor_service) usar um modelo mais
     rápido/barato sem mudar o modelo padrão usado por gerar_cards/gerar_quiz.
-
-    `user_id`/`db` alimentam o Quota Manager (app/services/quota_service.py):
-    a estimativa de tokens é debitada da cota do usuário ANTES da chamada
-    HTTP -- se ele já estourou o limite diário, nem tentamos falar com o
-    Gemini (ver QuotaExceededError acima).
     """
     if not settings.GEMINI_API_KEY:
         raise IAError("Chave do Gemini não configurada. Preencha GEMINI_API_KEY no arquivo .env")
-
-    estimativa = _estimar_tokens(prompt, instrucao_sistema)
-    if not check_and_consume_tokens(user_id, estimativa, db):
-        raise QuotaExceededError(
-            "Limite diário de uso do Tutor/IA atingido. Tente novamente amanhã."
-        )
 
     url = GEMINI_URL.format(model=model or settings.GEMINI_MODEL)
     payload = {"contents": [{"parts": [{"text": prompt}]}]}
@@ -128,6 +119,34 @@ def _chamar_gemini(
             raise IAError("Resposta do Gemini veio em formato inesperado") from e
 
     raise IAError(f"Gemini indisponível após 2 tentativas ({ultimo_erro})")
+
+
+def _chamar_gemini(
+    prompt: str,
+    user_id: int,
+    db: Session,
+    timeout: int = 25,
+    instrucao_sistema: str | None = None,
+    model: str | None = None,
+) -> str:
+    """_chamar_gemini_raw() + Quota Manager. Mantida como está (assinatura
+    e comportamento inalterados) pra não quebrar quem já chama isso direto
+    (gerar_quiz, gerar_explicacoes, gerar_cards_completos, gerar_cards,
+    tutor_service.explicar_card) -- só o corpo da chamada HTTP em si foi
+    extraído pra _chamar_gemini_raw acima.
+
+    `user_id`/`db` alimentam o Quota Manager (app/services/quota_service.py):
+    a estimativa de tokens é debitada da cota do usuário ANTES da chamada
+    HTTP -- se ele já estourou o limite diário, nem tentamos falar com o
+    Gemini (ver QuotaExceededError acima).
+    """
+    estimativa = _estimar_tokens(prompt, instrucao_sistema)
+    if not check_and_consume_tokens(user_id, estimativa, db):
+        raise QuotaExceededError(
+            "Limite diário de uso do Tutor/IA atingido. Tente novamente amanhã."
+        )
+
+    return _chamar_gemini_raw(prompt, timeout=timeout, instrucao_sistema=instrucao_sistema, model=model)
 
 
 def _montar_prompt(texto: str, quantidade: int) -> str:

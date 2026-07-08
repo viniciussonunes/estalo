@@ -26,6 +26,17 @@ class Settings(BaseSettings):
     GEMINI_API_KEY: str = ""
     GEMINI_MODEL: str = "gemini-2.5-flash"
 
+    # Provedor de IA usado pelo Tutor Inteligente Evolutivo (ver
+    # app/services/error_explanation_service.py) -- "gemini" (padrão) ou
+    # "openai". Trocar é só mudar essa variável; a lógica de negócio
+    # (explicar_erro/refinar_explicacao) não sabe nem precisa saber qual
+    # dos dois está por trás.
+    IA_PROVIDER: str = "gemini"
+
+    # Só é lida/validada de verdade quando IA_PROVIDER=openai -- com
+    # Gemini ativo (padrão), pode ficar vazia sem travar nada.
+    OPENAI_API_KEY: str = ""
+
     # CORS — URL do frontend em produção (Vercel).
     # Localmente a origem http://localhost:5173 é sempre permitida.
     FRONTEND_URL: str = ""
