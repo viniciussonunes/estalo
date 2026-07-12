@@ -3,6 +3,7 @@ Junta todos os modelos num lugar só, pra o SQLAlchemy enxergar todos
 quando for criar as tabelas.
 """
 from app.models.card import Card
+from app.models.challenge import Challenge
 from app.models.deck import Deck
 from app.models.explanation_cache import ExplanationCache
 from app.models.explanation_log import ExplanationLog
@@ -17,5 +18,5 @@ from app.models.user_quota import UserQuota
 __all__ = [
     "User", "Folder", "Deck", "Card", "Review", "ReviewHistory",
     "StudySession", "ImportStagingCard", "UserQuota",
-    "ExplanationCache", "ExplanationLog",
+    "ExplanationCache", "ExplanationLog", "Challenge",
 ]
