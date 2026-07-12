@@ -1,0 +1,3 @@
+# Log de diagnóstico do scripts/pre_deploy.sh -- fica no disco só quando
+# o deploy falha (pra investigar), removido automaticamente no sucesso.
+.pre_deploy_last.log
