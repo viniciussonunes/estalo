@@ -11,7 +11,7 @@ from app.core.config import settings
 from app.core.database import Base, engine
 from app import models  # noqa: F401
 from app.models.card import calcular_content_hash
-from app.routers import admin, auth, folders, decks, cards, study, import_anki
+from app.routers import admin, auth, folders, decks, cards, study, import_anki, challenges
 
 # Precisa vir ANTES de tudo (inclusive de _migrar()/create_all() logo
 # abaixo) -- assim uma falha na migração no cold start também é capturada,
@@ -151,6 +151,7 @@ app.include_router(cards.router)
 app.include_router(study.router)
 app.include_router(import_anki.router)
 app.include_router(admin.router)
+app.include_router(challenges.router)
 
 
 @app.get("/")
