@@ -165,20 +165,8 @@ export const api = {
 
   excluirCard: (cardId) => request(`/cards/${cardId}`, { method: "DELETE" }),
 
-  // opcoesLeitura ({ languageLevel, answerLanguage }) ativa o modo Leitura
-  // em Inglês no backend (extrai vocabulário-em-contexto de um texto em
-  // inglês em vez de gerar flashcard genérico) -- omitido (undefined),
-  // comportamento de sempre. Os cards gerados voltam com source
-  // diferente ("ai_reading" vs "ai"), mas a forma da resposta é idêntica.
-  gerarCardsIA: (deckId, text, quantity, opcoesLeitura = {}) =>
-    request(`/decks/${deckId}/cards/generate`, {
-      method: "POST",
-      body: {
-        text, quantity,
-        language_level: opcoesLeitura.languageLevel,
-        answer_language: opcoesLeitura.answerLanguage,
-      },
-    }),
+  gerarCardsIA: (deckId, text, quantity) =>
+    request(`/decks/${deckId}/cards/generate`, { method: "POST", body: { text, quantity } }),
 
   gerarQuiz: (deckId) =>
     request(`/study/decks/${deckId}/quiz`, { method: "POST" }),

@@ -297,52 +297,6 @@ def _montar_prompt_completo(texto: str, quantidade: int) -> str:
     )
 
 
-# --- Leitura em Inglês (ver gerar_cards_leitura_ingles abaixo) -----------
-#
-# Objetivo diferente de _montar_prompt_completo: não é "extrair fatos de
-# um texto de estudo", é "treinar o vocabulário/estrutura de UM texto em
-# inglês específico até ele ficar fácil de ler". Por isso cada 'front' é
-# obrigatoriamente uma frase literal do texto (nunca inventada) -- o
-# aluno precisa reconhecer exatamente o que vai encontrar quando for ler
-# o texto de verdade depois.
-
-def _montar_prompt_leitura_ingles(
-    texto: str, quantidade: int, nivel: str, idioma_resposta: str,
-) -> str:
-    idioma_desc = "português" if idioma_resposta == "pt" else "inglês"
-    return (
-        "Você é um professor de inglês especializado em ensinar leitura através "
-        "de vocabulário em contexto. Vai receber um texto em inglês (pode ser "
-        "longo -- um artigo, uma página) e deve identificar até "
-        f"{quantidade} palavras ou expressões que provavelmente dificultam a "
-        f"leitura pra um aluno de nível CEFR {nivel}.\n\n"
-        "Escolha as de MAIOR IMPACTO pra compreensão, espalhadas pelo texto "
-        "INTEIRO (não só do início) -- evite palavras triviais demais ou raras "
-        f"demais pro nível {nivel}. O objetivo não é cobrir toda palavra difícil, "
-        "é montar uma sessão de treino curada com o que mais vai destravar a "
-        "leitura desse texto específico.\n\n"
-        "Para cada palavra/expressão escolhida, crie uma questão de múltipla escolha:\n"
-        "1. 'front': uma pergunta no formato 'In the sentence \"<frase EXATA do "
-        "texto onde a palavra aparece>\", what does '<palavra ou expressão>' "
-        "mean?' -- a frase entre aspas tem que ser um trecho LITERAL do texto "
-        "original, nunca inventada ou parafraseada. Não use markdown/negrito "
-        "pra marcar a palavra -- ela já fica identificada por estar entre "
-        "aspas simples na pergunta.\n"
-        f"2. 'back': o significado correto da palavra/expressão NESSE contexto "
-        f"específico, em {idioma_desc}.\n"
-        "3. 'distractors': lista de EXATAMENTE 3 alternativas incorretas mas "
-        f"plausíveis (outros significados possíveis da palavra, ou termos "
-        f"parecidos), também em {idioma_desc}.\n"
-        f"4. 'explanation': 1-2 frases em {idioma_desc} explicando por que esse é "
-        "o significado certo NESSE contexto (não o significado genérico da "
-        "palavra fora de contexto).\n\n"
-        "Regras:\n"
-        "- Responda APENAS com um array JSON válido, sem texto antes ou depois, sem markdown ao redor do JSON.\n"
-        '- Formato exato: [{"front":"...","back":"...","distractors":["...","...","..."],"explanation":"..."}]\n\n'
-        f"TEXTO:\n{texto}"
-    )
-
-
 def _limpar_json(bruto: str) -> str:
     """
     Às vezes a IA embrulha o JSON em ```json ... ```. Tira essa casca
@@ -488,60 +442,6 @@ def gerar_cards_completos(texto: str, quantidade: int, user_id: int, db: Session
 
     if not validos:
         raise IAError("A IA não gerou cards válidos com a estrutura completa")
-
-    return validos
-
-
-def gerar_cards_leitura_ingles(
-    texto: str, quantidade: int, nivel: str, idioma_resposta: str, user_id: int, db: Session,
-) -> list[dict]:
-    """
-    Leitura em Inglês: extrai até `quantidade` palavras/expressões de maior
-    impacto pra leitura de um texto em inglês (`texto`, até 12.000 chars --
-    ver GenerateRequest.text), calibradas pro nível CEFR `nivel`, e devolve
-    questões de múltipla escolha no MESMO formato de gerar_cards_completos
-    (front/back/distractors/explanation) -- é o que permite ao chamador
-    (cards.py) persistir o resultado como Card comum, sem nenhuma tabela
-    ou motor de revisão novo: entra direto no SM-2/Modo Aprender/Fila
-    Única que já existem.
-
-    Único ponto de divergência de gerar_cards_completos: aqui 'front' é
-    pedido no prompt como uma pergunta que embute a frase literal do
-    texto original entre aspas (nunca inventada), não markdown/negrito --
-    nada no app (Cards.jsx, Aprender.jsx, Estudo.jsx) renderiza markdown
-    no front/back de um Card, só texto puro, então **negrito** apareceria
-    como asterisco literal na tela. Não há checagem de string no código
-    pra "é mesmo um trecho literal" -- a validação aqui se limita, como
-    em gerar_cards_completos, ao formato JSON.
-    """
-    bruto = _chamar_ia(
-        _montar_prompt_leitura_ingles(texto, quantidade, nivel, idioma_resposta),
-        user_id, db, timeout=30,
-    )
-
-    try:
-        cards = json.loads(_limpar_json(bruto))
-    except json.JSONDecodeError as e:
-        raise IAError("A IA não devolveu um JSON válido") from e
-
-    validos = []
-    for c in cards:
-        if not isinstance(c, dict):
-            continue
-        if not all(k in c for k in ("front", "back", "distractors", "explanation")):
-            continue
-        distractors = c["distractors"]
-        if not isinstance(distractors, list) or len(distractors) < 3:
-            continue
-        validos.append({
-            "front":        str(c["front"]),
-            "back":         str(c["back"]),
-            "distractors":  [str(d) for d in distractors[:3]],
-            "explanation":  str(c["explanation"]),
-        })
-
-    if not validos:
-        raise IAError("A IA não gerou questões de leitura válidas")
 
     return validos
 
