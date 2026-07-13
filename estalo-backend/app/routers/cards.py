@@ -7,7 +7,7 @@ from app.models import Card, Deck, Review
 from app.models.card import calcular_content_hash
 from app.schemas.ai import GenerateRequest
 from app.schemas.card import CardCreate, CardOut, CardUpdate
-from app.services.ai import IAError, gerar_cards_completos
+from app.services.ai import IAError, gerar_cards_completos, gerar_cards_leitura_ingles
 
 router = APIRouter(tags=["Cards"])
 
@@ -94,11 +94,26 @@ def gerar_cards_ia(
     """
     Gera cards completos com IA: front, back, 3 distratores e explicação.
     Tudo salvo no banco — o Modo Aprender carrega instantaneamente depois.
+
+    `language_level` presente no corpo ativa o modo Leitura em Inglês
+    (extrai vocabulário-em-contexto de um texto em inglês em vez de
+    fatos genéricos de um texto de estudo) -- mesmo endpoint, mesmo
+    formato de Card gerado, só o prompt por trás muda (ver
+    gerar_cards_leitura_ingles em app/services/ai.py). Ausente (default),
+    comportamento de sempre.
     """
     _deck_do_usuario(deck_id, user_id, db)
 
     try:
-        gerados = gerar_cards_completos(dados.text, dados.quantity, user_id, db)
+        if dados.language_level:
+            gerados = gerar_cards_leitura_ingles(
+                dados.text, dados.quantity, dados.language_level,
+                dados.answer_language, user_id, db,
+            )
+            source = "ai_reading"
+        else:
+            gerados = gerar_cards_completos(dados.text, dados.quantity, user_id, db)
+            source = "ai"
     except IAError as e:
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(e))
 
@@ -108,7 +123,7 @@ def gerar_cards_ia(
             back=g["back"],
             options=g["distractors"],
             explanation=g["explanation"],
-            source="ai",
+            source=source,
             deck_id=deck_id,
             content_hash=calcular_content_hash(g["front"], g["back"]),
         )
