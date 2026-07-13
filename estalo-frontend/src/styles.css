@@ -743,40 +743,6 @@ body {
   margin-right: auto;
 }
 
-/* ---------- Modo de Estudo (Flashcards vs Inglês Ativo) ---------- */
-.modo-estudo-selector { margin-bottom: 1.5rem; }
-.modo-estudo-label {
-  display: block;
-  font-size: 0.85rem;
-  font-weight: 500;
-  margin-bottom: 0.5rem;
-  color: var(--tinta-suave);
-}
-.abas-modo-estudo .aba { padding: 0.75rem; font-size: 0.98rem; font-weight: 600; }
-
-/* ---------- Leitura em Inglês ---------- */
-.leitura-ingles-intro {
-  color: var(--tinta-suave);
-  font-size: 0.92rem;
-  line-height: 1.5;
-  margin-bottom: 1rem;
-}
-.campo-contador {
-  display: block;
-  text-align: right;
-  font-size: 0.78rem;
-  color: var(--tinta-suave);
-  margin-top: 0.3rem;
-}
-.leitura-ingles-opcoes {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.75rem;
-  align-items: flex-end;
-}
-.leitura-ingles-opcoes .campo { flex: 1; min-width: 160px; margin-bottom: 0; }
-.leitura-ingles-opcoes .ordenacao-select { width: 100%; padding-top: 0.65rem; padding-bottom: 0.65rem; }
-
 /* ---------- Cabeçalho da tela de estudo ---------- */
 .topo-esquerda { display: flex; align-items: center; gap: 0.75rem; }
 .estudo-deck-nome {

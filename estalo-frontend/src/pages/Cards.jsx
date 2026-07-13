@@ -292,7 +292,7 @@ export default function Cards({ deck, aoVoltar, aoEstudar, aoAprender, aoRevelar
                     <p className="item-card-verso">{c.back}</p>
                   </div>
                   <div className="item-card-rodape">
-                    {(c.source === "ai" || c.source === "ai_reading") && <span className="badge-ia">✨ IA</span>}
+                    {c.source === "ai" && <span className="badge-ia">✨ IA</span>}
                     <div className="item-card-acoes">
                       <button className="icone-acao" onClick={() => iniciarEdicao(c)} title="Editar">
                         <IcoPencil />
