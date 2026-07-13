@@ -119,8 +119,7 @@
 }
 .tema-escuro .estudo-concluido-icone,
 .tema-escuro .nota-bom,
-.tema-escuro .badge-ia,
-.tema-escuro .mentor-chip {
+.tema-escuro .badge-ia {
   background: var(--violeta-suave);
 }
 .tema-escuro .nota-dificil { background: var(--violeta-suave); color: var(--violeta); }
@@ -755,87 +754,28 @@ body {
 }
 .abas-modo-estudo .aba { padding: 0.75rem; font-size: 0.98rem; font-weight: 600; }
 
-/* ---------- Mentor de Inglês Ativo ---------- */
-.mentor-ingles-form { display: flex; flex-direction: column; gap: 1rem; }
-.mentor-ingles-intro { color: var(--tinta-suave); font-size: 0.92rem; line-height: 1.5; }
-.mentor-ingles-nivel { max-width: 260px; }
-.mentor-ingles-nivel .ordenacao-select { width: 100%; padding-top: 0.65rem; padding-bottom: 0.65rem; }
-
-/* Componente de feedback: pensado pra textos curtos legíveis de relance --
-   a tentativa do aluno fica discreta (itálico, tinta suave, nunca riscada
-   -- riscar soaria punitivo, quebra o tom encorajador pedido), a correção
-   é o elemento que mais chama atenção (mesmo par borda/fundo verde que
-   .quiz-opcao.correta já usa em outras telas pra "resposta certa"), e
-   collocations viram chips pequenos e escaneáveis em vez de texto corrido. */
-.mentor-ingles-card { display: flex; flex-direction: column; gap: 0.6rem; }
-.mentor-ingles-label {
+/* ---------- Leitura em Inglês ---------- */
+.leitura-ingles-intro {
+  color: var(--tinta-suave);
+  font-size: 0.92rem;
+  line-height: 1.5;
+  margin-bottom: 1rem;
+}
+.campo-contador {
   display: block;
-  font-size: 0.7rem;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--tinta-suave);
-  margin-bottom: 0.2rem;
-}
-.mentor-ingles-tentativa {
-  color: var(--tinta-suave);
-  font-size: 0.95rem;
-  font-style: italic;
-  line-height: 1.5;
-}
-.mentor-ingles-correcao {
-  border: 1px solid #2d8a4e;
-  background: var(--verde-suave);
-  border-radius: 9px;
-  padding: 0.65rem 0.85rem;
-  font-size: 1rem;
-  font-weight: 600;
-  line-height: 1.5;
-  color: var(--tinta);
-}
-.mentor-ingles-correcao .mentor-ingles-label { color: #2d8a4e; }
-.mentor-ingles-collocations { display: flex; flex-wrap: wrap; gap: 0.4rem; }
-.mentor-chip {
+  text-align: right;
   font-size: 0.78rem;
-  font-weight: 600;
-  color: var(--violeta);
-  background: #ede9ff;
-  border-radius: 999px;
-  padding: 0.25rem 0.65rem;
-}
-.mentor-ingles-porque { color: var(--tinta-suave); font-size: 0.88rem; line-height: 1.55; }
-
-/* ---------- Painel de preview de challenges (Confirmar e Salvar) ---------- */
-.challenge-preview-skeleton { height: 110px; margin-top: 0.75rem; }
-.challenge-preview-painel {
-  background: var(--superficie);
-  border: 1px solid var(--borda);
-  border-radius: var(--raio);
-  padding: 1.25rem;
-  margin-top: 1.5rem;
-  animation: fadeIn 0.18s ease both;
-}
-.challenge-preview-header { display: flex; align-items: center; gap: 0.6rem; margin-bottom: 1rem; }
-.challenge-preview-titulo { font-size: 1.05rem; font-weight: 700; }
-.challenge-preview-lista { list-style: none; display: grid; gap: 0.75rem; margin-bottom: 1rem; }
-.challenge-preview-item { position: relative; padding-right: 2.75rem; }
-.challenge-preview-item .linha-card-remover { position: absolute; top: 0.6rem; right: 0.6rem; }
-.challenge-preview-explicacao {
   color: var(--tinta-suave);
-  font-size: 0.88rem;
-  line-height: 1.5;
-  border-top: 1px solid var(--borda);
-  padding-top: 0.5rem;
-  margin-top: 0.6rem;
+  margin-top: 0.3rem;
 }
-.challenge-preview-sucesso {
-  color: #2d8a4e;
-  background: var(--verde-suave);
-  border-radius: 9px;
-  padding: 0.6rem 0.8rem;
-  font-size: 0.88rem;
-  margin-top: 1.5rem;
+.leitura-ingles-opcoes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: flex-end;
 }
+.leitura-ingles-opcoes .campo { flex: 1; min-width: 160px; margin-bottom: 0; }
+.leitura-ingles-opcoes .ordenacao-select { width: 100%; padding-top: 0.65rem; padding-bottom: 0.65rem; }
 
 /* ---------- Cabeçalho da tela de estudo ---------- */
 .topo-esquerda { display: flex; align-items: center; gap: 0.75rem; }

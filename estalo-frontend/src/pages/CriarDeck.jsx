@@ -8,6 +8,13 @@ const MSGS_IA = [
   "Finalizando a formatação dos cards...",
 ];
 
+const MSGS_LEITURA = [
+  "Lendo o texto...",
+  "Identificando o vocabulário que mais trava a leitura...",
+  "Montando questões de contexto...",
+  "Preparando sua sessão de treino...",
+];
+
 const NIVEIS_CEFR = [
   { valor: "A1", label: "A1 — Iniciante" },
   { valor: "A2", label: "A2 — Básico" },
@@ -17,42 +24,22 @@ const NIVEIS_CEFR = [
   { valor: "C2", label: "C2 — Proficiente" },
 ];
 
-// Componente de feedback do Mentor de Inglês Ativo — content vem sempre
-// no formato {student_attempt, native_correction, why, collocations}
-// (ver PERSONA_MENTOR_INGLES em challenge_service.py, backend). Pensado
-// pra textos curtos e legíveis de relance: a tentativa fica discreta, a
-// correção é o elemento que mais chama atenção, collocations viram chips.
-function renderMentorIngles(content) {
-  return (
-    <div className="mentor-ingles-card">
-      <p className="mentor-ingles-tentativa">
-        <span className="mentor-ingles-label">Você escreveu</span>
-        {content.student_attempt}
-      </p>
-      <p className="mentor-ingles-correcao">
-        <span className="mentor-ingles-label">✓ Um nativo diria</span>
-        {content.native_correction}
-      </p>
-      {Array.isArray(content.collocations) && content.collocations.length > 0 && (
-        <div className="mentor-ingles-collocations">
-          {content.collocations.map((c, i) => (
-            <span key={i} className="mentor-chip">{c}</span>
-          ))}
-        </div>
-      )}
-      <p className="mentor-ingles-porque">{content.why}</p>
-    </div>
-  );
-}
+const IDIOMAS_RESPOSTA = [
+  { valor: "pt", label: "Português" },
+  { valor: "en", label: "Inglês" },
+];
+
+const LIMITE_TEXTO_LEITURA = 12_000;
 
 export default function CriarDeck({ pastaId, aoVoltar, aoVerCards }) {
   const [nome, setNome] = useState("");
   const [descricao, setDescricao] = useState("");
 
   // Modo de Estudo: 'flashcards' (fluxo original, intocado) ou 'ingles'
-  // (Mentor de Inglês Ativo) — são dois motores de conteúdo totalmente
-  // isolados por baixo (ver challenge_service.py), essa é só a escolha
-  // de qual o usuário quer usar nesta sessão de criação.
+  // (Leitura em Inglês) — dois motores de conteúdo isolados só na forma
+  // de gerar (prompts diferentes em ai.py); o resultado dos dois é
+  // sempre um Card comum, salvo do mesmo jeito, revisável no mesmo
+  // Modo Aprender.
   const [modoEstudo, setModoEstudo] = useState("flashcards");
 
   const [modo, setModo] = useState("manual"); // "manual" | "ia" (dentro de Flashcards)
@@ -60,47 +47,34 @@ export default function CriarDeck({ pastaId, aoVoltar, aoVerCards }) {
   // Modo manual: linhas dinâmicas
   const [linhas, setLinhas] = useState([{ frente: "", verso: "" }]);
 
-  // Modo IA
+  // Modo IA (flashcards genéricos)
   const [textoIA, setTextoIA] = useState("");
   const [qtdIA, setQtdIA] = useState(5);
 
-  // Mentor de Inglês Ativo
-  const [tentativaIngles, setTentativaIngles] = useState("");
-  const [nivelIngles, setNivelIngles] = useState("B1");
-  const [previewChallenges, setPreviewChallenges] = useState([]);
-  const [isLoadingPreview, setIsLoadingPreview] = useState(false);
-  const [salvandoChallenges, setSalvandoChallenges] = useState(false);
-  const [challengesSalvos, setChallengesSalvos] = useState(0);
+  // Leitura em Inglês
+  const [textoLeitura, setTextoLeitura] = useState("");
+  const [nivelLeitura, setNivelLeitura] = useState("B1");
+  const [idiomaResposta, setIdiomaResposta] = useState("pt");
+  const [qtdLeitura, setQtdLeitura] = useState(10);
 
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState("");
   const [msgIA, setMsgIA] = useState(MSGS_IA[0]);
   const msgIAIdx = useRef(0);
 
-  // O deck precisa existir (com id de verdade) antes de gerar ou salvar
-  // qualquer challenge — Challenge.deck_id é obrigatório e validado por
-  // dono no backend. Criado sob demanda (1ª correção do Mentor, ou no
-  // submit do formulário, o que vier primeiro) e reaproveitado depois —
-  // nunca duas vezes pro mesmo rascunho.
-  const deckCriadoRef = useRef(null);
-
-  async function garantirDeck() {
-    if (deckCriadoRef.current) return deckCriadoRef.current;
-    const deck = await api.criarDeck(nome.trim(), descricao.trim() || null, pastaId);
-    deckCriadoRef.current = deck;
-    return deck;
-  }
+  const gerandoPorIA = modoEstudo === "ingles" || modo === "ia";
 
   useEffect(() => {
-    if (!salvando || modo !== "ia") return;
-    setMsgIA(MSGS_IA[0]);
+    if (!salvando || !gerandoPorIA) return;
+    const msgs = modoEstudo === "ingles" ? MSGS_LEITURA : MSGS_IA;
+    setMsgIA(msgs[0]);
     msgIAIdx.current = 0;
     const id = setInterval(() => {
-      msgIAIdx.current = (msgIAIdx.current + 1) % MSGS_IA.length;
-      setMsgIA(MSGS_IA[msgIAIdx.current]);
+      msgIAIdx.current = (msgIAIdx.current + 1) % msgs.length;
+      setMsgIA(msgs[msgIAIdx.current]);
     }, 2500);
     return () => clearInterval(id);
-  }, [salvando, modo]);
+  }, [salvando, modoEstudo, gerandoPorIA]);
 
   function addLinha() {
     setLinhas(l => [...l, { frente: "", verso: "" }]);
@@ -121,16 +95,16 @@ export default function CriarDeck({ pastaId, aoVoltar, aoVerCards }) {
     setSalvando(true);
     setErro("");
     try {
-      // garantirDeck() em vez de api.criarDeck() direto: se o usuário já
-      // gerou alguma correção do Mentor antes de dar submit, o deck já
-      // existe (deckCriadoRef) e é reaproveitado — sem isso, criaríamos
-      // um segundo deck vazio e deixaríamos o primeiro (com os challenges
-      // salvos) órfão do formulário. Em modoEstudo="ingles", `modo`
-      // nunca sai de "manual" e `linhas` fica vazia — o submit principal
-      // só cria o deck, sem duplicar nada do fluxo de inglês.
-      const deck = await garantirDeck();
+      const deck = await api.criarDeck(nome.trim(), descricao.trim() || null, pastaId);
 
-      if (modo === "manual") {
+      if (modoEstudo === "ingles") {
+        if (textoLeitura.trim()) {
+          await api.gerarCardsIA(deck.id, textoLeitura.trim(), qtdLeitura, {
+            languageLevel: nivelLeitura,
+            answerLanguage: idiomaResposta,
+          });
+        }
+      } else if (modo === "manual") {
         const validos = linhas.filter(l => l.frente.trim() && l.verso.trim());
         for (const l of validos) {
           await api.criarCard(deck.id, l.frente.trim(), l.verso.trim());
@@ -144,51 +118,6 @@ export default function CriarDeck({ pastaId, aoVoltar, aoVerCards }) {
       setErro(err.message);
     } finally {
       setSalvando(false);
-    }
-  }
-
-  async function handleCorrigirIngles() {
-    if (!nome.trim() || !tentativaIngles.trim()) return;
-    setIsLoadingPreview(true);
-    setErro("");
-    try {
-      const deck = await garantirDeck();
-      const pedido = {
-        deck_id: deck.id,
-        raw_content: tentativaIngles.trim(),
-        type: "ENGLISH_TUTOR",
-        language_level: nivelIngles,
-      };
-      const preview = await api.generateChallengePreview(pedido);
-      setPreviewChallenges(lista => [...lista, { chave: crypto.randomUUID(), pedido, preview }]);
-      // Limpa o campo pra próxima tentativa — fluxo de prática rápida,
-      // tipo chat: escreve, corrige, escreve de novo, sem re-digitar.
-      setTentativaIngles("");
-    } catch (err) {
-      setErro(err.message);
-    } finally {
-      setIsLoadingPreview(false);
-    }
-  }
-
-  function removerPreviewChallenge(chave) {
-    setPreviewChallenges(lista => lista.filter(item => item.chave !== chave));
-  }
-
-  async function handleConfirmarChallenges() {
-    if (previewChallenges.length === 0) return;
-    setSalvandoChallenges(true);
-    setErro("");
-    try {
-      for (const item of previewChallenges) {
-        await api.saveChallenge(item.pedido);
-      }
-      setChallengesSalvos(n => n + previewChallenges.length);
-      setPreviewChallenges([]);
-    } catch (err) {
-      setErro(err.message);
-    } finally {
-      setSalvandoChallenges(false);
     }
   }
 
@@ -251,44 +180,63 @@ export default function CriarDeck({ pastaId, aoVoltar, aoVerCards }) {
           {erro && <p className="erro">{erro}</p>}
 
           {modoEstudo === "ingles" ? (
-            /* ---------- Mentor de Inglês Ativo ---------- */
-            <div className="cards-criar mentor-ingles-form">
-              <p className="mentor-ingles-intro">
-                Escreva uma frase em inglês do jeito que você diria naturalmente — o Mentor
-                mostra como um nativo diria e explica o porquê, com foco em collocations e
-                gramática no contexto, não em tradução mecânica.
+            /* ---------- Leitura em Inglês ---------- */
+            <div className="cards-criar">
+              <p className="leitura-ingles-intro">
+                Cole um texto em inglês — um artigo, um trecho de página, o que você quiser
+                conseguir ler com mais facilidade — e a IA monta questões de vocabulário a
+                partir das frases reais desse texto. Treinando elas, a leitura desse texto
+                específico fica mais fácil.
               </p>
               <div className="form-card">
                 <label className="campo">
-                  <span>O que você tentou dizer em inglês?</span>
+                  <span>Cole o texto que você quer treinar</span>
                   <textarea
-                    value={tentativaIngles}
-                    onChange={(e) => setTentativaIngles(e.target.value)}
-                    placeholder="Ex: I are happy to see you yesterday"
-                    rows={3}
+                    value={textoLeitura}
+                    onChange={(e) => setTextoLeitura(e.target.value.slice(0, LIMITE_TEXTO_LEITURA))}
+                    placeholder="Cole aqui um artigo, uma página, ou qualquer texto em inglês…"
+                    rows={14}
                   />
+                  <span className="campo-contador">
+                    {textoLeitura.length.toLocaleString("pt-BR")} / {LIMITE_TEXTO_LEITURA.toLocaleString("pt-BR")} caracteres
+                  </span>
                 </label>
-                <label className="campo mentor-ingles-nivel">
-                  <span>Seu nível (CEFR)</span>
-                  <select
-                    className="ordenacao-select"
-                    value={nivelIngles}
-                    onChange={(e) => setNivelIngles(e.target.value)}
-                  >
-                    {NIVEIS_CEFR.map(n => (
-                      <option key={n.valor} value={n.valor}>{n.label}</option>
-                    ))}
-                  </select>
-                </label>
-                <button
-                  type="button"
-                  className="botao-principal"
-                  disabled={isLoadingPreview || !nome.trim() || !tentativaIngles.trim()}
-                  onClick={handleCorrigirIngles}
-                >
-                  {isLoadingPreview ? "Corrigindo…" : "✨ Corrigir com o Mentor"}
-                </button>
-                {isLoadingPreview && <div className="skeleton challenge-preview-skeleton" />}
+                <div className="leitura-ingles-opcoes">
+                  <label className="campo">
+                    <span>Seu nível (CEFR)</span>
+                    <select
+                      className="ordenacao-select"
+                      value={nivelLeitura}
+                      onChange={(e) => setNivelLeitura(e.target.value)}
+                    >
+                      {NIVEIS_CEFR.map(n => (
+                        <option key={n.valor} value={n.valor}>{n.label}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="campo">
+                    <span>Idioma da resposta</span>
+                    <select
+                      className="ordenacao-select"
+                      value={idiomaResposta}
+                      onChange={(e) => setIdiomaResposta(e.target.value)}
+                    >
+                      {IDIOMAS_RESPOSTA.map(i => (
+                        <option key={i.valor} value={i.valor}>{i.label}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="campo campo-inline">
+                    <span>Quantidade de questões</span>
+                    <input
+                      type="number"
+                      min={1}
+                      max={30}
+                      value={qtdLeitura}
+                      onChange={(e) => setQtdLeitura(Number(e.target.value))}
+                    />
+                  </label>
+                </div>
               </div>
             </div>
           ) : (
@@ -380,56 +328,10 @@ export default function CriarDeck({ pastaId, aoVoltar, aoVerCards }) {
             disabled={salvando || !nome.trim()}
           >
             {salvando
-              ? (modo === "ia" ? msgIA : "Criando…")
+              ? (gerandoPorIA ? msgIA : "Criando…")
               : "Criar deck"}
           </button>
         </form>
-
-        {/* Painel de correções do Mentor — fora do <form> de propósito, é
-            uma ação separada (Confirmar e Salvar) do submit principal do
-            deck, e persiste mesmo se o usuário trocar de Modo de Estudo. */}
-        {previewChallenges.length > 0 && (
-          <section className="challenge-preview-painel">
-            <div className="challenge-preview-header">
-              <h2 className="challenge-preview-titulo">Correções do Mentor</h2>
-              <span className="badge-ia">✨ IA</span>
-            </div>
-
-            <ul className="challenge-preview-lista">
-              {previewChallenges.map(item => (
-                <li key={item.chave} className="item-card challenge-preview-item">
-                  <button
-                    type="button"
-                    className="linha-card-remover"
-                    onClick={() => removerPreviewChallenge(item.chave)}
-                    title="Remover"
-                  >
-                    ×
-                  </button>
-                  {renderMentorIngles(item.preview.content)}
-                  <p className="challenge-preview-explicacao">{item.preview.explanation}</p>
-                </li>
-              ))}
-            </ul>
-
-            <button
-              type="button"
-              className="botao-principal"
-              disabled={salvandoChallenges}
-              onClick={handleConfirmarChallenges}
-            >
-              {salvandoChallenges ? "Salvando…" : `Confirmar e Salvar (${previewChallenges.length})`}
-            </button>
-          </section>
-        )}
-
-        {challengesSalvos > 0 && previewChallenges.length === 0 && (
-          <p className="challenge-preview-sucesso">
-            {challengesSalvos} correç{challengesSalvos !== 1 ? "ões salvas" : "ão salva"} no deck.
-            {/* Sem link direto pra "ver desafios" -- Cards.jsx ainda não exibe
-                Challenge, só Card (ver backlog). */}
-          </p>
-        )}
       </main>
     </div>
   );

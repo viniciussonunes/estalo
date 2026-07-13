@@ -165,8 +165,20 @@ export const api = {
 
   excluirCard: (cardId) => request(`/cards/${cardId}`, { method: "DELETE" }),
 
-  gerarCardsIA: (deckId, text, quantity) =>
-    request(`/decks/${deckId}/cards/generate`, { method: "POST", body: { text, quantity } }),
+  // opcoesLeitura ({ languageLevel, answerLanguage }) ativa o modo Leitura
+  // em Inglês no backend (extrai vocabulário-em-contexto de um texto em
+  // inglês em vez de gerar flashcard genérico) -- omitido (undefined),
+  // comportamento de sempre. Os cards gerados voltam com source
+  // diferente ("ai_reading" vs "ai"), mas a forma da resposta é idêntica.
+  gerarCardsIA: (deckId, text, quantity, opcoesLeitura = {}) =>
+    request(`/decks/${deckId}/cards/generate`, {
+      method: "POST",
+      body: {
+        text, quantity,
+        language_level: opcoesLeitura.languageLevel,
+        answer_language: opcoesLeitura.answerLanguage,
+      },
+    }),
 
   gerarQuiz: (deckId) =>
     request(`/study/decks/${deckId}/quiz`, { method: "POST" }),
@@ -202,30 +214,4 @@ export const api = {
       method: "POST",
       body: { alternativa_escolhida: alternativaEscolhida, positivo, motivo },
     }),
-
-  // --- Challenges (tabela paralela a cards — ver
-  // estalo-backend/app/routers/challenges.py). Hoje usada principalmente
-  // pelo Mentor de Inglês Ativo (type default "ENGLISH_TUTOR" no
-  // backend), mas o motor por trás é genérico.
-  //
-  // As duas funções abaixo batem no MESMO endpoint (POST /challenges/generate),
-  // só variando preview_only. `payload` é sempre
-  // { deck_id, raw_content, type?, depth?, language_level? }.
-  //
-  // generateChallengePreview nomeada em inglês por pedido explícito —
-  // única exceção ao padrão em português do resto deste arquivo, mantida
-  // assim de propósito em vez de "corrigida" pra consistência.
-
-  // preview_only=true: a IA gera e o backend valida o schema, mas nada é
-  // persistido — id/created_at voltam null na resposta (ver ChallengeResponse).
-  generateChallengePreview: (payload) =>
-    request("/challenges/generate", { method: "POST", body: { ...payload, preview_only: true } }),
-
-  // preview_only=false: persiste de verdade. Importante — isto chama a IA
-  // de NOVO com o mesmo payload (o preview nunca fica salvo em lugar
-  // nenhum entre as duas chamadas), então o conteúdo confirmado pode sair
-  // ligeiramente diferente do que apareceu no preview — a IA não é 100%
-  // determinística entre duas chamadas com o mesmo prompt.
-  saveChallenge: (payload) =>
-    request("/challenges/generate", { method: "POST", body: { ...payload, preview_only: false } }),
 };
