@@ -16,7 +16,10 @@ const QUALITY_ERREI_PADRAO = 1;
 // interval igual, ver sm2.py), só varia o tamanho da queda do
 // ease_factor conforme a gravidade. Nunca promove um "Errei" auto-
 // reportado pra faixa de "acertou" (>=3) -- respeitar a autoavaliação
-// do usuário importa mais que a nuance da IA.
+// do usuário importa mais que a nuance da IA. "correto" fica de fora
+// deste mapa de propósito: se o usuário clica "Errei" mesmo depois da IA
+// confirmar que acertou (autoavaliação contradiz o feedback), cai no
+// QUALITY_ERREI_PADRAO -- não é um caso que vale um valor dedicado.
 const QUALITY_POR_TIPO_ERRO = {
   omissao: 2,          // faltou um detalhe -- queda leve
   imprecisao: 1,        // mesmo peso do "Errei" padrão
@@ -24,9 +27,14 @@ const QUALITY_POR_TIPO_ERRO = {
 };
 
 // Linha de abertura em linguagem natural pro feedback -- em vez de expor
-// a categoria crua (omissao/imprecisao/erro_conceitual) pro usuário, só a
-// telemetria do backend vê o valor técnico (ver routers/cards.py).
+// a categoria crua (correto/omissao/imprecisao/erro_conceitual) pro
+// usuário, só a telemetria do backend vê o valor técnico (ver
+// routers/cards.py). "correto" existe de propósito -- sem essa entrada, um
+// acerto de verdade (até idêntico à resposta) saía sem NENHUMA confirmação
+// visual, só a explicação solta, o que pareceria o tutor não reconhecendo
+// o acerto.
 const TIPO_ERRO_MENSAGEM = {
+  correto: "Isso mesmo! 🎯",
   omissao: "Quase lá — faltou só uma parte.",
   imprecisao: "No caminho certo, mas vale afinar.",
   erro_conceitual: "Vale revisitar esse conceito com calma.",

@@ -163,20 +163,31 @@ def explicar_conceito_breve(
     )
 
 
-# --- Análise de tentativa de resposta (preparação de motor) --------------
+# --- Análise de tentativa de resposta -------------------------------------
 #
-# Ainda sem endpoint/UI -- ver docstring do módulo. Existe pra já deixar a
-# classificação de erro testável e pronta antes de uma tela que capture a
-# tentativa do usuário existir de verdade.
-
-_TIPOS_ERRO_VALIDOS = {"omissao", "imprecisao", "erro_conceitual"}
+# "correto" existe como categoria de propósito -- achado num teste real:
+# sem essa saída, o prompt forçava a IA a escolher entre 3 tipos de ERRO
+# mesmo quando a tentativa do aluno era idêntica à resposta certa, porque
+# não havia opção pra dizer "está certo". Um tutor que nunca confirma o
+# acerto (e ainda inventa uma lacuna que não existe só pra ter algo a
+# dizer) é pior que não dar feedback nenhum -- reconhecer o acerto é parte
+# do "ser reflexivo", não um caso à parte de menor prioridade.
+_TIPOS_ERRO_VALIDOS = {"correto", "omissao", "imprecisao", "erro_conceitual"}
 
 PERSONA_ANALISE_FEEDBACK = """\
-Você é um tutor que analisa a tentativa de resposta de um aluno antes de \
-explicar o que ele errou -- não corrige só "certo/errado", entende O TIPO \
-de erro primeiro.
+Você é um tutor que analisa a tentativa de resposta de um aluno -- primeiro \
+CONFIRMA se ela está certa antes de procurar qualquer defeito. Nunca invente \
+uma lacuna que não existe só pra ter algo a apontar; reconhecer um acerto de \
+verdade é tão parte do seu trabalho quanto corrigir um erro.
 
-Passo 1 -- CLASSIFIQUE o erro em exatamente uma destas três categorias:
+Passo 1 -- Compare a tentativa do aluno com a resposta correta pelo \
+CONTEÚDO, não pela forma exata das palavras (podem ser idênticas, \
+equivalentes com outras palavras, ou genuinamente diferentes). Classifique \
+em exatamente uma destas quatro categorias:
+- "correto": a tentativa captura a mesma ideia da resposta certa -- seja \
+literalmente igual, seja com outras palavras. Qualquer resposta que "bate" \
+com o conteúdo correto entra aqui, mesmo que não seja um espelho perfeito \
+da forma como foi escrita.
 - "omissao": o aluno deixou de mencionar uma parte importante da resposta \
 correta, mas o que ele disse não está errado, só incompleto.
 - "imprecisao": o aluno chegou perto do conceito certo, mas usou termos \
@@ -184,18 +195,24 @@ vagos, incompletos ou levemente equivocados.
 - "erro_conceitual": o aluno demonstra um entendimento fundamentalmente \
 errado do conceito, não apenas uma resposta incompleta ou imprecisa.
 
-Passo 2 -- identifique o "gap cognitivo": a lacuna de entendimento \
-ESPECÍFICA por trás do erro. Não repita a resposta correta aqui -- nomeie \
-o que exatamente o aluno não entendeu (ex: "confunde causa com efeito", \
-"não distingue os dois conceitos", "aplica a regra geral onde há uma \
-exceção").
+Passo 2 -- "gap cognitivo":
+- Se "correto": string vazia "" -- não existe lacuna pra nomear.
+- Se um dos três tipos de erro: a lacuna de entendimento ESPECÍFICA por \
+trás dele. Não repita a resposta correta aqui -- nomeie o que exatamente o \
+aluno não entendeu (ex: "confunde causa com efeito", "não distingue os \
+dois conceitos", "aplica a regra geral onde há uma exceção").
 
-Passo 3 -- escreva uma explicação curta (máximo 3 frases) corrigindo o \
-erro, com o TOM ajustado ao assunto (decida pelo contexto, nunca pergunte):
+Passo 3 -- escreva uma explicação curta (máximo 3 frases), com o TOM \
+ajustado ao assunto (decida pelo contexto, nunca pergunte):
 - Aprendizado de idioma (vocabulário, gramática, expressões): tom \
 pedagógico e encorajador.
 - Conteúdo técnico (TI, programação, conceitos técnicos em geral): tom \
 técnico e direto, sem rodeios.
+- Se "correto": confirme o acerto com entusiasmo genuíno mas breve, E \
+reforce O PORQUÊ está certo -- não é só "certo!", é "certo, porque X" \
+(reforça o conceito mesmo quando não há erro pra corrigir).
+- Se um dos três tipos de erro: corrija de fato, sem suavizar a ponto de \
+esconder que havia um problema.
 Pode destacar o termo-chave do conceito em **negrito** (markdown) dentro \
 do texto de "explicacao" -- só uma ou duas palavras/expressões, as mais \
 importantes pra quem for só bater o olho.
@@ -204,8 +221,8 @@ Responda com um objeto JSON válido, sem texto antes ou depois do objeto \
 em si, sem ```envolver o JSON``` em bloco de código, com EXATAMENTE estas \
 três chaves (o **negrito** do passo 3 acima vai DENTRO do valor de
 "explicacao", isso não conflita com o JSON em si continuar válido):
-- "tipo_erro": "omissao" | "imprecisao" | "erro_conceitual"
-- "gap_cognitivo": string curta (1 frase) nomeando a lacuna específica
+- "tipo_erro": "correto" | "omissao" | "imprecisao" | "erro_conceitual"
+- "gap_cognitivo": string curta (1 frase) nomeando a lacuna específica, ou "" se "correto"
 - "explicacao": string (máximo 3 frases), no tom adequado ao assunto"""
 
 
@@ -217,35 +234,38 @@ def _montar_prompt_analise_feedback(user_attempt: str, correct_answer: str, cont
         f"[Resposta correta]: {correct_answer}\n"
         f"[O que o aluno respondeu]: {user_attempt}\n"
         "---\n"
-        "Siga os 3 passos das diretrizes acima: classifique o erro, "
-        "identifique o gap cognitivo, e gere a explicação no tom "
-        "adequado ao assunto."
+        "Siga os 3 passos das diretrizes acima: confirme se está certo "
+        "antes de procurar erro, identifique o gap cognitivo (se houver), "
+        "e gere a explicação no tom adequado ao assunto."
     )
 
 
 @dataclass
 class AnaliseFeedback:
-    tipo_erro: str        # "omissao" | "imprecisao" | "erro_conceitual"
-    gap_cognitivo: str
+    tipo_erro: str        # "correto" | "omissao" | "imprecisao" | "erro_conceitual"
+    gap_cognitivo: str     # "" quando tipo_erro == "correto"
     explicacao: str
 
 
 def analisar_feedback(
     user_attempt: str, correct_answer: str, context: str, user_id: int, db: Session, timeout: int = 25,
 ) -> AnaliseFeedback:
-    """Classifica o erro numa tentativa de resposta (omissão/imprecisão/
-    erro conceitual), identifica o gap cognitivo por trás dele, e gera
-    uma explicação curta no tom adequado ao assunto (pedagógico pra
-    idioma, técnico pra TI) -- tudo numa ÚNICA chamada de IA: a
-    classificação sai como o primeiro campo do JSON estruturado
-    devolvido, "antes" da explicação no mesmo sentido que o raciocínio
-    de um LLM sobre saída estruturada é sequencial campo a campo, não
-    porque são duas chamadas separadas (duas chamadas dobrariam custo/
-    latência sem ganho real aqui).
+    """Compara a tentativa do aluno com a resposta correta -- primeiro
+    confirma se está certa (classificação "correto", sem inventar defeito),
+    só então classifica o tipo de erro (omissão/imprecisão/erro conceitual)
+    quando de fato existe um. Gera uma explicação curta no tom adequado ao
+    assunto (pedagógico pra idioma, técnico pra TI) -- tudo numa ÚNICA
+    chamada de IA: a classificação sai como o primeiro campo do JSON
+    estruturado devolvido, "antes" da explicação no mesmo sentido que o
+    raciocínio de um LLM sobre saída estruturada é sequencial campo a
+    campo, não porque são duas chamadas separadas (duas chamadas dobrariam
+    custo/latência sem ganho real aqui).
 
-    Lança IAError se a IA não devolver JSON válido ou classificar o erro
-    fora das 3 categorias esperadas -- nunca deixa um `tipo_erro`
-    inventado vazar pra quem chama.
+    Lança IAError se a IA não devolver JSON válido ou classificar fora das
+    4 categorias esperadas -- nunca deixa um `tipo_erro` inventado vazar
+    pra quem chama. `gap_cognitivo` vazio só é aceito quando
+    tipo_erro == "correto"; pra qualquer erro real, ambos os campos
+    continuam obrigatórios.
     """
     bruto = _chamar_ia(
         _montar_prompt_analise_feedback(user_attempt, correct_answer, context),
@@ -264,9 +284,9 @@ def analisar_feedback(
     if tipo_erro not in _TIPOS_ERRO_VALIDOS:
         raise IAError(f"A IA classificou o erro com um tipo inesperado: {tipo_erro!r}")
 
-    gap_cognitivo = dados.get("gap_cognitivo")
+    gap_cognitivo = dados.get("gap_cognitivo") or ""
     explicacao = dados.get("explicacao")
-    if not gap_cognitivo or not explicacao:
+    if (tipo_erro != "correto" and not gap_cognitivo) or not explicacao:
         raise IAError("A IA não devolveu gap_cognitivo/explicacao válidos")
 
     return AnaliseFeedback(

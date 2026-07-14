@@ -8,9 +8,11 @@ routers/cards.py):
    endpoint separado do Tutor Inteligente completo
    (POST /study/cards/{id}/tutor).
 2. analisar_feedback() + POST /cards/{id}/tutor?action=analyze (botão
-   "Errei" do Modo Estudo -- Mentoria Ativa) -- classificação de erro
-   (omissão/imprecisão/erro conceitual) + gap cognitivo + explicação,
-   tudo numa chamada de IA só. Testado tanto direto na função de serviço
+   "Errei" do Modo Estudo -- Mentoria Ativa) -- confirma se a tentativa
+   está certa ANTES de procurar erro ("correto", sem inventar defeito
+   quando não há), e só quando existe erro de verdade classifica em
+   omissão/imprecisão/erro conceitual + gap cognitivo + explicação, tudo
+   numa chamada de IA só. Testado tanto direto na função de serviço
    quanto via HTTP (validação de user_attempt obrigatório, telemetria,
    isolamento entre usuários).
 
@@ -265,8 +267,8 @@ def test_analisar_feedback_classifica_e_retorna_dataclass(db_session):
     assert "1789" in resultado.explicacao
 
 
-@pytest.mark.parametrize("tipo", ["omissao", "imprecisao", "erro_conceitual"])
-def test_analisar_feedback_aceita_as_3_categorias_validas(db_session, tipo):
+@pytest.mark.parametrize("tipo", ["correto", "omissao", "imprecisao", "erro_conceitual"])
+def test_analisar_feedback_aceita_as_4_categorias_validas(db_session, tipo):
     from tests.factories import UserFactory
     user = UserFactory()
 
@@ -276,6 +278,55 @@ def test_analisar_feedback_aceita_as_3_categorias_validas(db_session, tipo):
         resultado = analisar_feedback("tentativa", "certa", "contexto", user.id, db_session)
 
     assert resultado.tipo_erro == tipo
+
+
+def test_analisar_feedback_correto_aceita_gap_cognitivo_vazio(db_session):
+    """O achado real que motivou "correto" existir: uma tentativa
+    idêntica/equivalente à resposta certa não pode forçar a IA a inventar
+    uma lacuna -- gap_cognitivo="" é válido quando tipo_erro="correto"."""
+    from tests.factories import UserFactory
+    user = UserFactory()
+
+    payload = json.dumps({
+        "tipo_erro": "correto", "gap_cognitivo": "",
+        "explicacao": "Isso mesmo, a sintaxe está certa porque compara o atributo certo.",
+    })
+    with patch.object(settings, "GEMINI_API_KEY", "chave-fake"), \
+         patch("app.services.ai.httpx.post", return_value=_resposta_gemini_mock(payload)):
+        resultado = analisar_feedback("tentativa idêntica", "resposta certa", "contexto", user.id, db_session)
+
+    assert resultado.tipo_erro == "correto"
+    assert resultado.gap_cognitivo == ""
+    assert "certo" in resultado.explicacao.lower()
+
+
+def test_analisar_feedback_correto_sem_chave_gap_cognitivo_tambem_funciona(db_session):
+    """Se a IA simplesmente omitir a chave (em vez de mandar "") pra um
+    "correto", o fallback `.get("gap_cognitivo") or ""` ainda cobre."""
+    from tests.factories import UserFactory
+    user = UserFactory()
+
+    payload = json.dumps({"tipo_erro": "correto", "explicacao": "Exatamente isso."})
+    with patch.object(settings, "GEMINI_API_KEY", "chave-fake"), \
+         patch("app.services.ai.httpx.post", return_value=_resposta_gemini_mock(payload)):
+        resultado = analisar_feedback("tentativa", "certa", "contexto", user.id, db_session)
+
+    assert resultado.tipo_erro == "correto"
+    assert resultado.gap_cognitivo == ""
+
+
+def test_analisar_feedback_erro_real_com_gap_cognitivo_vazio_ainda_lanca_iaerror(db_session):
+    """gap_cognitivo vazio SÓ é aceito quando tipo_erro="correto" -- pra
+    qualquer erro de verdade, continua obrigatório (não pode virar uma
+    brecha geral que esvazia a validação)."""
+    from tests.factories import UserFactory
+    user = UserFactory()
+
+    payload = json.dumps({"tipo_erro": "omissao", "gap_cognitivo": "", "explicacao": "algo incompleto"})
+    with patch.object(settings, "GEMINI_API_KEY", "chave-fake"), \
+         patch("app.services.ai.httpx.post", return_value=_resposta_gemini_mock(payload)):
+        with pytest.raises(IAError):
+            analisar_feedback("tentativa", "certa", "contexto", user.id, db_session)
 
 
 def test_analisar_feedback_tipo_erro_invalido_da_ia_lanca_iaerror(db_session):
