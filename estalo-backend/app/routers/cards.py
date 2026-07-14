@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -6,8 +6,9 @@ from app.dependencies import get_current_user_id
 from app.models import Card, Deck, Review
 from app.models.card import calcular_content_hash
 from app.schemas.ai import GenerateRequest
-from app.schemas.card import CardCreate, CardOut, CardUpdate
-from app.services.ai import IAError, gerar_cards_completos
+from app.schemas.card import CardCreate, CardOut, CardTutorResponse, CardUpdate
+from app.services.ai import IAError, QuotaExceededError, gerar_cards_completos
+from app.services.tutor_service import explicar_conceito_breve
 
 router = APIRouter(tags=["Cards"])
 
@@ -140,6 +141,50 @@ def ver_card(
 ):
     card = _card_do_usuario(card_id, user_id, db)
     return _card_out(card, user_id, db)
+
+
+@router.post("/cards/{card_id}/tutor", response_model=CardTutorResponse)
+def tutor_explicar_conceito(
+    card_id: int,
+    action: str = Query("explain"),
+    db: Session = Depends(get_db),
+    user_id: int = Depends(get_current_user_id),
+):
+    """Botão "Explicar" do Modo Revelar -- explicação curta (≤3 frases,
+    ver explicar_conceito_breve em tutor_service.py) do conceito por trás
+    do verso do card, pensada pra não quebrar o fluxo de quem está
+    revelando cards em sequência.
+
+    Endpoint simplificado, deliberadamente separado de
+    POST /study/cards/{id}/tutor (Tutor Inteligente completo -- até 2
+    parágrafos, markdown, cacheado em Card.tutor_explanation, usado pelo
+    modal "Perguntar ao Tutor" do Modo Aprender): são dois contextos de
+    UX diferentes (inline vs modal) com requisitos de tamanho/cache
+    diferentes, por isso duas funções e dois endpoints em vez de um só
+    parametrizado.
+
+    `action` só aceita 'explain' hoje -- existe como parâmetro pra
+    deixar espaço pra outras ações (ex: 'analyze', via
+    tutor_service.analisar_feedback) sem quebrar compatibilidade depois.
+    """
+    if action != "explain":
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST, f"action '{action}' não suportada -- use 'explain'",
+        )
+
+    card = _card_do_usuario(card_id, user_id, db)
+
+    try:
+        explicacao = explicar_conceito_breve(card.front, card.back, user_id, db)
+    except QuotaExceededError as e:
+        # Precisa vir ANTES de "except IAError" -- QuotaExceededError é
+        # subclasse dela (ver ai.py), e a mensagem certa aqui é "espere
+        # até amanhã", não a genérica abaixo.
+        raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS, str(e))
+    except IAError as e:
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, str(e))
+
+    return CardTutorResponse(explanation=explicacao)
 
 
 @router.patch("/cards/{card_id}", response_model=CardOut)

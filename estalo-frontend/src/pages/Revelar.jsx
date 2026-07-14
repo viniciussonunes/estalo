@@ -8,6 +8,12 @@ export default function Revelar({ deck, aoVoltar }) {
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState("");
 
+  // Botão "Explicar" -- explicação curta gerada sob demanda (sem cache,
+  // ver api.explicarConceito), reseta a cada card novo.
+  const [explicacaoConceito, setExplicacaoConceito] = useState("");
+  const [explicacaoCarregando, setExplicacaoCarregando] = useState(false);
+  const [explicacaoErro, setExplicacaoErro] = useState("");
+
   useEffect(() => {
     api.gerarRevelar(deck.id)
       .then(setCards)
@@ -31,6 +37,21 @@ export default function Revelar({ deck, aoVoltar }) {
   function proximo() {
     setIndice((i) => i + 1);
     setRevelado(false);
+    setExplicacaoConceito("");
+    setExplicacaoErro("");
+  }
+
+  async function pedirExplicacaoConceito() {
+    setExplicacaoCarregando(true);
+    setExplicacaoErro("");
+    try {
+      const resp = await api.explicarConceito(cards[indice].card_id);
+      setExplicacaoConceito(resp.explanation);
+    } catch (err) {
+      setExplicacaoErro(err.message);
+    } finally {
+      setExplicacaoCarregando(false);
+    }
   }
 
   const cabecalho = (
@@ -139,6 +160,24 @@ export default function Revelar({ deck, aoVoltar }) {
                 <div className="revelar-explicacao">
                   <span className="cartao-lado-label">Explicação</span>
                   <p className="revelar-explicacao-texto">{card.explanation}</p>
+                </div>
+              )}
+
+              {!explicacaoConceito && !explicacaoCarregando && (
+                <button
+                  type="button"
+                  className="botao-texto tutor-botao"
+                  onClick={pedirExplicacaoConceito}
+                >
+                  💡 Explicar
+                </button>
+              )}
+              {explicacaoCarregando && <p className="tutor-status">Pensando…</p>}
+              {explicacaoErro && <p className="tutor-status tutor-status-erro">{explicacaoErro}</p>}
+              {explicacaoConceito && (
+                <div className="revelar-explicacao">
+                  <span className="cartao-lado-label">Tutor</span>
+                  <p className="revelar-explicacao-texto">{explicacaoConceito}</p>
                 </div>
               )}
 

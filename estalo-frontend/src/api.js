@@ -134,6 +134,13 @@ export const api = {
   tutorExplicarCard: (cardId) =>
     request(`/study/cards/${cardId}/tutor`, { method: "POST" }),
 
+  // Botão "Explicar" do Modo Revelar -- endpoint separado do Tutor
+  // Inteligente acima: resposta sempre curta (≤3 frases) e sem cache,
+  // pensada pra aparecer inline sem quebrar o fluxo de revelar cards em
+  // sequência (ver POST /cards/{id}/tutor, routers/cards.py).
+  explicarConceito: (cardId) =>
+    request(`/cards/${cardId}/tutor?action=explain`, { method: "POST" }),
+
   // Resumo de uma rodada do Modo Aprender já encerrada (pro gráfico de
   // evolução do Dashboard). Chamado uma única vez, depois do Promise.all
   // de responderCard (ver _salvarProgresso em Aprender.jsx).
