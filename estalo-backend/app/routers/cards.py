@@ -6,9 +6,9 @@ from app.dependencies import get_current_user_id
 from app.models import Card, Deck, Review
 from app.models.card import calcular_content_hash
 from app.schemas.ai import GenerateRequest
-from app.schemas.card import CardCreate, CardOut, CardTutorResponse, CardUpdate
+from app.schemas.card import CardCreate, CardOut, CardTutorRequest, CardTutorResponse, CardUpdate
 from app.services.ai import IAError, QuotaExceededError, gerar_cards_completos
-from app.services.tutor_service import explicar_conceito_breve
+from app.services.tutor_service import analisar_feedback, explicar_conceito_breve
 
 router = APIRouter(tags=["Cards"])
 
@@ -144,36 +144,69 @@ def ver_card(
 
 
 @router.post("/cards/{card_id}/tutor", response_model=CardTutorResponse)
-def tutor_explicar_conceito(
+def tutor_card(
     card_id: int,
     action: str = Query("explain"),
+    dados: CardTutorRequest = CardTutorRequest(),
     db: Session = Depends(get_db),
     user_id: int = Depends(get_current_user_id),
 ):
-    """Botão "Explicar" do Modo Revelar -- explicação curta (≤3 frases,
-    ver explicar_conceito_breve em tutor_service.py) do conceito por trás
-    do verso do card, pensada pra não quebrar o fluxo de quem está
-    revelando cards em sequência.
-
-    Endpoint simplificado, deliberadamente separado de
+    """Duas ações do mesmo endpoint, deliberadamente separado de
     POST /study/cards/{id}/tutor (Tutor Inteligente completo -- até 2
     parágrafos, markdown, cacheado em Card.tutor_explanation, usado pelo
-    modal "Perguntar ao Tutor" do Modo Aprender): são dois contextos de
-    UX diferentes (inline vs modal) com requisitos de tamanho/cache
-    diferentes, por isso duas funções e dois endpoints em vez de um só
-    parametrizado.
+    modal "Perguntar ao Tutor" do Modo Aprender): são contextos de UX
+    diferentes (inline vs modal) com requisitos de tamanho/cache
+    diferentes, por isso funções e endpoints próprios em vez de
+    reaproveitar aquele.
 
-    `action` só aceita 'explain' hoje -- existe como parâmetro pra
-    deixar espaço pra outras ações (ex: 'analyze', via
-    tutor_service.analisar_feedback) sem quebrar compatibilidade depois.
+    action=explain (padrão) -- botão "Explicar" do Modo Revelar:
+    explicação curta (≤3 frases, ver explicar_conceito_breve em
+    tutor_service.py) do conceito por trás do verso do card, sem exigir
+    corpo na requisição.
+
+    action=analyze -- Mentoria Ativa: botão "Errei" do Modo Estudo (ver
+    Estudo.jsx). Corpo obrigatório { "user_attempt": "..." } com a
+    tentativa de resposta do usuário; classifica o erro (omissão/
+    imprecisão/erro conceitual), identifica o gap cognitivo, e devolve
+    explicação no tom ajustado ao assunto (ver
+    tutor_service.analisar_feedback).
     """
-    if action != "explain":
+    if action not in ("explain", "analyze"):
         raise HTTPException(
-            status.HTTP_400_BAD_REQUEST, f"action '{action}' não suportada -- use 'explain'",
+            status.HTTP_400_BAD_REQUEST,
+            f"action '{action}' não suportada -- use 'explain' ou 'analyze'",
         )
 
     card = _card_do_usuario(card_id, user_id, db)
 
+    if action == "analyze":
+        if not dados.user_attempt or not dados.user_attempt.strip():
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST, "user_attempt é obrigatório quando action=analyze",
+            )
+        try:
+            resultado = analisar_feedback(dados.user_attempt, card.back, card.front, user_id, db)
+        except QuotaExceededError as e:
+            raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS, str(e))
+        except IAError as e:
+            raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, str(e))
+
+        # Telemetria leve: só o tipo de erro + o "tema" (a pergunta do
+        # card, truncada) -- NUNCA a tentativa do usuário, que é texto
+        # livre e pode conter algo pessoal/sensível dependendo de como a
+        # pessoa explicou o raciocínio dela. print() (não logging) pelo
+        # mesmo motivo do telemetria de challenges: sem handler de
+        # logging configurado neste projeto, stdout é o que a Vercel
+        # captura sem precisar de config nova.
+        print(f"[feedback_analyzed] tipo_erro={resultado.tipo_erro} tema={card.front[:80]!r}")
+
+        return CardTutorResponse(
+            explanation=resultado.explicacao,
+            tipo_erro=resultado.tipo_erro,
+            gap_cognitivo=resultado.gap_cognitivo,
+        )
+
+    # action == "explain"
     try:
         explicacao = explicar_conceito_breve(card.front, card.back, user_id, db)
     except QuotaExceededError as e:

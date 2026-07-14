@@ -1,14 +1,18 @@
 """
-Testes das duas capacidades novas de tutor_service.py (evolução do modo
-de aprendizado assistido, ver app/services/tutor_service.py):
+Testes das capacidades novas de tutor_service.py (evolução do modo de
+aprendizado assistido, ver app/services/tutor_service.py e
+routers/cards.py):
 
-1. explicar_conceito_breve() + POST /cards/{id}/tutor (botão "Explicar"
-   do Modo Revelar) -- resposta curta, sem cache, endpoint separado do
-   Tutor Inteligente completo (POST /study/cards/{id}/tutor).
-2. analisar_feedback() -- classificação de erro (omissão/imprecisão/erro
-   conceitual) + gap cognitivo + explicação, tudo numa chamada de IA só.
-   Ainda sem endpoint ligado (preparação de motor) -- testado direto
-   contra a função de serviço.
+1. explicar_conceito_breve() + POST /cards/{id}/tutor?action=explain
+   (botão "Explicar" do Modo Revelar) -- resposta curta, sem cache,
+   endpoint separado do Tutor Inteligente completo
+   (POST /study/cards/{id}/tutor).
+2. analisar_feedback() + POST /cards/{id}/tutor?action=analyze (botão
+   "Errei" do Modo Estudo -- Mentoria Ativa) -- classificação de erro
+   (omissão/imprecisão/erro conceitual) + gap cognitivo + explicação,
+   tudo numa chamada de IA só. Testado tanto direto na função de serviço
+   quanto via HTTP (validação de user_attempt obrigatório, telemetria,
+   isolamento entre usuários).
 
 Gemini mockado, sem rede (mesma técnica do resto da suíte: httpx, não
 `requests`, mock entra em app.services.ai.httpx.post).
@@ -125,13 +129,117 @@ def test_explicar_conceito_breve_prompt_pede_no_maximo_3_frases_e_sem_markdown(c
     assert "sem markdown" in prompt_sistema.lower() or "nunca use **" in prompt_sistema.lower()
 
 
-# --- analisar_feedback() (preparação de motor, sem endpoint ainda) --------
+# --- POST /cards/{id}/tutor?action=analyze (Mentoria Ativa, botão "Errei") -
 
 _ANALISE_OMISSAO = json.dumps({
     "tipo_erro": "omissao",
     "gap_cognitivo": "Aluno esqueceu de mencionar o ano da revolução.",
     "explicacao": "Faltou o ano -- 1789. O resto da resposta está correto.",
 })
+
+
+def test_analyze_endpoint_retorna_classificacao_completa(client):
+    auth = _autenticar(client, "analyze_ok@estalo.dev")
+    card = _criar_card(client, auth, front="Quando começou a Revolução Francesa?", back="1789")
+
+    with patch.object(settings, "GEMINI_API_KEY", "chave-fake"), \
+         patch("app.services.ai.httpx.post", return_value=_resposta_gemini_mock(_ANALISE_OMISSAO)) as mock_post:
+        resp = client.post(
+            "/cards/%d/tutor?action=analyze" % card["id"],
+            json={"user_attempt": "Foi uma revolta popular"},
+            headers=auth,
+        )
+
+    assert resp.status_code == 200
+    corpo = resp.json()
+    assert corpo["tipo_erro"] == "omissao"
+    assert "ano" in corpo["gap_cognitivo"].lower()
+    assert "1789" in corpo["explanation"]
+    assert mock_post.called
+
+
+def test_analyze_endpoint_sem_user_attempt_da_400_sem_chamar_ia(client):
+    auth = _autenticar(client, "analyze_sem_tentativa@estalo.dev")
+    card = _criar_card(client, auth)
+
+    with patch("app.services.ai.httpx.post") as mock_post:
+        resp = client.post(f"/cards/{card['id']}/tutor?action=analyze", json={}, headers=auth)
+
+    assert resp.status_code == 400
+    assert not mock_post.called
+
+
+def test_analyze_endpoint_user_attempt_vazio_da_400_sem_chamar_ia(client):
+    auth = _autenticar(client, "analyze_tentativa_vazia@estalo.dev")
+    card = _criar_card(client, auth)
+
+    with patch("app.services.ai.httpx.post") as mock_post:
+        resp = client.post(
+            f"/cards/{card['id']}/tutor?action=analyze",
+            json={"user_attempt": "   "},
+            headers=auth,
+        )
+
+    assert resp.status_code == 400
+    assert not mock_post.called
+
+
+def test_analyze_endpoint_erro_da_ia_retorna_503(client):
+    auth = _autenticar(client, "analyze_erro_ia@estalo.dev")
+    card = _criar_card(client, auth)
+
+    resp_erro = Mock()
+    resp_erro.status_code = 503
+    resp_erro.raise_for_status.side_effect = Exception("indisponível")
+
+    with patch.object(settings, "GEMINI_API_KEY", "chave-fake"), \
+         patch("app.services.ai.httpx.post", return_value=resp_erro):
+        resp = client.post(
+            f"/cards/{card['id']}/tutor?action=analyze",
+            json={"user_attempt": "não sei"},
+            headers=auth,
+        )
+
+    assert resp.status_code == 503
+
+
+def test_analyze_endpoint_card_de_outro_usuario_da_404_sem_chamar_ia(client):
+    dono_auth = _autenticar(client, "dono_analyze@estalo.dev")
+    card = _criar_card(client, dono_auth)
+
+    intruso_auth = _autenticar(client, "intruso_analyze@estalo.dev")
+
+    with patch("app.services.ai.httpx.post") as mock_post:
+        resp = client.post(
+            f"/cards/{card['id']}/tutor?action=analyze",
+            json={"user_attempt": "tentativa"},
+            headers=intruso_auth,
+        )
+
+    assert resp.status_code == 404
+    assert not mock_post.called
+
+
+def test_analyze_endpoint_telemetria_loga_tipo_erro_sem_vazar_tentativa_do_usuario(client, capsys):
+    """Confere o pedido explícito: telemetria registra o tipo de erro e o
+    tema (a pergunta do card), NUNCA a tentativa do usuário (texto livre,
+    pode conter algo pessoal)."""
+    auth = _autenticar(client, "telemetria@estalo.dev")
+    card = _criar_card(client, auth, front="Quando começou a Revolução Francesa?", back="1789")
+
+    with patch.object(settings, "GEMINI_API_KEY", "chave-fake"), \
+         patch("app.services.ai.httpx.post", return_value=_resposta_gemini_mock(_ANALISE_OMISSAO)):
+        client.post(
+            "/cards/%d/tutor?action=analyze" % card["id"],
+            json={"user_attempt": "informação pessoal sensível do aluno"},
+            headers=auth,
+        )
+
+    saida = capsys.readouterr().out
+    assert "[feedback_analyzed]" in saida
+    assert "tipo_erro=omissao" in saida
+    assert "Revolução Francesa" in saida
+    assert "informação pessoal sensível" not in saida
 
 
 def test_analisar_feedback_classifica_e_retorna_dataclass(db_session):

@@ -1,5 +1,5 @@
 from datetime import datetime
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class CardCreate(BaseModel):
@@ -27,12 +27,29 @@ class CardOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class CardTutorRequest(BaseModel):
+    """Corpo de POST /cards/{id}/tutor -- só relevante quando
+    action=analyze (ver routers/cards.py); ausente/vazio é o normal
+    quando action=explain, por isso user_attempt é opcional aqui e a
+    obrigatoriedade é validada no router, não no schema (não dá pra
+    expressar "obrigatório só se X" direto via Field)."""
+    user_attempt: str | None = Field(None, min_length=1)
+
+
 class CardTutorResponse(BaseModel):
-    """Resposta de POST /cards/{id}/tutor (botão "Explicar", ver
-    routers/cards.py) -- sempre curta (≤3 frases, ver PERSONA_EXPLICACAO_BREVE
-    em tutor_service.py), sem cache. Não confundir com TutorResponse
-    (schemas/study.py), usado pelo Tutor Inteligente completo em
-    POST /study/cards/{id}/tutor -- os dois têm o mesmo shape hoje, mas
-    são schemas separados de propósito: um dia um pode ganhar campo que
-    o outro não precisa."""
+    """Resposta de POST /cards/{id}/tutor (routers/cards.py) -- serve as
+    duas ações do mesmo endpoint:
+
+    - action=explain (botão "Explicar", ver PERSONA_EXPLICACAO_BREVE em
+      tutor_service.py): só `explanation` vem preenchido, sempre curta
+      (≤3 frases), sem cache.
+    - action=analyze (Mentoria Ativa -- botão "Errei", ver
+      tutor_service.analisar_feedback): os três campos vêm preenchidos,
+      `explanation` carrega a explicação já no tom ajustado ao assunto.
+
+    Não confundir com TutorResponse (schemas/study.py), usado pelo Tutor
+    Inteligente completo em POST /study/cards/{id}/tutor -- é um endpoint
+    e um propósito de UX diferentes (modal completo vs inline curto)."""
     explanation: str
+    tipo_erro: str | None = None       # só populado quando action=analyze
+    gap_cognitivo: str | None = None   # idem

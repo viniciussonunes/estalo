@@ -624,6 +624,45 @@ body {
 }
 .revelar-explicacao-texto { font-size: 0.92rem; line-height: 1.6; color: var(--tinta); }
 
+/* ---------- Mentoria Ativa -- captura de tentativa (botão "Errei", Estudo.jsx) --- */
+.errei-conversa { display: flex; flex-direction: column; gap: 0.85rem; margin-top: 0.5rem; }
+.errei-input-linha { display: flex; gap: 0.5rem; align-items: flex-start; }
+.errei-input-linha textarea {
+  flex: 1;
+  padding: 0.65rem 0.8rem;
+  border: 1px solid var(--borda);
+  border-radius: 9px;
+  font: inherit;
+  font-size: 0.95rem;
+  background: var(--papel);
+  resize: vertical;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.errei-input-linha textarea:focus {
+  outline: none;
+  border-color: var(--violeta);
+  box-shadow: 0 0 0 3px rgba(91, 75, 232, 0.15);
+}
+/* Ícone de microfone -- terreno preparado pra transcrição por voz, ainda
+   sem funcionalidade (desabilitado de propósito, ver Estudo.jsx). */
+.errei-mic-botao {
+  flex-shrink: 0;
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  border: 1px solid var(--borda);
+  background: var(--superficie);
+  font-size: 1.1rem;
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+/* Linha de abertura do feedback do Tutor, em linguagem natural (ver
+   TIPO_ERRO_MENSAGEM em Estudo.jsx) -- deliberadamente SEM rótulo/badge
+   categórico (ex: "Erro conceitual"): isso é vocabulário de classificação
+   interna da IA, não algo que o usuário final precisa ler cru. */
+.revelar-explicacao-resumo { font-weight: 600; color: var(--tinta); margin: 0; }
+
 /* ---------- Deck clicável (Dashboard) ---------- */
 .card-deck-link {
   border: none;
@@ -830,7 +869,7 @@ body {
 /* ---------- Botões de nota ---------- */
 .notas {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(2, 1fr);
   gap: 0.5rem;
   margin-top: 0.25rem;
 }

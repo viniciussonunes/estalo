@@ -160,6 +160,7 @@ export default function Cards({ deck, aoVoltar, aoEstudar, aoAprender, aoRevelar
         </div>
         <div className="modos-estudo-topo">
           <button className="botao-modo-ghost" onClick={aoRevelar}>Revelar</button>
+          <button className="botao-modo-ghost" onClick={aoEstudar}>Estudo clássico</button>
           {stats?.criticos > 0 ? (
             <button className="botao-modo-critico" onClick={aoAprender}>
               🔴 Estudar críticos ({stats.criticos})

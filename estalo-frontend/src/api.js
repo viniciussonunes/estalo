@@ -141,6 +141,16 @@ export const api = {
   explicarConceito: (cardId) =>
     request(`/cards/${cardId}/tutor?action=explain`, { method: "POST" }),
 
+  // Mentoria Ativa: analisa a tentativa de resposta do usuário depois de
+  // errar (ver botão "Errei" em Estudo.jsx) -- mesma rota do "Explicar"
+  // acima, action=analyze em vez de explain. Resposta traz explanation +
+  // tipo_erro (omissao/imprecisao/erro_conceitual) + gap_cognitivo.
+  analisarFeedback: (cardId, userAttempt) =>
+    request(`/cards/${cardId}/tutor?action=analyze`, {
+      method: "POST",
+      body: { user_attempt: userAttempt },
+    }),
+
   // Resumo de uma rodada do Modo Aprender já encerrada (pro gráfico de
   // evolução do Dashboard). Chamado uma única vez, depois do Promise.all
   // de responderCard (ver _salvarProgresso em Aprender.jsx).
