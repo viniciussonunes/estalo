@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import ReactMarkdown from "react-markdown";
 import { api } from "../api.js";
 
 export default function Revelar({ deck, aoVoltar }) {
@@ -177,7 +178,9 @@ export default function Revelar({ deck, aoVoltar }) {
               {explicacaoConceito && (
                 <div className="revelar-explicacao">
                   <span className="cartao-lado-label">Tutor</span>
-                  <p className="revelar-explicacao-texto">{explicacaoConceito}</p>
+                  <div className="tutor-conteudo">
+                    <ReactMarkdown>{explicacaoConceito}</ReactMarkdown>
+                  </div>
                 </div>
               )}
 

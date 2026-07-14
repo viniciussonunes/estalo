@@ -116,7 +116,11 @@ def test_explicar_endpoint_card_de_outro_usuario_da_404(client):
     assert not mock_post.called
 
 
-def test_explicar_conceito_breve_prompt_pede_no_maximo_3_frases_e_sem_markdown(client):
+def test_explicar_conceito_breve_prompt_pede_no_maximo_3_frases_e_permite_negrito(client):
+    """Negrito (markdown) é permitido de propósito -- o frontend (Estudo.jsx/
+    Revelar.jsx) renderiza via ReactMarkdown com estilo violeta, igual ao
+    Tutor completo de Aprender.jsx. Antes disso existir, o prompt pedia
+    "sem markdown" porque nada renderizava -- ver histórico do arquivo."""
     auth = _autenticar(client, "prompt_breve@estalo.dev")
     card = _criar_card(client, auth)
 
@@ -126,7 +130,7 @@ def test_explicar_conceito_breve_prompt_pede_no_maximo_3_frases_e_sem_markdown(c
 
     prompt_sistema = mock_post.call_args.kwargs["json"]["systemInstruction"]["parts"][0]["text"]
     assert "3 frases" in prompt_sistema
-    assert "sem markdown" in prompt_sistema.lower() or "nunca use **" in prompt_sistema.lower()
+    assert "**negrito**" in prompt_sistema
 
 
 # --- POST /cards/{id}/tutor?action=analyze (Mentoria Ativa, botão "Errei") -

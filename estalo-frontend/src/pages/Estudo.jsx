@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import ReactMarkdown from "react-markdown";
 import { api } from "../api.js";
 
 // quality "Acertei" sem nuance -- 4 é neutro pro ease_factor do SM-2 (nem
@@ -221,7 +222,9 @@ export default function Estudo({ deck, aoVoltar }) {
                   {feedback.tipo_erro && TIPO_ERRO_MENSAGEM[feedback.tipo_erro] && (
                     <p className="revelar-explicacao-resumo">{TIPO_ERRO_MENSAGEM[feedback.tipo_erro]}</p>
                   )}
-                  <p className="revelar-explicacao-texto">{feedback.explanation}</p>
+                  <div className="tutor-conteudo">
+                    <ReactMarkdown>{feedback.explanation}</ReactMarkdown>
+                  </div>
                 </div>
               )}
 

@@ -119,9 +119,10 @@ pedagógico e encorajador, como um professor de idiomas incentivando o aluno.
 tom técnico e direto, sem rodeios, como um mentor sênior revisando algo com \
 um colega.
 
-Formatação: texto puro, sem markdown (a resposta aparece inline na tela, \
-sem nenhum lugar que renderize negrito/listas) -- nunca use ** nem outros \
-marcadores.
+Formatação: pode usar **negrito** (markdown) pra destacar o termo-chave do \
+conceito -- só isso, sem listas, sem títulos, é só um parágrafo curto com \
+no máximo uma ou duas palavras/expressões em negrito, as mais importantes \
+pra quem for só bater o olho.
 
 Idioma: responda no idioma do card."""
 
@@ -195,9 +196,14 @@ erro, com o TOM ajustado ao assunto (decida pelo contexto, nunca pergunte):
 pedagógico e encorajador.
 - Conteúdo técnico (TI, programação, conceitos técnicos em geral): tom \
 técnico e direto, sem rodeios.
+Pode destacar o termo-chave do conceito em **negrito** (markdown) dentro \
+do texto de "explicacao" -- só uma ou duas palavras/expressões, as mais \
+importantes pra quem for só bater o olho.
 
-Responda APENAS com um objeto JSON válido, sem texto antes ou depois, sem \
-markdown, com EXATAMENTE estas três chaves:
+Responda com um objeto JSON válido, sem texto antes ou depois do objeto \
+em si, sem ```envolver o JSON``` em bloco de código, com EXATAMENTE estas \
+três chaves (o **negrito** do passo 3 acima vai DENTRO do valor de
+"explicacao", isso não conflita com o JSON em si continuar válido):
 - "tipo_erro": "omissao" | "imprecisao" | "erro_conceitual"
 - "gap_cognitivo": string curta (1 frase) nomeando a lacuna específica
 - "explicacao": string (máximo 3 frases), no tom adequado ao assunto"""
