@@ -91,6 +91,7 @@ def _chamar_gemini_raw(
     timeout: int = 25,
     instrucao_sistema: str | None = None,
     model: str | None = None,
+    desabilitar_thinking: bool = False,
 ) -> str:
     """Só a chamada HTTP ao Gemini, SEM quota-check -- usada por _chamar_ia()
     (abaixo), o Adaptador de provedor de IA, que faz o quota-check UMA
@@ -111,12 +112,22 @@ def _chamar_gemini_raw(
     `model`, quando informado, sobrepõe settings.GEMINI_MODEL só nesta
     chamada — permite um serviço (ex: tutor_service) usar um modelo mais
     rápido/barato sem mudar o modelo padrão usado por gerar_cards/gerar_quiz.
+
+    `desabilitar_thinking`, quando True, zera o thinkingBudget do Gemini
+    2.5 -- usado por gerar_cards/gerar_quiz, onde a tarefa é só formatar
+    JSON estruturado seguindo regras explícitas (nada que precise de
+    raciocínio profundo). Medido empiricamente: pra um lote de 10 cards,
+    o "pensamento" consumia ~5x mais tokens que a resposta em si e
+    quase dobrava o tempo (32s -> 13s sem), arriscando estourar o timeout
+    do endpoint e até truncar o JSON no meio (finishReason MAX_TOKENS).
     """
     if not settings.GEMINI_API_KEY:
         raise IAError("Chave do Gemini não configurada. Preencha GEMINI_API_KEY no arquivo .env")
 
     url = GEMINI_URL.format(model=model or settings.GEMINI_MODEL)
     payload = {"contents": [{"parts": [{"text": prompt}]}]}
+    if desabilitar_thinking:
+        payload["generationConfig"] = {"thinkingConfig": {"thinkingBudget": 0}}
     if instrucao_sistema:
         payload["systemInstruction"] = {"parts": [{"text": instrucao_sistema}]}
     headers = {
@@ -232,6 +243,7 @@ def _chamar_ia(
     timeout: int = 25,
     instrucao_sistema: str | None = None,
     model: str | None = None,
+    desabilitar_thinking: bool = False,
 ) -> str:
     """O Adaptador. Único ponto que decide pra qual provedor despachar --
     todo o resto do backend chama isto, nunca _chamar_gemini_raw/
@@ -246,6 +258,10 @@ def _chamar_ia(
     tutor_service usa um modelo mais rápido/barato que gerar_cards/
     gerar_quiz) -- a OpenAI usa sempre OPENAI_MODEL, sem variação por
     serviço (não há necessidade disso hoje).
+
+    `desabilitar_thinking` só tem efeito no Gemini (ver _chamar_gemini_raw)
+    -- a OpenAI não tem esse conceito, então o parâmetro é ignorado nesse
+    branch.
     """
     estimativa = _estimar_tokens(prompt, instrucao_sistema)
     if not check_and_consume_tokens(user_id, estimativa, db):
@@ -257,7 +273,10 @@ def _chamar_ia(
     if provider == "openai":
         return _chamar_openai_raw(prompt, timeout=timeout, instrucao_sistema=instrucao_sistema)
     if provider == "gemini":
-        return _chamar_gemini_raw(prompt, timeout=timeout, instrucao_sistema=instrucao_sistema, model=model)
+        return _chamar_gemini_raw(
+            prompt, timeout=timeout, instrucao_sistema=instrucao_sistema, model=model,
+            desabilitar_thinking=desabilitar_thinking,
+        )
     raise IAError(f"IA_PROVIDER '{provider}' desconhecido -- use 'gemini' ou 'openai'.")
 
 
@@ -380,7 +399,7 @@ def gerar_quiz(cards: list[dict], user_id: int, db: Session) -> list[dict]:
     {card_id, question, correct, distractors, explanation}.
     Lança IAError (ou QuotaExceededError) se algo der errado.
     """
-    bruto = _chamar_ia(_montar_prompt_quiz(cards), user_id, db)
+    bruto = _chamar_ia(_montar_prompt_quiz(cards), user_id, db, desabilitar_thinking=True)
 
     try:
         resultado = json.loads(_limpar_json(bruto))
@@ -446,7 +465,10 @@ def gerar_cards_completos(texto: str, quantidade: int, user_id: int, db: Session
     Gera cards com front, back, distractors e explanation em uma única chamada.
     Retorna lista de dicts com todas as chaves preenchidas.
     """
-    bruto = _chamar_ia(_montar_prompt_completo(texto, quantidade), user_id, db, timeout=30)
+    bruto = _chamar_ia(
+        _montar_prompt_completo(texto, quantidade), user_id, db, timeout=30,
+        desabilitar_thinking=True,
+    )
 
     try:
         cards = json.loads(_limpar_json(bruto))

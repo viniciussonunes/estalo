@@ -54,8 +54,9 @@ export default function CriarDeck({ pastaId, aoVoltar, aoVerCards }) {
     if (!nome.trim()) return;
     setSalvando(true);
     setErro("");
+    let deck = null;
     try {
-      const deck = await api.criarDeck(nome.trim(), descricao.trim() || null, pastaId);
+      deck = await api.criarDeck(nome.trim(), descricao.trim() || null, pastaId);
 
       if (modo === "manual") {
         const validos = linhas.filter(l => l.frente.trim() && l.verso.trim());
@@ -68,6 +69,18 @@ export default function CriarDeck({ pastaId, aoVoltar, aoVerCards }) {
 
       aoVerCards(deck);
     } catch (err) {
+      // Se o deck já foi criado mas a geração de cards falhou no meio do
+      // caminho, ele fica órfão e vazio na listagem -- desfaz pra não
+      // acumular lixo a cada tentativa que dá erro (ver bug reportado:
+      // "A IA não devolveu um JSON válido" deixando deck de 0 cards).
+      if (deck) {
+        try {
+          await api.excluirDeck(deck.id);
+        } catch {
+          // Melhor esforço -- se nem a limpeza funcionar, o erro original
+          // já é o que importa mostrar pro usuário.
+        }
+      }
       setErro(err.message);
     } finally {
       setSalvando(false);
