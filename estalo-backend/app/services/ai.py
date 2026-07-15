@@ -284,13 +284,16 @@ def _montar_prompt_completo(texto: str, quantidade: int) -> str:
         f"Para cada flashcard gere:\n"
         f"1. 'front': Pergunta clara e objetiva baseada no conteúdo.\n"
         f"2. 'back': Resposta correta e concisa.\n"
-        f"3. 'distractors': Lista de EXATAMENTE 3 alternativas INCORRETAS que sejam:\n"
-        f"   - Plausíveis e relacionadas especificamente a ESTA pergunta\n"
-        f"   - Geradas de forma exclusiva para este card (NUNCA copie o 'back' de outros cards)\n"
-        f"   - Distintas entre si e da resposta correta\n"
-        f"   - Do MESMO tamanho e nível de detalhe do 'back' (número parecido de palavras e "
-        f"frases completas, nunca uma opção vaga/curta ao lado de uma correta longa e "
-        f"elaborada) -- o comprimento do texto NUNCA pode ser uma pista de qual é a certa\n"
+        f"3. 'distractors': Lista de EXATAMENTE 3 alternativas INCORRETAS. REGRA DE TAMANHO "
+        f"OBRIGATÓRIA E MENSURÁVEL: conte o número de caracteres do 'back' -- cada distractor "
+        f"tem que ter entre 90% e 110% desse número de caracteres. Um distractor fora dessa "
+        f"faixa é uma resposta ERRADA à tarefa, não só uma questão de estilo. Para bater essa "
+        f"faixa, adicione detalhes/contexto extra ao distractor até ele ficar do tamanho da "
+        f"resposta certa -- nunca deixe um distractor curto e genérico. Além disso, os "
+        f"distractors devem ser:\n"
+        f"   - Plausíveis e relacionados especificamente a ESTA pergunta\n"
+        f"   - Gerados de forma exclusiva para este card (NUNCA copie o 'back' de outros cards)\n"
+        f"   - Distintos entre si e da resposta correta\n"
         f"4. 'explanation': Explicação de 2-3 frases explicando POR QUÊ a resposta correta está certa.\n\n"
         f"Regras gerais:\n"
         f"- Use o idioma do texto.\n"
@@ -298,6 +301,19 @@ def _montar_prompt_completo(texto: str, quantidade: int) -> str:
         f'- Formato exato: [{{"front":"...","back":"...","distractors":["...","...","..."],"explanation":"..."}}]\n\n'
         f"TEXTO:\n{texto}"
     )
+
+
+def _distractors_equilibrados(correct: str, distractors: list) -> bool:
+    """Rede de segurança contra o prompt ser ignorado: se algum distractor
+    ficar visivelmente mais curto que a resposta certa, o tamanho do texto
+    vira uma pista visual da resposta (bug real reportado por usuário -- ver
+    _montar_prompt_quiz/_montar_prompt_completo, que já pedem 90%-110% do
+    tamanho do 'back'). Aqui só rejeitamos o caso degenerado (< 50%), sem
+    replicar a faixa inteira do prompt -- variação normal de estilo não deve
+    derrubar um card válido.
+    """
+    limite = len(correct) * 0.5
+    return all(len(str(d)) >= limite for d in distractors)
 
 
 def _limpar_json(bruto: str) -> str:
@@ -321,14 +337,16 @@ def _montar_prompt_quiz(cards: list[dict]) -> str:
         "REGRAS OBRIGATÓRIAS:\n"
         "1. Use a 'front' do card como base para a pergunta.\n"
         "2. Use o 'back' como a única resposta correta ('correct').\n"
-        "3. Crie EXATAMENTE 3 alternativas INCORRETAS ('distractors') que sejam:\n"
-        "   - Plausíveis e contextualizadas para AQUELA pergunta específica\n"
-        "   - Geradas exclusivamente para esse card (NUNCA copie o 'back' de outros cards)\n"
-        "   - Distintas entre si e distintas da resposta correta\n"
-        "   - Do MESMO tamanho e nível de detalhe da resposta correta ('back'), com número "
-        "parecido de palavras e frases completas -- nunca uma opção vaga/curta ao lado de uma "
-        "correta longa e elaborada, pois o comprimento do texto NUNCA pode ser uma pista de "
-        "qual é a certa\n"
+        "3. Crie EXATAMENTE 3 alternativas INCORRETAS ('distractors'). REGRA DE TAMANHO "
+        "OBRIGATÓRIA E MENSURÁVEL: conte o número de caracteres do 'back' -- cada distractor "
+        "tem que ter entre 90% e 110% desse número de caracteres. Um distractor fora dessa "
+        "faixa é uma resposta ERRADA à tarefa, não só uma questão de estilo. Para bater essa "
+        "faixa, adicione detalhes/contexto extra ao distractor até ele ficar do tamanho da "
+        "resposta certa -- nunca deixe um distractor curto e genérico. Além disso, os "
+        "distractors devem ser:\n"
+        "   - Plausíveis e contextualizados para AQUELA pergunta específica\n"
+        "   - Gerados exclusivamente para esse card (NUNCA copie o 'back' de outros cards)\n"
+        "   - Distintos entre si e distintos da resposta correta\n"
         "4. Escreva uma 'explanation' curta (1-3 frases) explicando por que a resposta correta é a certa.\n"
         "5. Preserve o 'card_id' exato de cada flashcard na resposta.\n"
         "6. Use o mesmo idioma dos flashcards.\n\n"
@@ -378,11 +396,15 @@ def gerar_quiz(cards: list[dict], user_id: int, db: Session) -> list[dict]:
         distractors = item["distractors"]
         if not isinstance(distractors, list) or len(distractors) < 3:
             continue
+        correct = str(item["correct"])
+        distractors = [str(d) for d in distractors[:3]]
+        if not _distractors_equilibrados(correct, distractors):
+            continue
         validos.append({
             "card_id": int(item["card_id"]),
             "question": str(item["question"]),
-            "correct": str(item["correct"]),
-            "distractors": [str(d) for d in distractors[:3]],
+            "correct": correct,
+            "distractors": distractors,
             "explanation": str(item["explanation"]),
         })
 
@@ -440,10 +462,14 @@ def gerar_cards_completos(texto: str, quantidade: int, user_id: int, db: Session
         distractors = c["distractors"]
         if not isinstance(distractors, list) or len(distractors) < 3:
             continue
+        back = str(c["back"])
+        distractors = [str(d) for d in distractors[:3]]
+        if not _distractors_equilibrados(back, distractors):
+            continue
         validos.append({
             "front":        str(c["front"]),
-            "back":         str(c["back"]),
-            "distractors":  [str(d) for d in distractors[:3]],
+            "back":         back,
+            "distractors":  distractors,
             "explanation":  str(c["explanation"]),
         })
 

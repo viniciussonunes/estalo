@@ -53,6 +53,53 @@ def test_gerar_cards_completos_com_gemini_mockado(db_session):
     assert cards[1]["back"] == "Roma"
 
 
+def test_gerar_cards_completos_descarta_card_com_distractor_muito_curto(db_session):
+    """Bug real reportado por usuário: a IA às vezes ignora a regra de
+    tamanho do prompt e devolve um distractor bem mais curto que o 'back',
+    dando uma pista visual da resposta certa. _distractors_equilibrados()
+    (ai.py) é a rede de segurança pra esse caso -- o card inteiro é
+    descartado (mesmo tratamento já dado a JSON malformado) em vez de ir
+    pro usuário com uma alternativa óbvia."""
+    corpo = {
+        "candidates": [{
+            "content": {
+                "parts": [{
+                    "text": json.dumps([
+                        {
+                            "front": "Card bom",
+                            "back": "Resposta correta bem detalhada e completa sobre o assunto",
+                            "distractors": [
+                                "Alternativa incorreta igualmente detalhada e completa",
+                                "Outra alternativa incorreta também bem elaborada aqui",
+                                "Mais uma alternativa incorreta com tamanho parecido",
+                            ],
+                            "explanation": "Explicação.",
+                        },
+                        {
+                            "front": "Card com distractor curto demais",
+                            "back": "Resposta correta bem detalhada e completa sobre o assunto",
+                            "distractors": ["curta", "Outra alternativa incorreta também bem elaborada aqui", "Mais uma alternativa incorreta com tamanho parecido"],
+                            "explanation": "Explicação.",
+                        },
+                    ], ensure_ascii=False)
+                }]
+            }
+        }]
+    }
+    resp = Mock()
+    resp.status_code = 200
+    resp.json.return_value = corpo
+    resp.raise_for_status.return_value = None
+
+    user = UserFactory()
+    with patch.object(settings, "GEMINI_API_KEY", "chave-fake-de-teste"), \
+         patch("app.services.ai.httpx.post", return_value=resp):
+        cards = gerar_cards_completos("Qualquer texto", 2, user.id, db_session)
+
+    assert len(cards) == 1
+    assert cards[0]["front"] == "Card bom"
+
+
 def test_gerar_cards_completos_nao_faz_nenhuma_chamada_de_rede_real(db_session):
     """Prova que o teste acima é hermético: se o código tentasse mesmo
     assim ir pra rede (bug de patch mal aplicado), httpx.post real
