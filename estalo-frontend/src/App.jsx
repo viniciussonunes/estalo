@@ -67,7 +67,9 @@ function CardsPage() {
   return (
     <Cards
       deck={deck}
-      aoVoltar={() => navigate("/")}
+      // Volta pra dentro da mesma pasta (se o deck pertence a uma) em vez
+      // de sempre pro Início -- mesmo padrão do voltar de RevisaoGlobalPage.
+      aoVoltar={() => navigate(deck.folder_id ? `/?folder=${deck.folder_id}` : "/")}
       aoEstudar={() => navigate(`/deck/${deck.id}/estudo`, { state: { deck } })}
       aoAprender={() => navigate(`/deck/${deck.id}/aprender`, { state: { deck } })}
       aoRevelar={() => navigate(`/deck/${deck.id}/revelar`, { state: { deck } })}
