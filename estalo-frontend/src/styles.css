@@ -707,7 +707,7 @@ body {
   padding: 1.25rem;
   margin-bottom: 1.5rem;
 }
-.cards-criar .abas { margin-bottom: 1rem; }
+.criar-deck-alternar { display: inline-block; margin-top: 0.85rem; }
 
 .form-card { display: flex; flex-direction: column; gap: 0.75rem; }
 .form-card textarea {

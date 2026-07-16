@@ -11,7 +11,9 @@ const MSGS_IA = [
 export default function CriarDeck({ pastaId, aoVoltar, aoVerCards }) {
   const [nome, setNome] = useState("");
   const [descricao, setDescricao] = useState("");
-  const [modo, setModo] = useState("manual"); // "manual" | "ia"
+  // IA-first: a tela abre direto no formulário de IA -- manual é o caminho
+  // alternativo, acessível por um link discreto, não uma aba de peso igual.
+  const [modo, setModo] = useState("ia"); // "manual" | "ia"
 
   // Modo manual: linhas dinâmicas
   const [linhas, setLinhas] = useState([{ frente: "", verso: "" }]);
@@ -124,84 +126,86 @@ export default function CriarDeck({ pastaId, aoVoltar, aoVerCards }) {
 
           {/* Cards */}
           <div className="cards-criar">
-            <div className="abas">
-              <button
-                type="button"
-                className={modo === "manual" ? "aba ativa" : "aba"}
-                onClick={() => setModo("manual")}
-              >
-                Adicionar manualmente
-              </button>
-              <button
-                type="button"
-                className={modo === "ia" ? "aba ativa" : "aba"}
-                onClick={() => setModo("ia")}
-              >
-                Gerar com IA
-              </button>
-            </div>
-
             {erro && <p className="erro">{erro}</p>}
 
-            {modo === "manual" ? (
-              <div className="linhas-cards">
-                {linhas.map((linha, i) => (
-                  <div key={i} className="linha-card">
-                    <span className="linha-card-num">{i + 1}</span>
-                    <div className="linha-card-campos">
-                      <textarea
-                        value={linha.frente}
-                        onChange={(e) => updateLinha(i, "frente", e.target.value)}
-                        placeholder="Frente (pergunta)"
-                        rows={2}
-                      />
-                      <textarea
-                        value={linha.verso}
-                        onChange={(e) => updateLinha(i, "verso", e.target.value)}
-                        placeholder="Verso (resposta)"
-                        rows={2}
-                      />
-                    </div>
-                    {linhas.length > 1 && (
-                      <button
-                        type="button"
-                        className="linha-card-remover"
-                        onClick={() => removeLinha(i)}
-                        title="Remover"
-                      >
-                        ×
-                      </button>
-                    )}
-                  </div>
-                ))}
-                <button type="button" className="botao-add-linha" onClick={addLinha}>
-                  + Adicionar card
-                </button>
-              </div>
-            ) : (
-              <div className="form-card">
-                <label className="campo">
-                  <span>Material de estudo</span>
-                  <textarea
-                    value={textoIA}
-                    onChange={(e) => setTextoIA(e.target.value)}
-                    placeholder="Cole aqui suas anotações, um trecho do livro, a descrição de um conceito…"
-                    rows={8}
-                  />
-                </label>
-                <div className="form-card-rodape">
-                  <label className="campo campo-inline">
-                    <span>Quantidade de cards</span>
-                    <input
-                      type="number"
-                      min={1}
-                      max={30}
-                      value={qtdIA}
-                      onChange={(e) => setQtdIA(Number(e.target.value))}
+            {modo === "ia" ? (
+              <>
+                <div className="form-card">
+                  <label className="campo">
+                    <span>Material de estudo</span>
+                    <textarea
+                      value={textoIA}
+                      onChange={(e) => setTextoIA(e.target.value)}
+                      placeholder="Cole aqui suas anotações, um trecho do livro, a descrição de um conceito…"
+                      rows={8}
+                      autoFocus
                     />
                   </label>
+                  <div className="form-card-rodape">
+                    <label className="campo campo-inline">
+                      <span>Quantidade de cards</span>
+                      <input
+                        type="number"
+                        min={1}
+                        max={30}
+                        value={qtdIA}
+                        onChange={(e) => setQtdIA(Number(e.target.value))}
+                      />
+                    </label>
+                  </div>
                 </div>
-              </div>
+                <button
+                  type="button"
+                  className="botao-texto criar-deck-alternar"
+                  onClick={() => setModo("manual")}
+                >
+                  Prefiro criar manualmente
+                </button>
+              </>
+            ) : (
+              <>
+                <div className="linhas-cards">
+                  {linhas.map((linha, i) => (
+                    <div key={i} className="linha-card">
+                      <span className="linha-card-num">{i + 1}</span>
+                      <div className="linha-card-campos">
+                        <textarea
+                          value={linha.frente}
+                          onChange={(e) => updateLinha(i, "frente", e.target.value)}
+                          placeholder="Frente (pergunta)"
+                          rows={2}
+                        />
+                        <textarea
+                          value={linha.verso}
+                          onChange={(e) => updateLinha(i, "verso", e.target.value)}
+                          placeholder="Verso (resposta)"
+                          rows={2}
+                        />
+                      </div>
+                      {linhas.length > 1 && (
+                        <button
+                          type="button"
+                          className="linha-card-remover"
+                          onClick={() => removeLinha(i)}
+                          title="Remover"
+                        >
+                          ×
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                  <button type="button" className="botao-add-linha" onClick={addLinha}>
+                    + Adicionar card
+                  </button>
+                </div>
+                <button
+                  type="button"
+                  className="botao-texto criar-deck-alternar"
+                  onClick={() => setModo("ia")}
+                >
+                  Prefiro gerar com IA
+                </button>
+              </>
             )}
           </div>
 
@@ -212,7 +216,7 @@ export default function CriarDeck({ pastaId, aoVoltar, aoVerCards }) {
           >
             {salvando
               ? (modo === "ia" ? msgIA : "Criando…")
-              : "Criar deck"}
+              : (modo === "ia" ? "Gerar cards com IA" : "Criar deck")}
           </button>
         </form>
       </main>
