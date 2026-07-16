@@ -750,7 +750,7 @@ export default function Aprender({ deck, aoVoltar, modoGlobal = false, folderId 
                 </p>
                 <div className="gamificado-botoes">
                   <button className="botao-principal" onClick={reiniciarSessao} disabled={salvando}>
-                    Nova sessão agora
+                    {salvando ? "Salvando…" : "Nova sessão agora"}
                   </button>
                   <button className="botao-texto" onClick={sair}>
                     {modoGlobal ? "Voltar à Home" : "Voltar aos decks"}
