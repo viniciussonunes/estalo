@@ -742,17 +742,23 @@ export default function Aprender({ deck, aoVoltar, modoGlobal = false, folderId 
 
             {temCardsEmValidacao ? (
               <div className="gamificado-aviso">
-                <p className="gamificado-aviso-titulo">🧠 Seus cards estão em Validação</p>
+                <p className="gamificado-aviso-titulo">
+                  Objetivo: Dominar est{avancadosParaValidacao !== 1 ? "es" : "e"}{" "}
+                  {avancadosParaValidacao} card{avancadosParaValidacao !== 1 ? "s" : ""}
+                </p>
                 <p className="gamificado-aviso-texto">
-                  Cientificamente, seu cérebro precisa de um intervalo para consolidar
-                  a memória. Fazer uma nova sessão <em>agora</em> acelera a fixação —
-                  ou você pode descansar e revisar depois.
+                  Você validou {avancadosParaValidacao} conceito{avancadosParaValidacao !== 1 ? "s" : ""}.
+                  Agora, vamos consolidar? Fazer uma rodada final agora transformará esse
+                  conhecimento recente em <em>DOMÍNIO</em> permanente.
+                </p>
+                <p className="gamificado-progresso">
+                  Próximo passo: {avancadosParaValidacao}/{avancadosParaValidacao} Dominados
                 </p>
                 <div className="gamificado-botoes">
                   <button className="botao-principal" onClick={reiniciarSessao} disabled={salvando}>
-                    {salvando ? "Salvando…" : "Nova sessão agora"}
+                    {salvando ? "Salvando…" : "Consolidar Domínio"}
                   </button>
-                  <button className="botao-texto" onClick={sair}>
+                  <button className="botao-texto gamificado-secundario" onClick={sair}>
                     {modoGlobal ? "Voltar à Home" : "Voltar aos decks"}
                   </button>
                 </div>
