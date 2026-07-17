@@ -406,7 +406,15 @@ export default function Aprender({ deck, aoVoltar, modoGlobal = false, folderId 
         const opt = atual.options[parseInt(e.key) - 1];
         if (opt) {
           setResposta(opt.letter);
-          if (opt.letter !== atual.correct_letter) _registrarErro(atual.card_id);
+          if (opt.letter !== atual.correct_letter) {
+            _registrarErro(atual.card_id);
+          } else if (modoPraticaViloes) {
+            // Mesma marcação de escolher() (clique do mouse) -- sem isso, um
+            // vilão respondido certo só pelo teclado nunca some do resumo
+            // (bug real reportado: "refiz os dois vilões umas 3 vezes e ele
+            // não sumiu", sempre pelos atalhos 1-4 que a própria tela sugere).
+            viloesResolvidos.current.add(atual.card_id);
+          }
         }
       }
       if (respondeu && (e.key === " " || e.key === "Enter")) {
@@ -416,7 +424,7 @@ export default function Aprender({ deck, aoVoltar, modoGlobal = false, folderId 
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [concluido, semQuiz, carregando, fila, respondeu]);
+  }, [concluido, semQuiz, carregando, fila, respondeu, modoPraticaViloes]);
   const acertouAtual = respondeu && questaoAtual
     ? resposta === questaoAtual.correct_letter
     : false;
