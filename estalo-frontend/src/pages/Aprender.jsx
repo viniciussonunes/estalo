@@ -1,8 +1,32 @@
 import { useState, useEffect, useRef } from "react";
 import ReactMarkdown from "react-markdown";
+import confetti from "canvas-confetti";
 import { api, QuotaExceededException } from "../api.js";
 import useStudySession from "../hooks/useStudySession.js";
 import QuotaLimitModal from "../components/QuotaLimitModal.jsx";
+
+// Cores da própria paleta do app (violeta de marca + verde/âmbar/rosa dos
+// estados de acerto) -- confete precisa combinar com o resto da UI, não
+// parecer um componente genérico colado por cima.
+const CONFETTI_CORES = ["#5c54e8", "#16a34a", "#f59e0b", "#ec4899"];
+
+function _prefereReduzirMovimento() {
+  return window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+}
+
+/** Disparado uma vez ao fechar a sessão de verdade (ver useEffect [concluido]). */
+function comemorarSessaoConcluida() {
+  if (_prefereReduzirMovimento()) return;
+  confetti({ particleCount: 120, spread: 90, origin: { y: 0.6 }, colors: CONFETTI_CORES });
+  confetti({ particleCount: 60, angle: 60, spread: 70, origin: { x: 0, y: 0.6 }, colors: CONFETTI_CORES });
+  confetti({ particleCount: 60, angle: 120, spread: 70, origin: { x: 1, y: 0.6 }, colors: CONFETTI_CORES });
+}
+
+/** Disparado a cada vilão resolvido no "Rever Vilões" (menor, não rouba a cena). */
+function comemorarVilaoResolvido() {
+  if (_prefereReduzirMovimento()) return;
+  confetti({ particleCount: 40, spread: 55, origin: { y: 0.7 }, scalar: 0.75, colors: CONFETTI_CORES });
+}
 
 /*
   Lógica de fases SM-2:
@@ -113,6 +137,10 @@ export default function Aprender({ deck, aoVoltar, modoGlobal = false, folderId 
   // em _salvarProgresso) e só marca "resolvido" como uma dimensão à parte,
   // consultada no filtro de `viloes` da tela de resumo.
   const viloesResolvidos  = useRef(new Set());
+  // Garante um único burst de confete por sessão de verdade -- sem isso, ao
+  // voltar do "Rever Vilões" (que também passa por concluido=true) o efeito
+  // abaixo dispararia de novo o mesmo confete de "sessão concluída".
+  const confetiSessaoDisparado = useRef(false);
   const startingReps      = useRef({});
   const questoesOriginais = useRef([]);
   const inicioSessao      = useRef(null);
@@ -276,9 +304,15 @@ export default function Aprender({ deck, aoVoltar, modoGlobal = false, folderId 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fila, acertosNaPrimeira, concluido, mostrarPrompt, resposta, modoPraticaViloes]);
 
-  // Sessão chegou ao fim (equivalente a SessaoConcluida) → limpa o snapshot.
+  // Sessão chegou ao fim (equivalente a SessaoConcluida) → limpa o snapshot
+  // e comemora (só na primeira vez -- ver confetiSessaoDisparado acima).
   useEffect(() => {
-    if (concluido) limpar();
+    if (!concluido) return;
+    limpar();
+    if (!confetiSessaoDisparado.current) {
+      confetiSessaoDisparado.current = true;
+      comemorarSessaoConcluida();
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [concluido]);
 
@@ -414,6 +448,7 @@ export default function Aprender({ deck, aoVoltar, modoGlobal = false, folderId 
             // (bug real reportado: "refiz os dois vilões umas 3 vezes e ele
             // não sumiu", sempre pelos atalhos 1-4 que a própria tela sugere).
             viloesResolvidos.current.add(atual.card_id);
+            comemorarVilaoResolvido();
           }
         }
       }
@@ -438,6 +473,7 @@ export default function Aprender({ deck, aoVoltar, modoGlobal = false, folderId 
       // Acertou um vilão durante a prática — marca resolvido sem tocar em
       // errosPorCard (que precisa manter a contagem original de erros).
       viloesResolvidos.current.add(fila[0].card_id);
+      comemorarVilaoResolvido();
     }
   }
 
@@ -536,6 +572,7 @@ export default function Aprender({ deck, aoVoltar, modoGlobal = false, folderId 
   function reiniciarSessao() {
     errosPorCard.current = new Map();
     viloesResolvidos.current.clear();
+    confetiSessaoDisparado.current = false;
     startingReps.current = {};
     setAcertosNaPrimeira(0);
     setResposta(null);
