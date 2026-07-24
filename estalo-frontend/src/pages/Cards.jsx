@@ -1,6 +1,15 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { api } from "../api.js";
 
+// Mesma classificação usada nos boxes de resumo (stats-deck) e no backend
+// (ver _memorization_pct em decks.py): 0 repetições = novo, 1 = validando,
+// 2+ = dominado.
+function statusCard(repetitions) {
+  if (!repetitions) return "novo";
+  if (repetitions === 1) return "validando";
+  return "dominado";
+}
+
 const MSGS_IA = [
   "Lendo o texto fornecido...",
   "Decompondo conceitos essenciais...",
@@ -287,12 +296,15 @@ export default function Cards({ deck, aoVoltar, aoEstudar, aoAprender, aoRevelar
                   </div>
                 </li>
               ) : (
-                <li key={c.id} className="item-card">
+                <li key={c.id} className={`item-card item-card--${statusCard(c.repetitions)}`}>
                   <div className="item-card-conteudo">
                     <p className="item-card-frente">{c.front}</p>
                     <p className="item-card-verso">{c.back}</p>
                   </div>
                   <div className="item-card-rodape">
+                    <span className={`badge-status badge-status--${statusCard(c.repetitions)}`}>
+                      {statusCard(c.repetitions) === "novo" ? "Novo" : statusCard(c.repetitions) === "validando" ? "Validando" : "Dominado"}
+                    </span>
                     {c.source === "ai" && <span className="badge-ia">✨ IA</span>}
                     <div className="item-card-acoes">
                       <button className="icone-acao" onClick={() => iniciarEdicao(c)} title="Editar">

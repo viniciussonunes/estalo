@@ -2490,6 +2490,27 @@ kbd {
   flex-shrink: 0;
 }
 
+/* Marcação de status por card (Novo/Validando/Dominado) -- mesma
+   classificação e cores dos boxes de resumo (stats-deck) acima da lista. */
+.badge-status {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.18rem 0.55rem;
+  border-radius: 99px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  border: 1px solid transparent;
+  flex-shrink: 0;
+}
+.badge-status--novo      { background: var(--violeta-suave); color: var(--violeta); border-color: var(--violeta); }
+.badge-status--validando { background: var(--ambar-suave);   color: var(--ambar);   border-color: var(--ambar); }
+.badge-status--dominado  { background: var(--verde-suave);   color: var(--verde);   border-color: var(--verde); }
+
+.item-card--novo      { border-left: 4px solid var(--violeta); }
+.item-card--validando { border-left: 4px solid var(--ambar); }
+.item-card--dominado  { border-left: 4px solid var(--verde); }
+
 /* ---------- Modal ---------- */
 @keyframes modalIn {
   from { opacity: 0; transform: translateY(12px) scale(0.98); }
