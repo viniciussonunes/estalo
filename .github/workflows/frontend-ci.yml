@@ -1,0 +1,57 @@
+name: Frontend CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: estalo-frontend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: estalo-frontend/package-lock.json
+
+      - name: Instalar dependências
+        run: npm ci
+
+      - name: Build de produção
+        run: npm run build
+
+  e2e:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: estalo-frontend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: estalo-frontend/package-lock.json
+
+      - name: Instalar dependências
+        run: npm ci
+
+      - name: Instalar navegadores do Playwright
+        run: npx playwright install --with-deps chromium
+
+      # playwright.config.js sobe o próprio servidor de dev (webServer) e os
+      # specs em e2e/ não dependem de sessão logada nem do backend real (só
+      # verificam redirecionamento pro /login sem token) -- por isso não
+      # precisa de VITE_API_URL nem de nenhum secret aqui.
+      - name: Rodar testes e2e (Playwright)
+        run: npm run test:e2e
