@@ -3,6 +3,8 @@
 // Toda conversa com a API passa por aqui. Isso centraliza duas coisas chatas
 // que senão você repetiria em toda tela: o endereço base e o crachá (token).
 
+import { emitirToastErro } from "./toastBus.js";
+
 const BASE = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
 // Calculado uma vez (não muda durante a sessão) — nome IANA do fuso do
@@ -48,7 +50,24 @@ async function request(path, { method = "GET", body, form } = {}) {
     payload = JSON.stringify(body);
   }
 
-  const resp = await fetch(`${BASE}${path}`, { method, headers, body: payload });
+  let resp;
+  try {
+    resp = await fetch(`${BASE}${path}`, { method, headers, body: payload });
+  } catch (falhaDeRede) {
+    // fetch só lança aqui por falha de REDE de verdade (servidor
+    // inalcançável, sem internet) -- nunca por causa de um status de erro
+    // HTTP normal (isso vira resp.ok=false abaixo, sempre tratado por quem
+    // chamou). É exatamente o caso que hoje passava batido pro usuário:
+    // a internet cai no meio de uma sessão e ninguém avisa -- só um
+    // console.error que ninguém vê. Aqui sim generaliza pra toda chamada
+    // da API de uma vez, sem precisar mexer tela por tela.
+    emitirToastErro("Sem conexão com o servidor. Verifique sua internet e tente de novo.");
+    // Não repassa a mensagem crua do navegador (ex: "Failed to fetch") --
+    // quem pega esse erro num catch próprio (como o <p class="erro"> de
+    // Cards.jsx/CriarDeck.jsx) mostraria esse texto técnico direto pro
+    // usuário; com isso aqui já sai com a mesma mensagem amigável do toast.
+    throw new Error("Sem conexão com o servidor.");
+  }
 
   if (!resp.ok) {
     // Tenta ler a mensagem de erro que o backend mandou.

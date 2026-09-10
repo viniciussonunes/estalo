@@ -3,6 +3,7 @@ import ReactMarkdown from "react-markdown";
 import confetti from "canvas-confetti";
 import { api, QuotaExceededException } from "../api.js";
 import useStudySession from "../hooks/useStudySession.js";
+import { useToast } from "../hooks/ToastContext.jsx";
 import QuotaLimitModal from "../components/QuotaLimitModal.jsx";
 
 // Cores da própria paleta do app (violeta de marca + verde/âmbar/rosa dos
@@ -81,6 +82,7 @@ export default function Aprender({ deck, aoVoltar, modoGlobal = false, folderId 
   // salva da Fila Única de verdade nem com a de outra pasta.
   const chaveSessao = modoGlobal ? (folderId ? `folder-${folderId}` : "global") : deck.id;
   const { snapshotPendente, salvar, limpar, descartarPendente } = useStudySession(chaveSessao);
+  const mostrarToast = useToast();
 
   // Busca os cards a estudar: de um deck só (Modo Aprender normal) ou o
   // lote agrupado de até 15 vencidos (Fila Única — todas as pastas, ou só
@@ -387,12 +389,15 @@ export default function Aprender({ deck, aoVoltar, modoGlobal = false, folderId 
     setEnviandoFeedback(true);
     try {
       await api.feedbackErroCard(questaoAtual.card_id, _alternativaEscolhidaTexto(), true);
-      setFeedbackEstado("enviado");
     } catch {
-      // Feedback positivo é best-effort -- não vale interromper o fluxo
-      // de estudo por um 👍 que não salvou; a explicação já foi mostrada.
-      setFeedbackEstado("enviado");
+      // Continua best-effort -- não vale travar o fluxo de estudo por um
+      // 👍 que não salvou, a explicação já foi mostrada. A diferença agora
+      // é que isso não fica mais em silêncio total: antes a tela dizia
+      // "Obrigado pelo feedback!" mesmo quando a chamada tinha falhado de
+      // verdade, dando a entender (falsamente) que foi registrado.
+      mostrarToast("Não deu pra registrar seu feedback agora, mas pode seguir estudando.");
     } finally {
+      setFeedbackEstado("enviado");
       setEnviandoFeedback(false);
     }
   }
@@ -541,11 +546,26 @@ export default function Aprender({ deck, aoVoltar, modoGlobal = false, folderId 
       else if (fase >= 2 && !errou)  quality = 5;              // Dominado sem erro: estende
       else                            quality = 1;              // Dominado com erro: volta à Fase 1
 
-      return api.responderCard(q.card_id, quality, true).catch(err => {
-        console.error(`[Aprender] card ${q.card_id} fase=${fase} quality=${quality} erro:`, err.message);
-      });
+      return api.responderCard(q.card_id, quality, true)
+        .then(() => null)
+        .catch(err => {
+          console.error(`[Aprender] card ${q.card_id} fase=${fase} quality=${quality} erro:`, err.message);
+          return q.card_id; // marca esse card como "não salvou", pro aviso abaixo
+        });
     });
-    try { await Promise.all(chamadas); } catch { /* silencioso */ }
+    // Antes, um card que falhasse só virava um console.error -- a tela
+    // seguia pra "Sessão concluída!" normalmente, sem nenhum sinal de que
+    // parte do progresso pode não ter sido salva (ex: internet caiu no
+    // meio). Agora, se sobrar alguma falha depois de todas as tentativas,
+    // avisa explicitamente em vez de fingir que deu tudo certo.
+    const falhas = (await Promise.all(chamadas)).filter(Boolean);
+    if (falhas.length > 0) {
+      mostrarToast(
+        falhas.length === 1
+          ? "1 resposta desta sessão não foi salva — pode ter sido perda de conexão."
+          : `${falhas.length} respostas desta sessão não foram salvas — pode ter sido perda de conexão.`,
+      );
+    }
 
     // Resumo da rodada pro histórico do Dashboard. Fire-and-forget depois
     // das respostas individuais acima: se isso falhar, perde-se só um ponto

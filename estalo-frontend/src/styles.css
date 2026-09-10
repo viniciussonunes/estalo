@@ -2740,3 +2740,59 @@ kbd {
   .undo-toasts { left: 1rem; right: 1rem; transform: none; width: auto; }
   .undo-toast  { width: 100%; }
 }
+
+/* ===== Toasts globais de erro/sucesso (ToastContext.jsx) ===== */
+/* Canto oposto ao de .undo-toasts (bottom-center) de propósito -- os dois
+   têm significados diferentes (aviso genérico vs. ação com desfazer) e
+   podem em teoria coexistir na tela ao mesmo tempo. */
+.toasts-globais {
+  position: fixed;
+  top: 1.25rem;
+  right: 1.25rem;
+  z-index: 70;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  max-width: min(360px, calc(100vw - 2rem));
+}
+.toast-global {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  padding: 0.7rem 0.5rem 0.7rem 0.9rem;
+  border-radius: 10px;
+  border-left-width: 3px;
+  border-left-style: solid;
+  background: var(--superficie);
+  border-top: 1px solid var(--borda);
+  border-right: 1px solid var(--borda);
+  border-bottom: 1px solid var(--borda);
+  box-shadow: var(--sombra-elevada);
+  animation: undoToastEntra 0.25s ease;
+}
+@media (prefers-reduced-motion: reduce) { .toast-global { animation: none; } }
+.toast-global.toast-erro     { border-left-color: var(--perigo); }
+.toast-global.toast-sucesso  { border-left-color: var(--verde); }
+.toast-global-texto {
+  flex: 1;
+  font-size: 0.85rem;
+  color: var(--tinta);
+  line-height: 1.4;
+}
+.toast-global-fechar {
+  flex-shrink: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+  color: var(--tinta-suave);
+  font-size: 1.15rem;
+  line-height: 1;
+  padding: 0.1rem 0.35rem;
+  border-radius: 6px;
+  transition: background var(--transicao), color var(--transicao);
+}
+.toast-global-fechar:hover { background: var(--papel); color: var(--tinta); }
+
+@media (max-width: 640px) {
+  .toasts-globais { left: 1rem; right: 1rem; top: 1rem; max-width: none; }
+}
