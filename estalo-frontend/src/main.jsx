@@ -5,6 +5,7 @@ import * as Sentry from "@sentry/react";
 import "./sentry.js"; // precisa inicializar antes de qualquer coisa renderizar
 import App from "./App.jsx";
 import { ToastProvider } from "./hooks/ToastContext.jsx";
+import OfflineBanner from "./components/OfflineBanner.jsx";
 import "./styles.css";
 
 function ErroFallback({ error }) {
@@ -30,6 +31,7 @@ ReactDOM.createRoot(document.getElementById("root")).render(
   <React.StrictMode>
     <Sentry.ErrorBoundary fallback={({ error }) => <ErroFallback error={error} />}>
       <ToastProvider>
+        <OfflineBanner />
         <BrowserRouter>
           <App />
         </BrowserRouter>

@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import ReactMarkdown from "react-markdown";
 import confetti from "canvas-confetti";
-import { api, QuotaExceededException } from "../api.js";
+import { api, QuotaExceededException, NetworkException } from "../api.js";
 import useStudySession from "../hooks/useStudySession.js";
 import { useToast } from "../hooks/ToastContext.jsx";
 import QuotaLimitModal from "../components/QuotaLimitModal.jsx";
@@ -40,6 +40,28 @@ function comemorarVilaoResolvido() {
 */
 
 const LETRAS = ["A", "B", "C", "D"];
+
+/**
+ * Re-tenta `fn` só em falha de REDE (NetworkException) -- erro de negócio
+ * do backend (4xx) ou cota estourada não adianta re-tentar. Backoff:
+ * ~0.8s, 1.6s, 3.2s entre as 4 tentativas. Se todas falharem, propaga o
+ * último erro (quem chamou decide o que fazer -- em _salvarProgresso,
+ * vira o aviso de "não foi salva").
+ */
+async function comRetry(fn, tentativas = 4, baseMs = 800) {
+  let ultimoErro;
+  for (let i = 0; i < tentativas; i++) {
+    try {
+      return await fn();
+    } catch (e) {
+      ultimoErro = e;
+      const valeRetentar = e instanceof NetworkException;
+      if (!valeRetentar || i === tentativas - 1) throw e;
+      await new Promise(r => setTimeout(r, baseMs * 2 ** i));
+    }
+  }
+  throw ultimoErro; // inalcançável, mas deixa o retorno explícito
+}
 
 function embaralhar(arr) {
   const a = [...arr];
@@ -144,6 +166,7 @@ export default function Aprender({ deck, aoVoltar, modoGlobal = false, folderId 
   // abaixo dispararia de novo o mesmo confete de "sessão concluída".
   const confetiSessaoDisparado = useRef(false);
   const startingReps      = useRef({});
+  const requestIds        = useRef({}); // card_id -> X-Request-ID fixo da sessão (idempotência do save)
   const questoesOriginais = useRef([]);
   const inicioSessao      = useRef(null);
   const proximoRef        = useRef(null);
@@ -185,8 +208,18 @@ export default function Aprender({ deck, aoVoltar, modoGlobal = false, folderId 
     setTotalUnicos(questoes.length);
     questoesOriginais.current = questoes;
     const repsMap = {};
-    questoes.forEach(q => { repsMap[q.card_id] = q.repetitions; });
+    const idsMap = {};
+    questoes.forEach(q => {
+      repsMap[q.card_id] = q.repetitions;
+      // Um X-Request-ID fixo por card, gerado no início da sessão -- todas
+      // as tentativas de salvar aquele card (retry, ou até um novo save
+      // depois de um F5) usam o MESMO id, então o backend nunca reprocessa
+      // (ver responderCard em api.js). Precisa sobreviver ao reload -> vai
+      // no snapshot (ver useStudySession).
+      idsMap[q.card_id] = crypto.randomUUID();
+    });
     startingReps.current = repsMap;
+    requestIds.current = idsMap;
     inicioSessao.current = Date.now();
   }
 
@@ -236,6 +269,12 @@ export default function Aprender({ deck, aoVoltar, modoGlobal = false, folderId 
     setTotalUnicos(snap.totalUnicos);
     questoesOriginais.current = snap.questoesOriginais;
     startingReps.current = snap.startingReps;
+    // Snapshots antigos não têm requestIds -> gera na hora (o pior caso é
+    // um save pós-reload não ser idempotente contra tentativas de antes do
+    // reload; aceitável e só afeta sessões que já estavam salvas antes
+    // desta versão).
+    requestIds.current = snap.requestIds
+      ?? Object.fromEntries(snap.questoesOriginais.map(q => [q.card_id, crypto.randomUUID()]));
     errosPorCard.current = new Map(snap.errosPorCard);
     setAcertosNaPrimeira(snap.acertosNaPrimeira);
     inicioSessao.current = snap.inicioSessao;
@@ -296,6 +335,7 @@ export default function Aprender({ deck, aoVoltar, modoGlobal = false, folderId 
       totalUnicos,
       questoesOriginais: questoesOriginais.current,
       startingReps: startingReps.current,
+      requestIds: requestIds.current,
       // Serializa o Map como array de pares [card_id, contagem] — JSON não
       // tem Map nativo. new Map(arrayDePares) reconstrói certinho na volta.
       errosPorCard: [...errosPorCard.current],
@@ -546,7 +586,12 @@ export default function Aprender({ deck, aoVoltar, modoGlobal = false, folderId 
       else if (fase >= 2 && !errou)  quality = 5;              // Dominado sem erro: estende
       else                            quality = 1;              // Dominado com erro: volta à Fase 1
 
-      return api.responderCard(q.card_id, quality, true)
+      // comRetry: re-tenta sozinho em queda de conexão (backoff), usando
+      // sempre o mesmo X-Request-ID da sessão -> o backend não reprocessa
+      // se uma tentativa anterior já tinha salvado. Só desiste (e marca
+      // como falha) depois de 4 tentativas.
+      const reqId = requestIds.current[q.card_id];
+      return comRetry(() => api.responderCard(q.card_id, quality, true, reqId))
         .then(() => null)
         .catch(err => {
           console.error(`[Aprender] card ${q.card_id} fase=${fase} quality=${quality} erro:`, err.message);
@@ -556,7 +601,7 @@ export default function Aprender({ deck, aoVoltar, modoGlobal = false, folderId 
     // Antes, um card que falhasse só virava um console.error -- a tela
     // seguia pra "Sessão concluída!" normalmente, sem nenhum sinal de que
     // parte do progresso pode não ter sido salva (ex: internet caiu no
-    // meio). Agora, se sobrar alguma falha depois de todas as tentativas,
+    // meio). Agora, depois de esgotar os retries, se sobrar alguma falha,
     // avisa explicitamente em vez de fingir que deu tudo certo.
     const falhas = (await Promise.all(chamadas)).filter(Boolean);
     if (falhas.length > 0) {
@@ -594,6 +639,7 @@ export default function Aprender({ deck, aoVoltar, modoGlobal = false, folderId 
     viloesResolvidos.current.clear();
     confetiSessaoDisparado.current = false;
     startingReps.current = {};
+    requestIds.current = {}; // _iniciarComCards gera novos, mas deixa explícito: sessão nova = ids novos
     setAcertosNaPrimeira(0);
     setResposta(null);
     setConcluido(false);

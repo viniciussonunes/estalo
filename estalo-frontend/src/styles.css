@@ -2796,3 +2796,40 @@ kbd {
 @media (max-width: 640px) {
   .toasts-globais { left: 1rem; right: 1rem; top: 1rem; max-width: none; }
 }
+
+/* ===== Faixa fixa de "offline" (OfflineBanner.jsx) ===== */
+.offline-banner {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 55; /* abaixo dos toasts (60/70), acima do conteúdo */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.55rem 1rem;
+  background: var(--ambar-suave);
+  border-top: 1px solid var(--ambar);
+  color: var(--tinta);
+  font-size: 0.8rem;
+  font-weight: 500;
+  text-align: center;
+  animation: undoToastEntra 0.25s ease;
+}
+@media (prefers-reduced-motion: reduce) {
+  .offline-banner { animation: none; }
+  .offline-banner-ponto { animation: none; }
+}
+.offline-banner-ponto {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--perigo);
+  flex-shrink: 0;
+  animation: offlinePulse 1.8s ease-in-out infinite;
+}
+@keyframes offlinePulse {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.3; }
+}

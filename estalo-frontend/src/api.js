@@ -26,6 +26,17 @@ export class QuotaExceededException extends Error {
   }
 }
 
+// Lançada quando o fetch falha por REDE (servidor inalcançável, sem
+// internet) -- distinta de um erro de negócio vindo do backend. Classe
+// própria pra quem chama poder decidir re-tentar (ver comRetry em
+// Aprender.jsx): erro de rede é transitório, erro de negócio (4xx) não.
+export class NetworkException extends Error {
+  constructor() {
+    super("Sem conexão com o servidor.");
+    this.name = "NetworkException";
+  }
+}
+
 // O crachá fica guardado no navegador (localStorage), então o login
 // "gruda" mesmo se você recarregar a página.
 export const token = {
@@ -35,8 +46,8 @@ export const token = {
 };
 
 // Função base: monta a requisição, anexa o crachá e trata erro.
-async function request(path, { method = "GET", body, form } = {}) {
-  const headers = { "X-User-Timezone": FUSO_HORARIO };
+async function request(path, { method = "GET", body, form, headers: extra } = {}) {
+  const headers = { "X-User-Timezone": FUSO_HORARIO, ...extra };
   const t = token.get();
   if (t) headers["Authorization"] = `Bearer ${t}`;
 
@@ -61,12 +72,20 @@ async function request(path, { method = "GET", body, form } = {}) {
     // a internet cai no meio de uma sessão e ninguém avisa -- só um
     // console.error que ninguém vê. Aqui sim generaliza pra toda chamada
     // da API de uma vez, sem precisar mexer tela por tela.
-    emitirToastErro("Sem conexão com o servidor. Verifique sua internet e tente de novo.");
-    // Não repassa a mensagem crua do navegador (ex: "Failed to fetch") --
-    // quem pega esse erro num catch próprio (como o <p class="erro"> de
-    // Cards.jsx/CriarDeck.jsx) mostraria esse texto técnico direto pro
-    // usuário; com isso aqui já sai com a mesma mensagem amigável do toast.
-    throw new Error("Sem conexão com o servidor.");
+    // Só dispara o toast quando o navegador acha que ESTÁ online -- ou
+    // seja, "você tem internet mas o servidor não respondeu" (aí o toast é
+    // o único sinal). Se está offline de verdade (navigator.onLine false),
+    // a faixa fixa do OfflineBanner já está na tela dizendo isso -- não
+    // precisa também de um toast, ainda mais durante um retry que pode se
+    // recuperar sozinho.
+    if (typeof navigator === "undefined" || navigator.onLine) {
+      emitirToastErro("Sem conexão com o servidor. Verifique sua internet e tente de novo.");
+    }
+    // NetworkException (não Error cru): mensagem amigável já embutida
+    // (`.message` = "Sem conexão com o servidor.", pega pelos <p class="erro">
+    // de Cards.jsx/CriarDeck.jsx no lugar do "Failed to fetch" do navegador)
+    // e tipo identificável pra quem quiser re-tentar (comRetry em Aprender.jsx).
+    throw new NetworkException();
   }
 
   if (!resp.ok) {
@@ -134,10 +153,16 @@ export const api = {
   proximaRevisaoGlobal: (folderId) =>
     request(folderId ? `/study/global-reviews?folder_id=${folderId}` : "/study/global-reviews"),
 
-  responderCard: (cardId, quality, ignorarElegibilidade = false) =>
+  // requestId (UUID) opcional -> header X-Request-ID: o backend guarda em
+  // ReviewHistory.request_id e, numa segunda chamada com o MESMO id,
+  // devolve o resultado original sem reprocessar (ver responder_card em
+  // routers/study.py). É o que torna o retry seguro -- reenviar a mesma
+  // resposta não duplica histórico nem reaplica o SM-2.
+  responderCard: (cardId, quality, ignorarElegibilidade = false, requestId = null) =>
     request(`/study/cards/${cardId}/answer`, {
       method: "POST",
       body: { quality, ignorar_elegibilidade: ignorarElegibilidade },
+      headers: requestId ? { "X-Request-ID": requestId } : undefined,
     }),
 
   statsEstudo: (deckId) => request(`/study/decks/${deckId}/stats`),
