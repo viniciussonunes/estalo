@@ -2,6 +2,8 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { useSearchParams } from "react-router-dom";
 import * as Sentry from "@sentry/react";
 import { api } from "../api.js";
+import useUndoableDelete from "../hooks/useUndoableDelete.js";
+import UndoToasts from "../components/UndoToasts.jsx";
 
 /** Devolve o caminho (array de pastas) da raiz até `targetId` */
 function caminhoParaPasta(arvore, targetId, path = []) {
@@ -282,6 +284,10 @@ export default function Dashboard({ usuario, aoSair, aoVerCards, aoEstudar, aoCr
 
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro]             = useState("");
+  // Excluir pasta/deck: some da tela na hora (otimista), mas só chama a API
+  // de verdade se ninguém apertar "Desfazer" no toast a tempo (ver
+  // useUndoableDelete.js) -- substitui o antigo confirm() nativo.
+  const { pendentes: exclusoesPendentes, disparar: dispararExclusao, desfazer: desfazerExclusao } = useUndoableDelete();
   const [criandoPasta, setCriandoPasta]   = useState(false);
   const [nomePasta, setNomePasta]         = useState("");
   const [corPasta, setCorPasta]           = useState(null);
@@ -392,32 +398,53 @@ export default function Dashboard({ usuario, aoSair, aoVerCards, aoEstudar, aoCr
     finally { setSalvandoPasta(false); }
   }
 
-  async function excluirPasta(pasta, e) {
+  // Otimista + desfazer (ver useUndoableDelete.js): some da árvore/lista na
+  // hora, e só chama DELETE de verdade no backend se o toast "Desfazer"
+  // expirar sem clique. `arvoreAnterior`/`decksRemovidos`/`statsRemovidos`
+  // ficam presos no closure só pra esse desfazer -- se o usuário excluir
+  // uma SEGUNDA pasta antes de decidir sobre a primeira, desfazer a
+  // primeira restaura a árvore de antes dela (não desfaz a segunda,
+  // que seguiu seu próprio timer/estado independente).
+  function excluirPasta(pasta, e) {
     e.stopPropagation();
-    if (!confirm(`Excluir "${pasta.name}" e tudo dentro dela?`)) return;
-    try {
-      await api.excluirPasta(pasta.id);
-      const idsRemovidos = new Set(coletarIdsPastas(pasta));
-      setArvore(removerDaArvore(arvore, pasta.id));
-      setTodosDecks(decks => decks.filter(d => d.folder_id === null || !idsRemovidos.has(d.folder_id)));
-      setStatsMap(sm => {
-        const novo = { ...sm };
-        for (const d of todosDecks) {
-          if (d.folder_id !== null && idsRemovidos.has(d.folder_id)) delete novo[d.id];
-        }
-        return novo;
-      });
-    } catch (err) { setErro(err.message); }
+    const arvoreAnterior = arvore;
+    const idsRemovidos = new Set(coletarIdsPastas(pasta));
+    const decksRemovidos = todosDecks.filter(d => d.folder_id !== null && idsRemovidos.has(d.folder_id));
+    const statsRemovidos = {};
+    decksRemovidos.forEach(d => { if (statsMap[d.id]) statsRemovidos[d.id] = statsMap[d.id]; });
+
+    setArvore(removerDaArvore(arvore, pasta.id));
+    setTodosDecks(decks => decks.filter(d => !decksRemovidos.includes(d)));
+    setStatsMap(sm => {
+      const novo = { ...sm };
+      decksRemovidos.forEach(d => delete novo[d.id]);
+      return novo;
+    });
+
+    dispararExclusao(`Pasta "${pasta.name}" excluída`, {
+      commit: () => { api.excluirPasta(pasta.id).catch(err => setErro(err.message)); },
+      onUndo: () => {
+        setArvore(arvoreAnterior);
+        setTodosDecks(decks => [...decks, ...decksRemovidos]);
+        setStatsMap(sm => ({ ...sm, ...statsRemovidos }));
+      },
+    });
   }
 
-  async function excluirDeck(deck, e) {
+  function excluirDeck(deck, e) {
     e.stopPropagation();
-    if (!confirm(`Excluir "${deck.title}" e todos os cards?`)) return;
-    try {
-      await api.excluirDeck(deck.id);
-      setTodosDecks(decks => decks.filter(d => d.id !== deck.id));
-      setStatsMap(sm => { const novo = { ...sm }; delete novo[deck.id]; return novo; });
-    } catch (err) { setErro(err.message); }
+    const statsAnterior = statsMap[deck.id];
+
+    setTodosDecks(decks => decks.filter(d => d.id !== deck.id));
+    setStatsMap(sm => { const novo = { ...sm }; delete novo[deck.id]; return novo; });
+
+    dispararExclusao(`Deck "${deck.title}" excluído`, {
+      commit: () => { api.excluirDeck(deck.id).catch(err => setErro(err.message)); },
+      onUndo: () => {
+        setTodosDecks(decks => [...decks, deck]);
+        if (statsAnterior) setStatsMap(sm => ({ ...sm, [deck.id]: statsAnterior }));
+      },
+    });
   }
 
   function abrirMover(deck, e) {
@@ -821,6 +848,8 @@ export default function Dashboard({ usuario, aoSair, aoVerCards, aoEstudar, aoCr
           </div>
         </div>
       )}
+
+      <UndoToasts pendentes={exclusoesPendentes} aoDesfazer={desfazerExclusao} />
     </div>
   );
 }

@@ -2681,3 +2681,62 @@ kbd {
     overflow-y: auto;
   }
 }
+
+/* ===== Toasts de "excluído — Desfazer" (useUndoableDelete.js) ===== */
+.undo-toasts {
+  position: fixed;
+  left: 50%;
+  bottom: 1.25rem;
+  transform: translateX(-50%);
+  z-index: 60; /* acima de modal-overlay (ver .modal-overlay) só por segurança visual, embora raramente coexistam */
+  display: flex;
+  flex-direction: column-reverse; /* o mais recente nasce embaixo, empurra os outros pra cima */
+  gap: 0.5rem;
+  width: max-content;
+  max-width: calc(100vw - 2rem);
+}
+.undo-toast {
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+  background: var(--superficie);
+  border: 1px solid var(--borda);
+  box-shadow: var(--sombra-elevada);
+  border-radius: 999px;
+  padding: 0.55rem 0.6rem 0.55rem 1rem;
+  animation: undoToastEntra 0.25s ease;
+}
+@media (prefers-reduced-motion: reduce) {
+  .undo-toast { animation: none; }
+}
+.undo-toast-texto {
+  font-size: 0.85rem;
+  color: var(--tinta);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.undo-toast-botao {
+  flex-shrink: 0;
+  border: none;
+  background: none;
+  color: var(--violeta);
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 700;
+  cursor: pointer;
+  padding: 0.3rem 0.6rem;
+  border-radius: 999px;
+  transition: background var(--transicao);
+}
+.undo-toast-botao:hover { background: var(--violeta-suave); }
+
+@keyframes undoToastEntra {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@media (max-width: 640px) {
+  .undo-toasts { left: 1rem; right: 1rem; transform: none; width: auto; }
+  .undo-toast  { width: 100%; }
+}

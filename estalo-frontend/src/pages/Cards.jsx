@@ -1,5 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { api } from "../api.js";
+import useUndoableDelete from "../hooks/useUndoableDelete.js";
+import UndoToasts from "../components/UndoToasts.jsx";
 
 // Mesma classificação usada nos boxes de resumo (stats-deck) e no backend
 // (ver _memorization_pct em decks.py): 0 repetições = novo, 1 = validando,
@@ -22,6 +24,10 @@ export default function Cards({ deck, aoVoltar, aoEstudar, aoAprender, aoRevelar
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro]           = useState("");
   const [stats, setStats]         = useState(null);
+  // Excluir card: some da lista na hora, só chama a API se o toast
+  // "Desfazer" expirar sem clique (ver useUndoableDelete.js) -- substitui
+  // o antigo confirm() nativo.
+  const { pendentes: exclusoesPendentes, disparar: dispararExclusao, desfazer: desfazerExclusao } = useUndoableDelete();
 
   // Modal
   const [modalAberto, setModalAberto] = useState(false);
@@ -129,10 +135,23 @@ export default function Cards({ deck, aoVoltar, aoEstudar, aoAprender, aoRevelar
     finally { setGerando(false); }
   }
 
-  async function excluir(cardId) {
-    if (!confirm("Excluir este card?")) return;
-    try { await api.excluirCard(cardId); await carregarCards(); }
-    catch (err) { setErro(err.message); }
+  // Otimista + desfazer: some da lista na hora; guarda o índice original pra
+  // reinserir no mesmo lugar se o usuário desfizer (a lista não está
+  // ordenada por nenhum critério escolhível aqui, então a posição importa
+  // pra não "pular" o card de lugar ao voltar).
+  function excluir(cardId) {
+    const indiceOriginal = cards.findIndex(c => c.id === cardId);
+    if (indiceOriginal === -1) return;
+    const cardRemovido = cards[indiceOriginal];
+
+    setCards(cs => cs.filter(c => c.id !== cardId));
+
+    dispararExclusao(`Card excluído`, {
+      commit: () => { api.excluirCard(cardId).catch(err => setErro(err.message)); },
+      onUndo: () => {
+        setCards(cs => [...cs.slice(0, indiceOriginal), cardRemovido, ...cs.slice(indiceOriginal)]);
+      },
+    });
   }
 
   function iniciarEdicao(card) {
@@ -387,6 +406,8 @@ export default function Cards({ deck, aoVoltar, aoEstudar, aoAprender, aoRevelar
           </div>
         </div>
       )}
+
+      <UndoToasts pendentes={exclusoesPendentes} aoDesfazer={desfazerExclusao} />
     </div>
   );
 }
