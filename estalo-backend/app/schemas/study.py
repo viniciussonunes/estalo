@@ -42,6 +42,17 @@ class ReviewAnswer(BaseModel):
                      "due_date — precisa poder responder mesmo fora da janela de elegibilidade "
                      "do SM-2 clássico (usada pelo Modo Estudo).",
     )
+    respondido_em: datetime | None = Field(
+        None,
+        description="Quando o usuário REALMENTE respondeu (UTC). Usado pela fila de "
+                     "sincronização offline do frontend: uma resposta dada sem internet e "
+                     "enviada dias depois precisa entrar no histórico com a data original, "
+                     "senão o streak/heatmap contam tudo como 'hoje' e o próximo intervalo "
+                     "do SM-2 é calculado a partir da data errada. Ausente = agora "
+                     "(comportamento de sempre, todo cliente online continua igual). "
+                     "O servidor NÃO confia cegamente: valor no futuro ou antigo demais "
+                     "é ajustado (ver _resolver_respondido_em em routers/study.py).",
+    )
 
     def quality_efetivo(self) -> int:
         """Resolve quality a partir de difficulty se quality não vier."""

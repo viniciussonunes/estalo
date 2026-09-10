@@ -70,6 +70,36 @@ def _hoje_no_fuso(tz: ZoneInfo) -> date:
     return datetime.now(tz).date()
 
 
+# Quanto tempo pra trás uma resposta enfileirada offline ainda pode reivindicar
+# como data real. Além disso ela ainda é aceita (não se joga fora o estudo do
+# usuário), mas entra com a data limite -- evita que um cliente adulterado
+# reescreva histórico arbitrariamente longe.
+MAX_ATRASO_RESPOSTA_DIAS = 30
+
+
+def _resolver_respondido_em(respondido_em: datetime | None, agora: datetime) -> datetime:
+    """Resolve a data efetiva de uma resposta, sem confiar cegamente no cliente.
+
+    Ausente -> agora (caminho de todo cliente online, comportamento de sempre).
+    Presente -> normaliza pra naive-UTC e limita à janela [agora - MAX_ATRASO, agora]:
+      - futuro vira agora (senão dava pra empurrar due_date/streak pra frente);
+      - antigo demais vira o limite (a resposta não é descartada, só não pode
+        reescrever histórico distante).
+    """
+    if respondido_em is None:
+        return agora
+
+    # O cliente manda ISO-8601, normalmente com 'Z'/offset -> vem aware.
+    # Todas as colunas DateTime deste projeto são naive-UTC (ver _agora_utc).
+    if respondido_em.tzinfo is not None:
+        respondido_em = respondido_em.astimezone(timezone.utc).replace(tzinfo=None)
+
+    if respondido_em > agora:
+        return agora
+    limite = agora - timedelta(days=MAX_ATRASO_RESPOSTA_DIAS)
+    return max(respondido_em, limite)
+
+
 def _data_no_fuso(dt: datetime, tz: ZoneInfo) -> date:
     """Converte um datetime armazenado (naive, convenção UTC em todo o
     projeto) pra data de calendário no fuso do usuário."""
@@ -338,7 +368,13 @@ def responder_card(
         .first()
     )
 
-    agora = _agora_utc()
+    # `agora` = quando a resposta REALMENTE aconteceu. Igual ao relógio do
+    # servidor no caminho normal (online); numa resposta que veio da fila
+    # offline, é a data original que o cliente mandou (validada/limitada em
+    # _resolver_respondido_em). Tudo que deriva da resposta -- histórico,
+    # próximo due_date do SM-2, last_reviewed -- passa a usar essa data, pra
+    # 3 dias de estudo sem internet não colapsarem todos em "hoje".
+    agora = _resolver_respondido_em(resposta.respondido_em, _agora_utc())
     hoje = _hoje_no_fuso(tz)
 
     if review is None:
@@ -375,7 +411,9 @@ def responder_card(
         due_date=review.due_date,
     )
 
-    novo = calcular_proxima_revisao(estado_atual, quality)
+    # hoje=agora: o próximo intervalo conta a partir de quando a pessoa
+    # respondeu, não de quando o servidor recebeu (ver _resolver_respondido_em).
+    novo = calcular_proxima_revisao(estado_atual, quality, hoje=agora)
     if quality <= 2:
         # "Esqueci" → Crítico imediato
         novo = SM2State(
@@ -402,6 +440,10 @@ def responder_card(
         nova_due_date=novo.due_date,
         status=status_novo,
         request_id=x_request_id,   # None se header ausente (sem unicidade imposta)
+        # Explícito (em vez do default=utcnow da coluna): é o que faz o
+        # heatmap e o streak contarem a resposta no dia em que ela
+        # realmente aconteceu, mesmo chegando dias depois pela fila offline.
+        avaliado_em=agora,
     ))
 
     review.ease_factor   = novo.ease_factor
