@@ -2224,6 +2224,10 @@ kbd {
   align-items: center;
   gap: 0.65rem;
   flex: 1;
+  /* Sem isso o card não encolhe: item de flex tem min-width:auto por
+     padrão, o que o trava na largura do próprio conteúdo -- os dois cards
+     lado a lado estouravam a tela do celular. */
+  min-width: 0;
   padding: 0.7rem 0.9rem;
   border-radius: var(--raio);
   border: 1.5px solid;
@@ -2622,7 +2626,16 @@ kbd {
 @media (max-width: 640px) {
   .topo { padding: 0.75rem 1rem; flex-wrap: wrap; gap: 0.4rem; }
   .usuario-email { display: none; }
-  .modos-estudo-topo { gap: 0.25rem; }
+  /* Três botões numa linha só ("Revelar", "Estudo clássico" e o CTA) não
+     cabem em 412px -- e o CTA cresce quando há críticos ("🔴 Estudar
+     críticos (3)"), que é justamente quando o usuário mais precisa dele.
+     Deixar quebrar linha é melhor que a página inteira rolar de lado. */
+  .modos-estudo-topo { gap: 0.25rem; flex-wrap: wrap; justify-content: flex-end; min-width: 0; }
+  /* Texto de apoio dos cards de status ("Revisão atrasada"): é o pedaço
+     mais longo e o menos essencial -- o número e o rótulo já dizem tudo. */
+  .status-card-dica { display: none; }
+  .topo-esquerda { min-width: 0; }
+  .estudo-deck-nome { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .botao-modo { font-size: 0.8rem; padding: 0.35rem 0.55rem; }
   .botao-estudar { font-size: 0.8rem; padding: 0.35rem 0.6rem; }
 
@@ -2694,14 +2707,26 @@ kbd {
     align-items: center;
     justify-content: center;
   }
+  /* Lista completa, extraída do JSX -- botão que fica de fora vira
+     alvo de 24-37px e só aparece quando alguém usa no telefone. */
   .botao-texto,
   .breadcrumb-item,
   .btn-secao-acao,
+  .botao-add-linha,
+  .botao-adicionar-card,
   .botao-estudar,
   .botao-estudar-primary,
   .botao-estudar-critico,
+  .botao-modo-critico,
   .botao-modo-ghost,
-  .botao-adicionar-card { min-height: 40px; }
+  .botao-modo-primary,
+  .botao-mostrar,
+  .estudo-concluido-botao,
+  .hero-revisao-botao,
+  .tutor-botao,
+  .undo-toast-botao,
+  .errei-mic-botao,
+  .aba { min-height: 40px; }
   .botao-principal { min-height: 44px; }
   .lista-info { min-height: 40px; }
   .aba { min-height: 44px; } /* na tela de login sobra largura, dá pra dar o alvo cheio */
