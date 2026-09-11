@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Routes, Route, Navigate, useNavigate, useLocation, useParams } from "react-router-dom";
-import { api, token } from "./api.js";
+import { api, token, NetworkException } from "./api.js";
 import useTheme from "./hooks/useTheme.js";
 import Auth from "./pages/Auth.jsx";
 import Dashboard from "./pages/Dashboard.jsx";
@@ -11,6 +11,21 @@ import Aprender from "./pages/Aprender.jsx";
 import Revelar from "./pages/Revelar.jsx";
 import Admin from "./pages/Admin.jsx";
 
+// Última identidade confirmada pelo servidor, guardada pra conseguir abrir
+// o app offline sem parecer deslogado. Não é credencial (quem autentica é
+// o token JWT, que o backend valida em toda request) -- é só o nome/email
+// pra desenhar a tela.
+const CHAVE_USUARIO = "estalo_ultimo_usuario";
+
+function _lembrarUsuario(u) {
+  try { localStorage.setItem(CHAVE_USUARIO, JSON.stringify(u)); } catch { /* sem persistência */ }
+  return u;
+}
+
+function _usuarioLembrado() {
+  try { return JSON.parse(localStorage.getItem(CHAVE_USUARIO) || "null"); } catch { return null; }
+}
+
 function useAuth() {
   const [usuario, setUsuario] = useState(null);
   const [carregando, setCarregando] = useState(true);
@@ -18,13 +33,31 @@ function useAuth() {
   useEffect(() => {
     if (!token.get()) { setCarregando(false); return; }
     api.eu()
-      .then(setUsuario)
-      .catch(() => token.clear())
+      .then(u => setUsuario(_lembrarUsuario(u)))
+      .catch(err => {
+        // Distinguir os dois motivos importa MUITO pro modo offline:
+        //
+        //  - Falha de REDE: o token provavelmente continua válido, só não
+        //    dá pra confirmar agora. Limpar aqui (o que o código fazia
+        //    antes, pra qualquer erro) jogava o usuário na tela de login
+        //    justamente quando ele não tem como logar -- beco sem saída.
+        //    Então segue logado com a última identidade conhecida; a
+        //    primeira request de verdade que voltar 401 é que decide.
+        //  - Qualquer outro erro (401/403 = token inválido ou expirado):
+        //    aí sim é deslogar pra valer.
+        if (err instanceof NetworkException) {
+          setUsuario(_usuarioLembrado());
+        } else {
+          token.clear();
+          try { localStorage.removeItem(CHAVE_USUARIO); } catch { /* ignora */ }
+        }
+      })
       .finally(() => setCarregando(false));
   }, []);
 
   function sair() {
     token.clear();
+    try { localStorage.removeItem(CHAVE_USUARIO); } catch { /* ignora */ }
     setUsuario(null);
   }
 
@@ -157,7 +190,7 @@ export default function App() {
   return (
     <Routes>
       <Route path="/login" element={
-        usuario ? <Navigate to="/" replace /> : <Auth aoEntrar={setUsuario} />
+        usuario ? <Navigate to="/" replace /> : <Auth aoEntrar={u => setUsuario(_lembrarUsuario(u))} />
       } />
 
       <Route path="/" element={

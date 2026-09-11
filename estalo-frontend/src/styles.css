@@ -1955,6 +1955,12 @@ kbd {
 }
 .btn-secao-acao:hover { border-color: var(--violeta); color: var(--violeta); background: var(--violeta-suave); }
 .btn-secao-acao:active { transform: scale(0.96); }
+.btn-secao-acao:disabled { opacity: 0.45; cursor: default; }
+.btn-secao-acao:disabled:hover {
+  border-color: var(--borda);
+  color: var(--tinta-suave);
+  background: transparent;
+}
 .btn-secao-acao.primario {
   background: var(--violeta);
   border-color: var(--violeta);

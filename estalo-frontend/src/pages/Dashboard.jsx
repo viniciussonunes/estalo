@@ -1,8 +1,9 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useSearchParams } from "react-router-dom";
 import * as Sentry from "@sentry/react";
-import { api } from "../api.js";
+import { api, NetworkException } from "../api.js";
 import useUndoableDelete from "../hooks/useUndoableDelete.js";
+import useOnline from "../hooks/useOnline.js";
 import UndoToasts from "../components/UndoToasts.jsx";
 
 /** Devolve o caminho (array de pastas) da raiz até `targetId` */
@@ -284,10 +285,12 @@ export default function Dashboard({ usuario, aoSair, aoVerCards, aoEstudar, aoCr
 
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro]             = useState("");
+  const [falhouCarregar, setFalhouCarregar] = useState(false);
   // Excluir pasta/deck: some da tela na hora (otimista), mas só chama a API
   // de verdade se ninguém apertar "Desfazer" no toast a tempo (ver
   // useUndoableDelete.js) -- substitui o antigo confirm() nativo.
   const { pendentes: exclusoesPendentes, disparar: dispararExclusao, desfazer: desfazerExclusao } = useUndoableDelete();
+  const online = useOnline();
   const [criandoPasta, setCriandoPasta]   = useState(false);
   const [nomePasta, setNomePasta]         = useState("");
   const [corPasta, setCorPasta]           = useState(null);
@@ -323,8 +326,14 @@ export default function Dashboard({ usuario, aoSair, aoVerCards, aoEstudar, aoCr
           .then(mapa => setStatsMap(mapa))
           .finally(() => setStatsCarregando(false));
       }
+      setFalhouCarregar(false);
     } catch (err) {
-      setErro(err.message);
+      // Sem rede, o Dashboard não tem o que mostrar -- e mostrar os
+      // estados vazios normais seria MENTIR ("tudo em dia", "nenhum
+      // conteúdo ainda") sobre dados que simplesmente não chegaram.
+      // Ver o bloco de offline no render.
+      setFalhouCarregar(err instanceof NetworkException);
+      setErro(err instanceof NetworkException ? "" : err.message);
     } finally {
       setCarregando(false);
     }
@@ -521,7 +530,7 @@ export default function Dashboard({ usuario, aoSair, aoVerCards, aoEstudar, aoCr
         </div>
       </header>
 
-      {!pastaAtiva && !carregando && !emBusca && (
+      {!pastaAtiva && !carregando && !emBusca && !falhouCarregar && (
         <div className="hero-revisao-faixa">
           <div className="hero-revisao-container">
             <HeroRevisaoGlobal total={totalPendentes} aoEstudarTudo={aoEstudarTudo} />
@@ -529,7 +538,7 @@ export default function Dashboard({ usuario, aoSair, aoVerCards, aoEstudar, aoCr
         </div>
       )}
 
-      {pastaAtiva && !carregando && !emBusca && (
+      {pastaAtiva && !carregando && !emBusca && !falhouCarregar && (
         <div className="hero-revisao-faixa">
           <div className="hero-revisao-container">
             <HeroRevisaoGlobal
@@ -650,6 +659,21 @@ export default function Dashboard({ usuario, aoSair, aoVerCards, aoEstudar, aoCr
         {/* Lista */}
         {carregando ? (
           <ExplorerSkeleton viewMode={viewMode} />
+        ) : falhouCarregar ? (
+          /* Sem rede não dá pra saber o que o usuário tem. Cair no estado
+             vazio normal seria afirmar "nenhum conteúdo ainda" e "tudo em
+             dia" sobre dados que nunca chegaram -- errado com confiança,
+             que é pior que um erro visível. Aqui a tela diz o que de fato
+             sabe. (No Nível 3B este bloco passa a listar os decks
+             baixados, em vez de ficar vazio.) */
+          <div className="vazio-bloco fade-in">
+            <p style={{ fontWeight: 600, marginBottom: "0.35rem" }}>
+              Seus decks não carregaram
+            </p>
+            <p className="vazio-dica">
+              Isso precisa de internet. Assim que a conexão voltar, eles aparecem aqui.
+            </p>
+          </div>
         ) : vazio ? (
           <div className="vazio-bloco fade-in">
             {emBusca ? (
@@ -671,12 +695,14 @@ export default function Dashboard({ usuario, aoSair, aoVerCards, aoEstudar, aoCr
                 </p>
                 <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
                   {podeAdicionarPasta && (
-                    <button className="btn-secao-acao"
+                    <button className="btn-secao-acao" disabled={!online}
+                      title={online ? undefined : "Precisa de internet — disponível quando a conexão voltar"}
                       onClick={() => { setCriandoPasta(true); setNomePasta(""); setCorPasta(null); }}>
                       + Nova Pasta
                     </button>
                   )}
-                  <button className="btn-secao-acao primario"
+                  <button className="btn-secao-acao primario" disabled={!online}
+                    title={online ? undefined : "Precisa de internet — disponível quando a conexão voltar"}
                     onClick={() => aoCriarDeck(pastaAtiva?.id ?? null)}>
                     + Novo Deck
                   </button>
