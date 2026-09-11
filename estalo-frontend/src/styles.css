@@ -271,6 +271,11 @@ body {
 .botao-principal:hover { background: var(--violeta-escuro); }
 .botao-principal:active:not(:disabled) { transform: scale(0.97); }
 .botao-principal:disabled { opacity: 0.6; cursor: default; }
+/* Ghost buttons também precisam LER como desabilitados -- os do Tutor/IA
+   ficam assim offline (ver useOnline), e um botão que parece clicável mas
+   não responde é pior que um visivelmente indisponível. */
+.botao-texto:disabled { opacity: 0.45; cursor: default; }
+.botao-texto:disabled:hover { text-decoration: none; }
 
 .botao-texto {
   border: none;
@@ -2821,6 +2826,32 @@ kbd {
   .offline-banner { animation: none; }
   .offline-banner-ponto { animation: none; }
 }
+/* Selo inline de "respondendo offline" (SeloOffline.jsx) -- ambiente, não
+   interrupção: vive dentro do fluxo de estudo em vez de aparecer por cima
+   dele como um toast. */
+.selo-offline {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  background: var(--ambar-suave);
+  border: 1px solid var(--ambar);
+  color: var(--tinta-suave);
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.selo-offline-ponto {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--ambar);
+  flex-shrink: 0;
+}
+
 .offline-banner-ponto {
   width: 8px;
   height: 8px;

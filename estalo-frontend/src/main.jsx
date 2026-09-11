@@ -6,6 +6,7 @@ import "./sentry.js"; // precisa inicializar antes de qualquer coisa renderizar
 import App from "./App.jsx";
 import { ToastProvider } from "./hooks/ToastContext.jsx";
 import OfflineBanner from "./components/OfflineBanner.jsx";
+import useOutboxSync from "./hooks/useOutboxSync.js";
 import "./styles.css";
 
 function ErroFallback({ error }) {
@@ -27,14 +28,26 @@ function ErroFallback({ error }) {
   );
 }
 
+// Precisa ser um componente (e não JSX solto no render) porque
+// useOutboxSync é um hook -- e precisa estar DENTRO do ToastProvider,
+// já que a sincronização avisa por toast quando a fila sobe.
+function Raiz() {
+  useOutboxSync();
+  return (
+    <>
+      <OfflineBanner />
+      <BrowserRouter>
+        <App />
+      </BrowserRouter>
+    </>
+  );
+}
+
 ReactDOM.createRoot(document.getElementById("root")).render(
   <React.StrictMode>
     <Sentry.ErrorBoundary fallback={({ error }) => <ErroFallback error={error} />}>
       <ToastProvider>
-        <OfflineBanner />
-        <BrowserRouter>
-          <App />
-        </BrowserRouter>
+        <Raiz />
       </ToastProvider>
     </Sentry.ErrorBoundary>
   </React.StrictMode>

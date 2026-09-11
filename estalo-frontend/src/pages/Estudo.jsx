@@ -1,6 +1,9 @@
 import { useState, useEffect, useCallback } from "react";
 import ReactMarkdown from "react-markdown";
 import { api } from "../api.js";
+import { enfileirar, sincronizar } from "../outbox.js";
+import useOnline from "../hooks/useOnline.js";
+import SeloOffline from "../components/SeloOffline.jsx";
 
 // quality "Acertei" sem nuance -- 4 é neutro pro ease_factor do SM-2 (nem
 // sobe nem desce, ver services/sm2.py), o default mais honesto quando não
@@ -62,6 +65,7 @@ export default function Estudo({ deck, aoVoltar }) {
   const [analisando, setAnalisando] = useState(false);
   const [erroAnalise, setErroAnalise] = useState("");
   const [feedback, setFeedback] = useState(null); // { explanation, tipo_erro, gap_cognitivo }
+  const online = useOnline();
 
   const carregarProximo = useCallback(async () => {
     setErro("");
@@ -94,10 +98,17 @@ export default function Estudo({ deck, aoVoltar }) {
     if (enviando || analisando) return;
     setEnviando(true);
     setErro("");
+    // Fila primeiro (ver outbox.js): a resposta fica gravada no aparelho
+    // ANTES de qualquer tentativa de envio, com a data de agora. Mesmo
+    // sem internet ela não se perde -- sobe sozinha depois.
+    enfileirar({ cardId: card.card_id, quality });
     try {
-      await api.responderCard(card.card_id, quality);
+      await sincronizar();
       await carregarProximo();
     } catch (err) {
+      // A resposta em si está a salvo na fila; o que pode falhar aqui é
+      // buscar o PRÓXIMO card (que exige rede -- só o Nível 3, com cards
+      // em cache, vai permitir seguir estudando offline neste modo).
       setErro(err.message);
     } finally {
       setEnviando(false);
@@ -218,7 +229,8 @@ export default function Estudo({ deck, aoVoltar }) {
                   type="button"
                   className="botao-texto tutor-botao"
                   onClick={pedirFeedback}
-                  disabled={analisando}
+                  disabled={analisando || !online}
+                  title={online ? undefined : "Precisa de internet — disponível quando a conexão voltar"}
                 >
                   {analisando ? "Analisando…" : "🔍 Pedir feedback da IA"}
                 </button>
@@ -268,6 +280,7 @@ function CabecalhoEstudo({ deck, stats, aoVoltar }) {
           ← Voltar
         </button>
         <span className="estudo-deck-nome">{deck.title}</span>
+        <SeloOffline />
       </div>
       {stats !== null && (
         <span className="estudo-contador">

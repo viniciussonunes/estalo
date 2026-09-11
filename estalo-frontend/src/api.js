@@ -43,6 +43,26 @@ export const token = {
   get: () => localStorage.getItem("estalo_token"),
   set: (t) => localStorage.setItem("estalo_token", t),
   clear: () => localStorage.removeItem("estalo_token"),
+
+  /**
+   * Id do usuário dono do token atual (claim `sub` do JWT), ou null.
+   *
+   * Lê o payload SEM validar assinatura -- e tudo bem: isto não é controle
+   * de acesso (quem valida é o backend, em toda request). É só pra a fila
+   * offline saber de QUEM é cada resposta guardada, e não tentar enviar as
+   * respostas de uma conta usando o token de outra que logou depois no
+   * mesmo navegador (ver outbox.js).
+   */
+  usuarioId: () => {
+    const t = localStorage.getItem("estalo_token");
+    if (!t) return null;
+    try {
+      const payload = JSON.parse(atob(t.split(".")[1].replace(/-/g, "+").replace(/_/g, "/")));
+      return payload.sub ?? null;
+    } catch {
+      return null;
+    }
+  },
 };
 
 // Função base: monta a requisição, anexa o crachá e trata erro.
@@ -158,10 +178,18 @@ export const api = {
   // devolve o resultado original sem reprocessar (ver responder_card em
   // routers/study.py). É o que torna o retry seguro -- reenviar a mesma
   // resposta não duplica histórico nem reaplica o SM-2.
-  responderCard: (cardId, quality, ignorarElegibilidade = false, requestId = null) =>
+  // respondidoEm (ISO) opcional: quando a resposta veio da fila offline
+  // (outbox.js), é a data em que a pessoa REALMENTE respondeu. O backend
+  // ancora nela o histórico (streak/heatmap no dia certo) e o próximo
+  // intervalo do SM-2. Ausente = servidor usa o próprio relógio.
+  responderCard: (cardId, quality, ignorarElegibilidade = false, requestId = null, respondidoEm = null) =>
     request(`/study/cards/${cardId}/answer`, {
       method: "POST",
-      body: { quality, ignorar_elegibilidade: ignorarElegibilidade },
+      body: {
+        quality,
+        ignorar_elegibilidade: ignorarElegibilidade,
+        ...(respondidoEm ? { respondido_em: respondidoEm } : {}),
+      },
       headers: requestId ? { "X-Request-ID": requestId } : undefined,
     }),
 

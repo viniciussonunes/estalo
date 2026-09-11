@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { api } from "../api.js";
+import useOnline from "../hooks/useOnline.js";
 
 const MSGS_IA = [
   "Lendo o texto fornecido...",
@@ -25,6 +26,7 @@ export default function CriarDeck({ pastaId, aoVoltar, aoVerCards }) {
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState("");
   const [msgIA, setMsgIA] = useState(MSGS_IA[0]);
+  const online = useOnline();
   const msgIAIdx = useRef(0);
 
   useEffect(() => {
@@ -212,7 +214,8 @@ export default function CriarDeck({ pastaId, aoVoltar, aoVerCards }) {
           <button
             className="botao-principal criar-deck-submit"
             type="submit"
-            disabled={salvando || !nome.trim()}
+            disabled={salvando || !nome.trim() || (modo === "ia" && !online)}
+            title={modo === "ia" && !online ? "Precisa de internet — disponível quando a conexão voltar" : undefined}
           >
             {salvando
               ? (modo === "ia" ? msgIA : "Criando…")

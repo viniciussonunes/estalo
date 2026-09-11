@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import ReactMarkdown from "react-markdown";
 import { api } from "../api.js";
+import useOnline from "../hooks/useOnline.js";
 
 export default function Revelar({ deck, aoVoltar }) {
   const [cards, setCards] = useState([]);
@@ -14,6 +15,7 @@ export default function Revelar({ deck, aoVoltar }) {
   const [explicacaoConceito, setExplicacaoConceito] = useState("");
   const [explicacaoCarregando, setExplicacaoCarregando] = useState(false);
   const [explicacaoErro, setExplicacaoErro] = useState("");
+  const online = useOnline();
 
   useEffect(() => {
     api.gerarRevelar(deck.id)
@@ -169,6 +171,8 @@ export default function Revelar({ deck, aoVoltar }) {
                   type="button"
                   className="botao-texto tutor-botao"
                   onClick={pedirExplicacaoConceito}
+                  disabled={!online}
+                  title={online ? undefined : "Precisa de internet — disponível quando a conexão voltar"}
                 >
                   💡 Explicar
                 </button>

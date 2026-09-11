@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { api } from "../api.js";
 import useUndoableDelete from "../hooks/useUndoableDelete.js";
+import useOnline from "../hooks/useOnline.js";
 import UndoToasts from "../components/UndoToasts.jsx";
 
 // Mesma classificação usada nos boxes de resumo (stats-deck) e no backend
@@ -28,6 +29,7 @@ export default function Cards({ deck, aoVoltar, aoEstudar, aoAprender, aoRevelar
   // "Desfazer" expirar sem clique (ver useUndoableDelete.js) -- substitui
   // o antigo confirm() nativo.
   const { pendentes: exclusoesPendentes, disparar: dispararExclusao, desfazer: desfazerExclusao } = useUndoableDelete();
+  const online = useOnline();
 
   // Modal
   const [modalAberto, setModalAberto] = useState(false);
@@ -397,7 +399,8 @@ export default function Cards({ deck, aoVoltar, aoEstudar, aoAprender, aoRevelar
                       onChange={e => setQtdIA(Number(e.target.value))} />
                   </label>
                   <button className="botao-principal" type="submit"
-                    disabled={gerando || !textoIA.trim()}>
+                    disabled={gerando || !textoIA.trim() || !online}
+                    title={online ? undefined : "Precisa de internet — disponível quando a conexão voltar"}>
                     {gerando ? msgIA : "Gerar cards"}
                   </button>
                 </div>
