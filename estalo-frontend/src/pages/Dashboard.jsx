@@ -5,6 +5,8 @@ import { api, NetworkException } from "../api.js";
 import useUndoableDelete from "../hooks/useUndoableDelete.js";
 import useOnline from "../hooks/useOnline.js";
 import UndoToasts from "../components/UndoToasts.jsx";
+import BotaoBaixarOffline from "../components/BotaoBaixarOffline.jsx";
+import { baixarDeck, listarBaixados, removerDeck } from "../offlineDecks.js";
 
 /** Devolve o caminho (array de pastas) da raiz até `targetId` */
 function caminhoParaPasta(arvore, targetId, path = []) {
@@ -291,6 +293,24 @@ export default function Dashboard({ usuario, aoSair, aoVerCards, aoEstudar, aoCr
   // useUndoableDelete.js) -- substitui o antigo confirm() nativo.
   const { pendentes: exclusoesPendentes, disparar: dispararExclusao, desfazer: desfazerExclusao } = useUndoableDelete();
   const online = useOnline();
+  // Registro dos decks baixados. Fica em estado pra a lista e os ícones
+  // re-renderizarem na hora que o usuário baixa/remove algo.
+  const [baixados, setBaixados] = useState(() => listarBaixados());
+  const recarregarBaixados = useCallback(() => setBaixados(listarBaixados()), []);
+
+  // Baixar/remover uma pasta = fazer isso com todos os decks dela. Em série
+  // (não Promise.all) de propósito: são vários downloads e disparar todos
+  // juntos numa conexão ruim -- que é exatamente quando alguém baixa pra
+  // offline -- costuma piorar em vez de acelerar.
+  const baixarPasta = useCallback(async (decks) => {
+    for (const d of decks) await baixarDeck(d);
+    recarregarBaixados();
+  }, [recarregarBaixados]);
+
+  const removerPasta = useCallback(async (decks) => {
+    for (const d of decks) await removerDeck(d.id);
+    recarregarBaixados();
+  }, [recarregarBaixados]);
   const [criandoPasta, setCriandoPasta]   = useState(false);
   const [nomePasta, setNomePasta]         = useState("");
   const [corPasta, setCorPasta]           = useState(null);
@@ -660,20 +680,50 @@ export default function Dashboard({ usuario, aoSair, aoVerCards, aoEstudar, aoCr
         {carregando ? (
           <ExplorerSkeleton viewMode={viewMode} />
         ) : falhouCarregar ? (
-          /* Sem rede não dá pra saber o que o usuário tem. Cair no estado
-             vazio normal seria afirmar "nenhum conteúdo ainda" e "tudo em
-             dia" sobre dados que nunca chegaram -- errado com confiança,
-             que é pior que um erro visível. Aqui a tela diz o que de fato
-             sabe. (No Nível 3B este bloco passa a listar os decks
-             baixados, em vez de ficar vazio.) */
-          <div className="vazio-bloco fade-in">
-            <p style={{ fontWeight: 600, marginBottom: "0.35rem" }}>
-              Seus decks não carregaram
-            </p>
-            <p className="vazio-dica">
-              Isso precisa de internet. Assim que a conexão voltar, eles aparecem aqui.
-            </p>
-          </div>
+          /* Sem rede, a única coisa que o app sabe de verdade é o que foi
+             baixado. Mostrar a lista normal seria afirmar "nenhum conteúdo
+             ainda" sobre dados que nunca chegaram -- errado com confiança.
+             Aqui a tela mostra exatamente o que dá pra estudar agora. */
+          Object.keys(baixados).length > 0 ? (
+            <div className="explorer-secoes fade-in">
+              <section className="explorer-secao">
+                <div className="explorer-secao-header">
+                  <h2 className="explorer-secao-titulo">Disponíveis offline</h2>
+                </div>
+                <ul className="lista-explorer">
+                  {Object.values(baixados)
+                    .sort((a, b) => a.deck.title.localeCompare(b.deck.title, "pt-BR", { sensitivity: "base" }))
+                    .map(({ deck, totalCards }) => (
+                      <li key={deck.id} className="lista-item lista-deck">
+                        <span className="lista-icone deck"><IconeDeck /></span>
+                        <div className="lista-info">
+                          <span className="lista-nome">{deck.title}</span>
+                          <span className="lista-meta">
+                            {totalCards} card{totalCards !== 1 ? "s" : ""} · no aparelho
+                          </span>
+                        </div>
+                        <div className="lista-acoes">
+                          <button className="botao-estudar-primary" onClick={() => aoEstudar(deck)}>
+                            Estudar
+                          </button>
+                        </div>
+                      </li>
+                    ))}
+                </ul>
+              </section>
+            </div>
+          ) : (
+            <div className="vazio-bloco fade-in">
+              <p style={{ fontWeight: 600, marginBottom: "0.35rem" }}>
+                Nenhum deck baixado
+              </p>
+              <p className="vazio-dica">
+                Seus decks precisam de internet pra carregar. Da próxima vez que
+                estiver conectado, toque no ícone de baixar num deck pra poder
+                estudar ele sem conexão.
+              </p>
+            </div>
+          )
         ) : vazio ? (
           <div className="vazio-bloco fade-in">
             {emBusca ? (
@@ -744,7 +794,8 @@ export default function Dashboard({ usuario, aoSair, aoVerCards, aoEstudar, aoCr
                       <PastaItem key={pasta.id} viewMode="grid" pasta={pasta} todosDecks={todosDecks}
                         statsMap={statsMap} statsCarregando={statsCarregando} editando={editando}
                         setEditando={setEditando} confirmarEdicao={confirmarEdicao} iniciarEdicao={iniciarEdicao}
-                        entrarPasta={emBusca ? abrirResultadoBusca : entrarPasta} excluirPasta={excluirPasta} />
+                        entrarPasta={emBusca ? abrirResultadoBusca : entrarPasta} excluirPasta={excluirPasta}
+                        baixados={baixados} aoBaixarPasta={baixarPasta} aoRemoverPasta={removerPasta} />
                     ))}
                   </div>
                 ) : (
@@ -753,7 +804,8 @@ export default function Dashboard({ usuario, aoSair, aoVerCards, aoEstudar, aoCr
                       <PastaItem key={pasta.id} viewMode="list" pasta={pasta} todosDecks={todosDecks}
                         statsMap={statsMap} statsCarregando={statsCarregando} editando={editando}
                         setEditando={setEditando} confirmarEdicao={confirmarEdicao} iniciarEdicao={iniciarEdicao}
-                        entrarPasta={emBusca ? abrirResultadoBusca : entrarPasta} excluirPasta={excluirPasta} />
+                        entrarPasta={emBusca ? abrirResultadoBusca : entrarPasta} excluirPasta={excluirPasta}
+                        baixados={baixados} aoBaixarPasta={baixarPasta} aoRemoverPasta={removerPasta} />
                     ))}
                   </ul>
                 )}
@@ -828,6 +880,11 @@ export default function Dashboard({ usuario, aoSair, aoVerCards, aoEstudar, aoCr
                             onClick={e => abrirMover(deck, e)} title="Mover deck">
                             <IcoMover />
                           </button>
+                          <BotaoBaixarOffline
+                            baixado={Boolean(baixados[deck.id])}
+                            aoBaixar={async () => { await baixarDeck(deck); recarregarBaixados(); }}
+                            aoRemover={async () => { await removerDeck(deck.id); recarregarBaixados(); }}
+                          />
                           <button className="icone-acao perigo lista-deck-excluir"
                             onClick={e => excluirDeck(deck, e)} title="Excluir deck">
                             <IcoTrash />
@@ -884,9 +941,26 @@ export default function Dashboard({ usuario, aoSair, aoVerCards, aoEstudar, aoCr
 function PastaItem({
   pasta, viewMode, todosDecks, statsMap, statsCarregando,
   editando, setEditando, confirmarEdicao, iniciarEdicao, entrarPasta, excluirPasta,
+  baixados, aoBaixarPasta, aoRemoverPasta,
 }) {
-  const nDecks   = coletarDecks(pasta, todosDecks).length;
+  const decksDaPasta = coletarDecks(pasta, todosDecks);
+  const nDecks   = decksDaPasta.length;
   const nSubpast = (pasta.children || []).length;
+
+  // Baixar a pasta inteira só faz sentido na ÚLTIMA CAMADA (a que contém
+  // decks direto, sem subpastas) -- decisão do usuário. Numa pasta-mãe o
+  // botão significaria "baixe tudo lá embaixo", que é volume imprevisível
+  // e some com a noção do que você está guardando no aparelho.
+  const ehUltimaCamada = nSubpast === 0 && nDecks > 0;
+  const pastaBaixada = ehUltimaCamada && decksDaPasta.every(d => baixados?.[d.id]);
+  const botaoOffline = ehUltimaCamada ? (
+    <BotaoBaixarOffline
+      rotulo="pasta"
+      baixado={pastaBaixada}
+      aoBaixar={() => aoBaixarPasta(decksDaPasta)}
+      aoRemover={() => aoRemoverPasta(decksDaPasta)}
+    />
+  ) : null;
   const meta     = [
     nDecks > 0   && `${nDecks} deck${nDecks !== 1 ? "s" : ""}`,
     nSubpast > 0 && `${nSubpast} subpasta${nSubpast !== 1 ? "s" : ""}`,
@@ -937,6 +1011,7 @@ function PastaItem({
             onClick={e => iniciarEdicao("pasta", pasta.id, pasta.name, e, pasta.color)} title="Renomear pasta">
             <IcoLapis />
           </button>
+          {botaoOffline}
           <button className="icone-acao perigo lista-deck-excluir"
             onClick={e => excluirPasta(pasta, e)} title="Excluir pasta">
             <IcoTrash />
@@ -967,6 +1042,7 @@ function PastaItem({
         onClick={e => iniciarEdicao("pasta", pasta.id, pasta.name, e, pasta.color)} title="Renomear pasta">
         <IcoLapis />
       </button>
+      {botaoOffline && <span className="pasta-card-offline">{botaoOffline}</span>}
       <button className="pasta-card-excluir icone-acao perigo"
         onClick={e => excluirPasta(pasta, e)} title="Excluir pasta">
         <IcoTrash />

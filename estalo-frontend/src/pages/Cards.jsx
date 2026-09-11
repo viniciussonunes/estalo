@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { api } from "../api.js";
 import useUndoableDelete from "../hooks/useUndoableDelete.js";
 import useOnline from "../hooks/useOnline.js";
+import { baixarDeck, estaBaixado } from "../offlineDecks.js";
 import UndoToasts from "../components/UndoToasts.jsx";
 
 // Mesma classificação usada nos boxes de resumo (stats-deck) e no backend
@@ -73,6 +74,16 @@ export default function Cards({ deck, aoVoltar, aoEstudar, aoAprender, aoRevelar
   }, [deck.id]);
 
   useEffect(() => { carregarCards(); }, [carregarCards]);
+
+  // Deck baixado + com internet = atualiza a cópia local em silêncio.
+  // Decisão do usuário: manter atualizado sem ele precisar pensar nisso,
+  // e só do deck que ele está abrindo (não de todos no boot) -- gasta
+  // dados só do que vai ser estudado. Falha aqui não importa: a cópia
+  // antiga continua valendo, é melhor que nada.
+  useEffect(() => {
+    if (!online || !estaBaixado(deck.id)) return;
+    baixarDeck(deck).catch(() => { /* mantém a cópia anterior */ });
+  }, [online, deck]);
 
   // Atalho 'C' abre modal; Escape fecha
   useEffect(() => {

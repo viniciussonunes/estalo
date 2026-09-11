@@ -2870,3 +2870,37 @@ kbd {
   0%, 100% { opacity: 1; }
   50%      { opacity: 0.3; }
 }
+
+/* ===== Botão de baixar pra offline (BotaoBaixarOffline.jsx) ===== */
+/* Diferente dos outros .icone-acao (que só aparecem no hover), quando o
+   conteúdo ESTÁ baixado o ícone fica sempre visível: é uma característica
+   do deck, não uma ação escondida. */
+.botao-offline.baixado {
+  opacity: 1;
+  color: var(--verde);
+}
+.botao-offline.erro { color: var(--perigo); }
+.botao-offline:disabled { opacity: 0.3; cursor: default; }
+
+.botao-offline-girando {
+  width: 13px;
+  height: 13px;
+  border: 2px solid var(--borda-forte);
+  border-top-color: var(--violeta);
+  border-radius: 50%;
+  display: inline-block;
+  animation: offlineGirar 0.7s linear infinite;
+}
+@keyframes offlineGirar { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .botao-offline-girando { animation-duration: 2s; }
+}
+
+/* No card de pasta (grid) os ícones são posicionados em absoluto; o de
+   baixar entra à esquerda do lápis. */
+.pasta-card-offline {
+  position: absolute;
+  top: 0.5rem;
+  right: 4.2rem;
+}
+.pasta-card-offline .icone-acao.baixado { opacity: 1; }

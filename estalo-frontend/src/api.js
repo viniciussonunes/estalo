@@ -126,6 +126,27 @@ async function request(path, { method = "GET", body, form, headers: extra } = {}
   return resp.json();
 }
 
+/**
+ * Tenta a rede; se cair por falta de conexão, usa a cópia offline (só
+ * existe pros decks que o usuário baixou de propósito, ver offlineDecks.js).
+ *
+ * Fica AQUI, e não em cada tela, pra Aprender/Cards não precisarem saber
+ * que existe modo offline -- elas continuam só pedindo os cards.
+ *
+ * O import é dinâmico de propósito: offlineDecks.js importa `api` deste
+ * mesmo arquivo, e um import estático nos dois sentidos criaria um ciclo.
+ */
+async function _comQuedaParaOffline(promessa, lerLocal) {
+  try {
+    return await promessa;
+  } catch (e) {
+    if (!(e instanceof NetworkException)) throw e;
+    const local = await lerLocal();
+    if (local !== null && local !== undefined) return local;
+    throw e; // não baixado: o erro de rede segue sendo a resposta honesta
+  }
+}
+
 // --- Funções específicas que as telas usam ---
 
 export const api = {
@@ -193,7 +214,10 @@ export const api = {
       headers: requestId ? { "X-Request-ID": requestId } : undefined,
     }),
 
-  statsEstudo: (deckId) => request(`/study/decks/${deckId}/stats`),
+  statsEstudo: (deckId) => _comQuedaParaOffline(
+    request(`/study/decks/${deckId}/stats`),
+    async () => (await import("./offlineDecks.js")).statsOffline(deckId),
+  ),
 
   heatmapStats: () => request("/study/heatmap-stats"),
 
@@ -247,7 +271,10 @@ export const api = {
     return request(`/study/decks/stats?ids=${deckIds.join(",")}`);
   },
 
-  listarCards: (deckId) => request(`/decks/${deckId}/cards`),
+  listarCards: (deckId) => _comQuedaParaOffline(
+    request(`/decks/${deckId}/cards`),
+    async () => (await import("./offlineDecks.js")).cardsOffline(deckId),
+  ),
 
   criarCard: (deckId, front, back) =>
     request(`/decks/${deckId}/cards`, { method: "POST", body: { front, back } }),
