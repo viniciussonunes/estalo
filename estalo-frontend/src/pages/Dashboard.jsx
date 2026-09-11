@@ -866,30 +866,14 @@ export default function Dashboard({ usuario, aoSair, aoVerCards, aoEstudar, aoCr
                           stats={s}
                           carregando={statsCarregando && !s}
                         />
-                        <div className="lista-acoes">
-                          <button
-                            className={temCriticos ? "botao-estudar-critico" : temPendentes ? "botao-estudar-primary" : "botao-estudar"}
-                            onClick={() => aoEstudar(deck)}>
-                            {temCriticos ? `🔴 ${s.criticos}` : "Estudar"}
-                          </button>
-                          <button className="icone-acao lista-deck-editar"
-                            onClick={e => iniciarEdicao("deck", deck.id, deck.title, e)} title="Renomear deck">
-                            <IcoLapis />
-                          </button>
-                          <button className="icone-acao lista-deck-editar"
-                            onClick={e => abrirMover(deck, e)} title="Mover deck">
-                            <IcoMover />
-                          </button>
-                          <BotaoBaixarOffline
-                            baixado={Boolean(baixados[deck.id])}
-                            aoBaixar={async () => { await baixarDeck(deck); recarregarBaixados(); }}
-                            aoRemover={async () => { await removerDeck(deck.id); recarregarBaixados(); }}
-                          />
-                          <button className="icone-acao perigo lista-deck-excluir"
-                            onClick={e => excluirDeck(deck, e)} title="Excluir deck">
-                            <IcoTrash />
-                          </button>
-                        </div>
+                        <AcoesDeck
+                          deck={deck} stats={s} temCriticos={temCriticos} temPendentes={temPendentes}
+                          aoEstudar={aoEstudar} iniciarEdicao={iniciarEdicao} abrirMover={abrirMover}
+                          excluirDeck={excluirDeck}
+                          baixado={Boolean(baixados[deck.id])}
+                          aoBaixar={async () => { await baixarDeck(deck); recarregarBaixados(); }}
+                          aoRemoverOffline={async () => { await removerDeck(deck.id); recarregarBaixados(); }}
+                        />
                       </li>
                     );
                   })}
@@ -934,6 +918,90 @@ export default function Dashboard({ usuario, aoSair, aoVerCards, aoEstudar, aoCr
 
       <UndoToasts pendentes={exclusoesPendentes} aoDesfazer={desfazerExclusao} />
     </div>
+  );
+}
+
+/**
+ * Ações de um deck na lista.
+ *
+ * No desktop tudo aparece junto (os ícones surgem no hover, como sempre).
+ * No CELULAR não existe hover, então o CSS forçava os 5 botões visíveis o
+ * tempo todo -- eles comiam 206px de uma linha de 380px e o NOME DO DECK
+ * era espremido até 0px de largura: dava pra ver os botões, mas não qual
+ * deck era aquele.
+ *
+ * Aqui ficam visíveis no celular só as duas ações que se usa de fato no
+ * telefone -- estudar e baixar pra offline -- e renomear/mover/excluir
+ * entram atrás do "⋯". Nada foi removido: quem toca no ⋯ vê as três no
+ * lugar das primárias, com um ✕ pra voltar. Sem popover flutuante de
+ * propósito: nada de cálculo de posição, nada de fechar ao clicar fora.
+ */
+function AcoesDeck({
+  deck, stats, temCriticos, temPendentes,
+  aoEstudar, iniciarEdicao, abrirMover, excluirDeck,
+  baixado, aoBaixar, aoRemoverOffline,
+}) {
+  const [maisAberto, setMaisAberto] = useState(false);
+
+  return (
+    <div className={`lista-acoes${maisAberto ? " lista-acoes-expandida" : ""}`}>
+      {maisAberto ? (
+        <>
+          <button className="icone-acao" title="Renomear deck"
+            onClick={e => { setMaisAberto(false); iniciarEdicao("deck", deck.id, deck.title, e); }}>
+            <IcoLapis />
+          </button>
+          <button className="icone-acao" title="Mover deck"
+            onClick={e => { setMaisAberto(false); abrirMover(deck, e); }}>
+            <IcoMover />
+          </button>
+          <button className="icone-acao perigo" title="Excluir deck"
+            onClick={e => { setMaisAberto(false); excluirDeck(deck, e); }}>
+            <IcoTrash />
+          </button>
+          <button className="icone-acao acoes-mais" title="Fechar"
+            onClick={e => { e.stopPropagation(); setMaisAberto(false); }}>
+            <IconeX />
+          </button>
+        </>
+      ) : (
+        <>
+          <button
+            className={temCriticos ? "botao-estudar-critico" : temPendentes ? "botao-estudar-primary" : "botao-estudar"}
+            onClick={() => aoEstudar(deck)}>
+            {temCriticos ? `🔴 ${stats.criticos}` : "Estudar"}
+          </button>
+          <BotaoBaixarOffline baixado={baixado} aoBaixar={aoBaixar} aoRemover={aoRemoverOffline} />
+          {/* No desktop estes três aparecem direto (o CSS esconde o ⋯);
+              no celular ficam atrás dele. */}
+          <button className="icone-acao lista-deck-editar acoes-secundaria" title="Renomear deck"
+            onClick={e => iniciarEdicao("deck", deck.id, deck.title, e)}>
+            <IcoLapis />
+          </button>
+          <button className="icone-acao lista-deck-editar acoes-secundaria" title="Mover deck"
+            onClick={e => abrirMover(deck, e)}>
+            <IcoMover />
+          </button>
+          <button className="icone-acao perigo lista-deck-excluir acoes-secundaria" title="Excluir deck"
+            onClick={e => excluirDeck(deck, e)}>
+            <IcoTrash />
+          </button>
+          <button className="icone-acao acoes-mais" title="Mais ações"
+            onClick={e => { e.stopPropagation(); setMaisAberto(true); }}>
+            <IcoMais />
+          </button>
+        </>
+      )}
+    </div>
+  );
+}
+
+/** Três pontinhos — abre as ações secundárias no celular. */
+function IcoMais() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+      <circle cx="4" cy="10" r="1.6" /><circle cx="10" cy="10" r="1.6" /><circle cx="16" cy="10" r="1.6" />
+    </svg>
   );
 }
 

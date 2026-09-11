@@ -1419,6 +1419,15 @@ body {
   gap: 0.3rem;
   flex-shrink: 0;
 }
+/* O "⋯" só existe no celular -- no desktop as ações secundárias aparecem
+   direto no hover, como sempre foi (ver AcoesDeck em Dashboard.jsx).
+   Dois níveis de seletor de propósito: `.icone-acao` (que estes botões
+   também usam) é declarado mais abaixo no arquivo e, com a mesma
+   especificidade, venceria um `.acoes-mais` sozinho. */
+.lista-acoes .acoes-mais { display: none; }
+/* Quando as secundárias estão abertas no celular elas são a ação principal
+   do momento: precisam ficar visíveis mesmo sem hover. */
+.lista-acoes-expandida .icone-acao { opacity: 1; }
 .lista-btn-entrar {
   border: none;
   background: transparent;
@@ -2654,10 +2663,83 @@ kbd {
   .lista-progresso { width: 60px; }
   .lista-progresso-pct { display: none; }
   .lista-meta { display: none; }
+
+  /* O NOME DO DECK vinha sendo espremido até 0px de largura: .lista-info
+     tem flex:1 + min-width:0 (pode encolher até sumir) enquanto a barra de
+     progresso (~100px) e as ações (~206px, com todos os ícones forçados a
+     visíveis no mobile por não existir hover) não cedem espaço nenhum.
+     Numa linha de 380px não sobrava nada pro título -- dava pra ver o
+     ícone, a barra e os botões, mas não QUAL deck era aquele.
+     A barra segmentada é decorativa (o badge de críticos já comunica
+     urgência), então no celular ela sai e o nome volta a caber. */
+  .lista-item .barra-seg { display: none; }
+  .lista-info { min-width: 5.5rem; }
+
+  /* Ações secundárias (renomear/mover/excluir) vão pro "⋯"; ficam só
+     estudar e baixar, que são as que se usa no telefone. Ver AcoesDeck. */
+  .lista-acoes .acoes-secundaria { display: none; }
+  .lista-acoes .acoes-mais { display: inline-flex; }
+
+  /* ---- Alvos de toque ----
+     Mínimo recomendado é 44px (Apple HIG / WCAG 2.5.5). A auditoria de
+     layout achou o app inteiro entre 24px e 34px -- desenhado pro mouse,
+     que acerta um alvo de 24px sem esforço; o dedo, não. */
+  .icone-acao,
+  .toggle-tema,
+  .view-toggle-btn,
+  .botao-offline {
+    min-width: 40px;
+    min-height: 40px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .botao-texto,
+  .breadcrumb-item,
+  .btn-secao-acao,
+  .botao-estudar,
+  .botao-estudar-primary,
+  .botao-estudar-critico,
+  .botao-modo-ghost,
+  .botao-adicionar-card { min-height: 40px; }
+  .botao-principal { min-height: 44px; }
+  .lista-info { min-height: 40px; }
+  .aba { min-height: 44px; } /* na tela de login sobra largura, dá pra dar o alvo cheio */
+
+  /* Numa linha de 380px, nome de deck/pasta de verdade ("Endpoint Manager -
+     Políticas de Conformidade") não cabe em uma linha nem com folga -- no
+     celular vale ocupar duas e mostrar o título quase inteiro, em vez de
+     cortar em "Endpoint M…" e o usuário não distinguir dois decks
+     parecidos. Três pontinhos só a partir da terceira linha. */
+  .lista-nome,
+  .pasta-card-nome {
+    white-space: normal;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    line-height: 1.25;
+  }
   .lista-btn-entrar { padding: 0.25rem 0.35rem; }
   .botao-estudar { font-size: 0.78rem; padding: 0.3rem 0.55rem; }
 
-  .visao-geral { grid-template-columns: repeat(3, 1fr); gap: 0.5rem; }
+  /* minmax(0, 1fr) em vez de 1fr: coluna de grid não encolhe abaixo do
+     conteúdo por padrão, então "DOMINADOS" empurrava o terceiro card pra
+     fora da tela e a página inteira rolava de lado (4px, mas basta pra
+     incomodar no celular). */
+  .visao-geral { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.5rem; }
+  /* Em três colunas num celular sobra pouca largura: lado a lado, o ícone
+     rouba o espaço do rótulo e "DOMINADOS" não cabe. Empilhado, o texto
+     usa a largura inteira do card e nada precisa ser cortado. */
+  .visao-card {
+    min-width: 0;
+    flex-direction: column;
+    gap: 0.15rem;
+    text-align: center;
+    padding: 0.7rem 0.4rem;
+  }
+  .visao-card-info { min-width: 0; align-items: center; }
+  .visao-card-icone { font-size: 1.05rem; }
+  .visao-card-label { font-size: 0.62rem; letter-spacing: 0.02em; }
   .visao-card  { padding: 0.75rem 0.8rem; gap: 0.6rem; }
   .visao-card-valor { font-size: 1.25rem; }
 
