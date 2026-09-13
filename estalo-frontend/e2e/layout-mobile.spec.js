@@ -114,13 +114,6 @@ async function simularApi(page) {
 }
 
 /**
- * Entra "logado" sem passar pela tela de login (que não é o alvo aqui).
- *
- * Navega primeiro e só então grava o token: o localStorage é por origem, e
- * antes da primeira navegação a página ainda está em about:blank -- gravar
- * lá não chega no app.
- */
-/**
  * Conta recém-criada: sem pasta e sem deck nenhum. É a primeira tela que um
  * usuário novo vê e tem layout próprio (o bloco de primeiros passos), então
  * precisa passar pela mesma auditoria das outras.
@@ -144,6 +137,13 @@ async function abrirContaVazia(page, rota = "/") {
   await page.goto(rota);
 }
 
+/**
+ * Entra "logado" sem passar pela tela de login (que não é o alvo aqui).
+ *
+ * Navega primeiro e só então grava o token: o localStorage é por origem, e
+ * antes da primeira navegação a página ainda está em about:blank -- gravar
+ * lá não chega no app.
+ */
 async function abrirLogado(page, rota = "/") {
   await simularApi(page);
   await page.goto("/login");
@@ -257,6 +257,12 @@ test.describe("Layout no celular", () => {
     // A tela de Cards exige o deck no state do router; sem ele volta pra
     // raiz. Entrar pelo Dashboard é o caminho real do usuário.
     await page.goto("/?folder=2");
+    // Espera a linha existir antes de clicar. Sem isso o teste piscava sob
+    // carga (a suíte inteira em paralelo): o Dashboard redesenha a linha
+    // quando as stats chegam, e um clique disparado nesse meio-tempo mira
+    // um elemento que some -- 30s de timeout esperando um alvo que já foi
+    // substituído.
+    await expect(page.locator(".lista-deck .lista-info").first()).toBeVisible();
     await page.locator(".lista-deck .lista-info").first().click();
     await expect(page.locator(".lista-cards, .cards-lista-topo").first()).toBeVisible();
     await conferirLayout(page, "cards do deck");
@@ -264,6 +270,7 @@ test.describe("Layout no celular", () => {
 
   test("modo Aprender — pergunta e resposta", async ({ page }) => {
     await abrirLogado(page, "/?folder=2");
+    await expect(page.locator(".lista-deck .lista-info").first()).toBeVisible();
     await page.locator(".lista-deck .lista-info").first().click();
     // O CTA de estudo troca de texto conforme o estado do deck
     // ("Aprender" / "Estudar hoje (n)" / "🔴 Estudar críticos (n)") --
