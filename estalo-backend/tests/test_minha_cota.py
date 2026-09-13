@@ -88,3 +88,28 @@ def test_um_usuario_nao_ve_a_cota_do_outro(client):
     assert client.get("/auth/me/quota", headers=h1).status_code == 200
     assert client.get("/auth/me/quota", headers=h2).status_code == 200
     assert client.get("/auth/me/quota", headers=h2).json()["consumido"] == 0
+
+
+# ------------------------------------------------- quem é admin (item 6/6)
+
+def test_usuario_comum_nao_e_admin(client):
+    h = _entrar(client)
+    assert client.get("/auth/me", headers=h).json()["is_admin"] is False
+
+
+def test_admin_configurado_e_reconhecido(client, monkeypatch):
+    # is_admin sai da MESMA regra da catraca de /admin/* (eh_admin), pra
+    # interface e servidor nunca discordarem sobre quem é admin.
+    from app.core.config import settings
+    monkeypatch.setattr(settings, "ADMIN_EMAILS", f"outro@x.dev, {CONTA['email'].upper()}")
+    h = _entrar(client)
+    assert client.get("/auth/me", headers=h).json()["is_admin"] is True
+
+
+def test_is_admin_nao_libera_nada_sozinho(client, monkeypatch):
+    # O campo é só pra decidir se mostra o link. Quem barra é require_admin
+    # em cada endpoint -- forjar o campo no cliente não abre porta nenhuma.
+    from app.core.config import settings
+    monkeypatch.setattr(settings, "ADMIN_EMAILS", "")
+    h = _entrar(client)
+    assert client.get("/admin/users", headers=h).status_code == 403

@@ -179,7 +179,8 @@ function AdminPage() {
 
 function ContaPage({ usuario, sair }) {
   const navigate = useNavigate();
-  return <Conta usuario={usuario} aoVoltar={() => navigate("/")} aoSair={sair} />;
+  return <Conta usuario={usuario} aoVoltar={() => navigate("/")} aoSair={sair}
+    aoAbrirAdmin={() => navigate("/admin")} />;
 }
 
 // ─── App root ──────────────────────────────────────────────────────────────

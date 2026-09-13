@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.security import create_access_token, hash_password, verify_password
-from app.dependencies import get_current_user
+from app.dependencies import eh_admin, get_current_user
 from app.models import User
 from app.schemas.token import Token
 from app.schemas.user import PasswordChange, QuotaOut, UserCreate, UserOut
@@ -98,7 +98,12 @@ def login(
 @router.get("/me", response_model=UserOut)
 def quem_sou_eu(user: User = Depends(get_current_user)):
     """Endpoint protegido: só responde se você mostrar um crachá válido."""
-    return user
+    return UserOut(
+        id=user.id,
+        email=user.email,
+        created_at=user.created_at,
+        is_admin=eh_admin(user),
+    )
 
 
 @router.get("/me/quota", response_model=QuotaOut)

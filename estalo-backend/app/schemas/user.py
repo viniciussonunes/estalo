@@ -49,6 +49,11 @@ class UserOut(BaseModel):
     id: int
     email: str
     created_at: datetime
+    # Só pra a interface decidir se mostra o link do painel. NÃO é
+    # autorização: quem barra é require_admin, em cada endpoint /admin/*.
+    # Default False porque o /auth/register devolve este mesmo schema e
+    # ninguém nasce admin.
+    is_admin: bool = False
 
     # Permite o Pydantic ler direto de um objeto do banco (o model User).
     model_config = {"from_attributes": True}

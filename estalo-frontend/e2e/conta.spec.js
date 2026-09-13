@@ -208,6 +208,20 @@ test.describe("Área da conta", () => {
     expect(registro, "o download foi apagado junto com a sessão").toContain("Intune");
   });
 
+  test("usuário comum não vê o painel de administração", async ({ page }) => {
+    await abrirLogado(page);
+    await page.getByRole("button", { name: /Sua conta/ }).click();
+    await expect(page.getByRole("button", { name: "Abrir painel" })).toHaveCount(0);
+  });
+
+  test("admin ganha o link — a rota existia e nada levava até ela", async ({ page }) => {
+    // /admin funciona desde sempre e só era alcançável digitando a URL.
+    await abrirLogado(page, { ...USUARIO, is_admin: true });
+    await page.getByRole("button", { name: /Sua conta/ }).click();
+    await page.getByRole("button", { name: "Abrir painel" }).click();
+    await expect(page).toHaveURL(/\/admin/);
+  });
+
   test("identidade sem data de cadastro não quebra a página", async ({ page }) => {
     // Identidade em cache de uma versão anterior do app pode não ter
     // created_at (ver estalo_ultimo_usuario em App.jsx). Faltar a linha é

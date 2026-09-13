@@ -18,7 +18,7 @@ import { listarBaixados, removerDeck } from "../offlineDecks.js";
  * como saber em qual conta você estava. Quem tem conta pessoal e de estudo
  * descobria pelo conteúdo -- ou não descobria.
  */
-export default function Conta({ usuario, aoVoltar, aoSair }) {
+export default function Conta({ usuario, aoVoltar, aoSair, aoAbrirAdmin }) {
   const [trocandoSenha, setTrocandoSenha] = useState(false);
   const mostrarToast = useToast();
   const online = useOnline();
@@ -79,6 +79,22 @@ export default function Conta({ usuario, aoVoltar, aoSair }) {
               Sair da conta
             </button>
           </div>
+
+          {/* A rota /admin existe desde sempre e NADA no app levava até
+              ela -- só digitando a URL. is_admin vem do /auth/me e serve
+              só pra decidir se o link aparece; quem barra de verdade é o
+              require_admin, endpoint por endpoint. */}
+          {usuario.is_admin && (
+            <div className="conta-acao">
+              <div className="conta-acao-texto">
+                <span className="conta-acao-titulo">Administração</span>
+                <span className="conta-acao-sub">Cotas de IA de todos os usuários.</span>
+              </div>
+              <button className="botao-texto conta-acao-botao" onClick={aoAbrirAdmin}>
+                Abrir painel
+              </button>
+            </div>
+          )}
         </section>
       </main>
 

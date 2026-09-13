@@ -112,7 +112,19 @@ def require_admin(user: User = Depends(get_current_user)) -> User:
     é feita contra o email do token decodificado, não algo vindo do
     cliente -- não dá pra forjar.
     """
-    admins = {e.strip().lower() for e in settings.ADMIN_EMAILS.split(",") if e.strip()}
-    if user.email.lower() not in admins:
+    if not eh_admin(user):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Acesso restrito a administradores")
     return user
+
+
+def eh_admin(user: User) -> bool:
+    """Mesma regra da catraca acima, isolada porque o /auth/me também
+    precisa dela -- o frontend não tinha como saber se deve mostrar o
+    link do painel, e a rota /admin ficava acessível só por URL decorada.
+
+    Continua sendo decidido no SERVIDOR, a partir do email do token: o
+    campo que vai pro cliente é consequência, não fonte. Quem tentar
+    forjar o `is_admin` na resposta esbarra na catraca do endpoint.
+    """
+    admins = {e.strip().lower() for e in settings.ADMIN_EMAILS.split(",") if e.strip()}
+    return user.email.lower() in admins
