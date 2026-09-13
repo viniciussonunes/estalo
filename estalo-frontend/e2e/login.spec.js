@@ -33,6 +33,14 @@ async function simularApi(page, resposta = "ok") {
       if (resposta === "queda") return route.abort("internetdisconnected");
       if (resposta === "servidor") return route.fulfill({ status: 500, body: "" });
       if (resposta === "senha") return json({ detail: "Email ou senha incorretos" }, 401);
+      if (resposta === "bloqueado") {
+        return route.fulfill({
+          status: 429,
+          contentType: "application/json",
+          headers: { "Retry-After": "60" },
+          body: JSON.stringify({ detail: "Muitas tentativas seguidas. Tente de novo em cerca de 1 minuto." }),
+        });
+      }
       return json({ access_token: "t.t.t", token_type: "bearer" });
     }
     if (p === "/auth/me") return json({ id: 1, email: "estudante@estalo.dev" });
@@ -118,6 +126,21 @@ test.describe("Tela de entrar", () => {
     // colocar a mensagem. Aqui ele seria a MESMA notícia duas vezes, no
     // mesmo instante -- ver `semToastDeRede` em api.js.
     await expect(page.locator(".toast-global"), "erro repetido: formulário e toast dizendo o mesmo").toHaveCount(0);
+  });
+
+  test("conta travada por tentativas explica a espera, sem virar modal de cota", async ({ page }) => {
+    // O backend responde 429 quando trava a conta (ver login_throttle.py no
+    // estalo-backend). No frontend, 429 vira QuotaExceededException -- que
+    // nasceu pro limite de IA e tem um modal próprio. Aqui não pode virar
+    // modal nenhum: é uma frase no formulário, dizendo quanto esperar.
+    await simularApi(page, "bloqueado");
+    await page.getByPlaceholder("voce@email.com").fill("estudante@estalo.dev");
+    await page.locator(".campo-senha input").fill("segredo123");
+    await page.getByRole("button", { name: "Entrar" }).last().click();
+
+    await expect(page.getByRole("alert")).toContainText(/tentativas seguidas/i);
+    await expect(page.getByRole("alert")).toContainText(/1 minuto/);
+    await expect(page.getByRole("dialog"), "não é caso de modal").toHaveCount(0);
   });
 
   test("login que dá certo entra no app", async ({ page }) => {

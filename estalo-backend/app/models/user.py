@@ -20,6 +20,12 @@ class User(Base):
     hashed_password: Mapped[str] = mapped_column(String, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
+    # Freio de força bruta no login (ver services/login_throttle.py).
+    # Erros CONSECUTIVOS: um login certo zera. locked_until é naive-UTC,
+    # como toda coluna DateTime do projeto.
+    failed_login_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    locked_until: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
     # Um usuário tem várias pastas, decks e reviews.
     folders: Mapped[list["Folder"]] = relationship(back_populates="owner")
     decks: Mapped[list["Deck"]] = relationship(back_populates="owner")

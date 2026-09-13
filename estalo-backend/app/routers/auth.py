@@ -13,6 +13,7 @@ from app.dependencies import get_current_user
 from app.models import User
 from app.schemas.token import Token
 from app.schemas.user import UserCreate, UserOut
+from app.services import login_throttle
 
 router = APIRouter(prefix="/auth", tags=["Autenticação"])
 
@@ -47,13 +48,44 @@ def login(
 
     OAuth2PasswordRequestForm espera os campos 'username' e 'password'.
     Aqui o 'username' é o email do usuário.
+
+    Erros seguidos bloqueiam a conta por um tempo crescente (429 +
+    Retry-After) -- ver services/login_throttle.py pro porquê e pra escada.
     """
     user = db.query(User).filter(User.email == form.username).first()
+
+    # Conta bloqueada nem chega a conferir a senha -- inclusive porque
+    # verify_password é bcrypt, caro de propósito: responder cedo tira do
+    # atacante o trabalho de CPU que ele estava tentando nos impor.
+    if user:
+        espera = login_throttle.segundos_de_bloqueio(user)
+        if espera > 0:
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail=login_throttle.mensagem_de_bloqueio(espera),
+                headers={"Retry-After": str(espera)},
+            )
+
     if not user or not verify_password(form.password, user.hashed_password):
+        if user:
+            espera = login_throttle.registrar_falha(user)
+            db.commit()
+            if espera > 0:
+                raise HTTPException(
+                    status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                    detail=login_throttle.mensagem_de_bloqueio(espera),
+                    headers={"Retry-After": str(espera)},
+                )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Email ou senha incorretos",
         )
+
+    # Acertou: zera a sequência de erros. Só grava se havia o que limpar,
+    # pra um login comum não custar um UPDATE à toa.
+    if user.failed_login_count or user.locked_until:
+        login_throttle.registrar_sucesso(user)
+        db.commit()
 
     token = create_access_token(subject=str(user.id))
     return Token(access_token=token)

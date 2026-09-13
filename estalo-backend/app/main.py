@@ -73,6 +73,18 @@ def _migrar():
         if "color" not in colunas_pastas:
             conn.execute(text("ALTER TABLE folders ADD COLUMN color TEXT"))
 
+        # Freio de força bruta no login (ver services/login_throttle.py).
+        # DEFAULT 0 no ALTER é o que preenche as linhas que já existem --
+        # sem ele, todo usuário atual ficaria com failed_login_count NULL e
+        # o contador começaria quebrado pra quem já tem conta.
+        colunas_usuarios = {c["name"] for c in inspector.get_columns("users")}
+        if "failed_login_count" not in colunas_usuarios:
+            conn.execute(text(
+                "ALTER TABLE users ADD COLUMN failed_login_count INTEGER NOT NULL DEFAULT 0"
+            ))
+        if "locked_until" not in colunas_usuarios:
+            conn.execute(text("ALTER TABLE users ADD COLUMN locked_until TIMESTAMP"))
+
         # Backfill do content_hash pra cards que ainda não têm — SHA-256
         # não é nativo nem em SQLite nem em Postgres sem extensão, então
         # roda em Python (calcular_content_hash), não em SQL puro.
