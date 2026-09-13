@@ -114,6 +114,9 @@ export default function Aprender({ deck, aoVoltar, modoGlobal = false, folderId 
 
   const [fila, setFila]               = useState([]);
   const [totalUnicos, setTotalUnicos] = useState(0);
+  // Quantos vilões entraram na prática -- base do contador enquanto ela
+  // roda, já que a fila deixa de ser a sessão inteira (ver reverViloes).
+  const [totalViloes, setTotalViloes] = useState(0);
   const [carregando, setCarregando]   = useState(!snapshotPendente);
   // true só durante a chamada de auto-cura (POST /study/cards/enrich) —
   // usada pra trocar a mensagem de "Carregando cards…" por algo que não
@@ -626,6 +629,7 @@ export default function Aprender({ deck, aoVoltar, modoGlobal = false, folderId 
         && !viloesResolvidos.current.has(q.card_id)
     );
     if (viloes.length === 0) return;
+    setTotalViloes(viloes.length);
     setModoPraticaViloes(true);
     setResposta(null);
     setFila(viloes);
@@ -855,23 +859,50 @@ export default function Aprender({ deck, aoVoltar, modoGlobal = false, folderId 
   }
 
   // ─── Questão ───────────────────────────────────────────────────────────
+  //
+  // O número aqui conta CARDS CONCLUÍDOS (saíram da fila por acerto), não
+  // perguntas respondidas -- errar devolve o card pra fila, então ele
+  // continua pendente. Isso está certo, e a barra mede exatamente isso.
+  //
+  // O que estava errado era o RÓTULO: "Card 2 de 6" se lê como "pergunta 2
+  // de 6", e a pessoa via o número travado na 4ª pergunta achando que
+  // estava patinando. Medido: 1 acerto + 2 erros = tela na 4ª pergunta
+  // dizendo "Card 2 de 6". Agora o texto diz o que o número é.
+  //
+  // Durante o "Rever vilões" a base é outra: a fila tem só os vilões, mas
+  // totalUnicos continua sendo o total da sessão -- daí "5 de 6" numa
+  // prática de 2 cards. Por isso totalDaEtapa.
+  const totalDaEtapa    = modoPraticaViloes ? totalViloes : totalUnicos;
   const cardIdsNaFila   = new Set(fila.map(q => q.card_id));
-  const cardsConcluidos = totalUnicos - cardIdsNaFila.size;
-  const repeticoes      = fila.length - cardIdsNaFila.size;
+  const cardsConcluidos = Math.max(0, totalDaEtapa - cardIdsNaFila.size);
+
+  // Cards que você errou e ainda vão reaparecer. A conta antiga
+  // (fila.length - ids distintos) dava SEMPRE zero -- errar move o card
+  // dentro da fila, nunca duplica -- então esse aviso nunca apareceu na
+  // vida. É justamente ele que explica por que o contador não anda.
+  // Na prática de vilões não faz sentido: lá todo card é um erro.
+  const aguardandoReacerto = modoPraticaViloes
+    ? 0
+    : fila.filter(q => (errosPorCard.current.get(q.card_id) ?? 0) > 0).length;
 
   return (
     <div className="pagina">{cabecalho}
       <main className="conteudo estudo-centro">
         <div className="quiz-progresso">
           <span className="quiz-progresso-contador">
-            Card {Math.min(cardsConcluidos + 1, totalUnicos)} de {totalUnicos}
+            {modoPraticaViloes
+              ? `Vilão ${Math.min(cardsConcluidos + 1, totalDaEtapa)} de ${totalDaEtapa}`
+              : `${cardsConcluidos} de ${totalDaEtapa} concluídos`}
           </span>
           <div className="quiz-barra">
             <div className="quiz-barra-fill"
-              style={{ width: `${concluindoAnimacao ? 100 : (cardsConcluidos / totalUnicos) * 100}%` }} />
+              style={{ width: `${concluindoAnimacao ? 100 : (cardsConcluidos / totalDaEtapa) * 100}%` }} />
           </div>
-          {repeticoes > 0 && (
-            <span className="quiz-repetindo" title="Aguardando reacerto">+{repeticoes}↺</span>
+          {aguardandoReacerto > 0 && (
+            <span className="quiz-repetindo"
+              title="Cards que você errou — eles voltam antes de a sessão terminar">
+              ↺ {aguardandoReacerto} {aguardandoReacerto === 1 ? "volta" : "voltam"}
+            </span>
           )}
           <SeloOffline />
         </div>
