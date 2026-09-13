@@ -168,6 +168,35 @@ test.describe("Paridade online x offline", () => {
     await expect(page.locator(".quiz-opcao").first()).toBeVisible({ timeout: 15000 });
   });
 
+  test("sem as estatísticas, a tela não comemora — diz que não sabe", async ({ page }) => {
+    // Zero pendentes e "não sei quantos" são coisas diferentes. Se a carga
+    // morre entre /decks e /study/decks/stats e depois cai a rede, o
+    // retrato tem os decks mas nenhuma stat -- e a tela dizia "Parabéns!
+    // Está tudo em dia ✓". Um estudante que acredita nisso pula o dia.
+    // Mesma régua do Dashboard de conta nunca carregada: informação
+    // errada é pior que informação ausente.
+    const ref = { offline: false };
+    await simularApi(page, ref);
+    await page.goto("/login");
+    await page.evaluate((t) => localStorage.setItem("estalo_token", t), tokenFalso());
+
+    // Carrega tudo MENOS as stats, pra o retrato nascer sem elas.
+    // Regex, e não glob: a URL leva query (?ids=10,11) e o glob
+    // "**/study/decks/stats" não casaria -- a primeira versão deste teste
+    // falhou exatamente por isso, deixando as stats passarem.
+    await page.route(/\/study\/decks\/stats/, (route) => route.abort("internetdisconnected"));
+    await page.goto("/");
+    await page.waitForTimeout(900);
+
+    await cortarRede(page, ref);
+    await irPara(page, "/");
+
+    await expect(page.locator(".hero-revisao")).toContainText("Revisões ainda não conferidas");
+    await expect(page.locator(".hero-revisao")).not.toContainText(/tudo em dia/i);
+    // E o número não vira 0: vira "não sei".
+    await expect(page.locator(".visao-geral")).toContainText("—");
+  });
+
   test("offline, o que muda dados fica desabilitado em vez de falhar depois do clique", async ({ page }) => {
     const ref = await prepararComDeckBaixado(page);
     await cortarRede(page, ref);

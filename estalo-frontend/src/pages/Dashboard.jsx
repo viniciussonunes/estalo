@@ -594,6 +594,16 @@ export default function Dashboard({ usuario, aoVerCards, aoEstudar, aoCriarDeck,
     (soma, s) => soma + (s?.criticos ?? 0) + (s?.hoje ?? 0), 0
   );
 
+  // Zero pendentes e "não sei quantos" são coisas DIFERENTES, e tratá-las
+  // igual fazia o app comemorar sobre dados que nunca chegaram: com decks
+  // conhecidos mas nenhuma stat (a carga morreu entre /decks e
+  // /study/decks/stats, e depois caiu a rede), a tela dizia "Parabéns!
+  // Está tudo em dia ✓ -- nenhuma pasta tem revisões pendentes agora".
+  // Um estudante que acredita nisso pula o dia. Informação errada é pior
+  // que informação ausente -- mesma régua que já valeu pro Dashboard de
+  // conta nunca carregada (falhouCarregar).
+  const pendentesDesconhecidos = todosDecks.length > 0 && Object.keys(statsMap).length === 0;
+
   // Mesmo número, mas só dos decks dentro da pasta atual (+ subpastas) —
   // alimenta o Card Herói de "Estudar Pasta" quando não se está no Início.
   const statsAgregadasPastaAtiva = pastaAtiva ? agregarStats(pastaAtiva, todosDecks, statsMap) : null;
@@ -628,7 +638,8 @@ export default function Dashboard({ usuario, aoVerCards, aoEstudar, aoCriarDeck,
       {!pastaAtiva && !carregando && !emBusca && !falhouCarregar && !contaNova && (
         <div className="hero-revisao-faixa">
           <div className="hero-revisao-container">
-            <HeroRevisaoGlobal total={totalPendentes} aoEstudarTudo={aoEstudarTudo} />
+            <HeroRevisaoGlobal total={totalPendentes} aoEstudarTudo={aoEstudarTudo}
+              desconhecido={pendentesDesconhecidos} />
           </div>
         </div>
       )}
@@ -640,6 +651,7 @@ export default function Dashboard({ usuario, aoVerCards, aoEstudar, aoCriarDeck,
               total={totalPendentesPastaAtiva}
               aoEstudarTudo={() => aoEstudarPasta(pastaAtiva.id, pastaAtiva.name)}
               pasta={pastaAtiva}
+              desconhecido={pendentesDesconhecidos}
             />
           </div>
         </div>
@@ -729,7 +741,8 @@ export default function Dashboard({ usuario, aoVerCards, aoEstudar, aoCriarDeck,
 
         {/* Visão Geral — só na raiz, e não durante busca */}
         {!pastaAtiva && !carregando && !emBusca && todosDecks.length > 0 && (
-          <VisaoGeral decks={todosDecks} pendentesReais={totalPendentes} />
+          <VisaoGeral decks={todosDecks} pendentesReais={totalPendentes}
+            pendentesDesconhecidos={pendentesDesconhecidos} />
         )}
 
         {/* Formulário criar pasta */}
@@ -1404,7 +1417,22 @@ function PrimeiroUso({ online, aoCriarDeck, aoCriarPasta }) {
   );
 }
 
-function HeroRevisaoGlobal({ total, aoEstudarTudo, pasta = null }) {
+function HeroRevisaoGlobal({ total, aoEstudarTudo, pasta = null, desconhecido = false }) {
+  // Não sabemos: nem comemora, nem inventa número. Só nomeia o estado --
+  // a faixa de "sem conexão" (quando é o caso) já explica o porquê.
+  if (desconhecido) {
+    return (
+      <div className="hero-revisao hero-revisao-indefinido">
+        <span className="hero-revisao-icone-limpo">?</span>
+        <div className="hero-revisao-texto">
+          <span className="hero-revisao-titulo">Revisões ainda não conferidas</span>
+          <span className="hero-revisao-sub">
+            Não deu pra saber o que está pendente agora.
+          </span>
+        </div>
+      </div>
+    );
+  }
   if (total <= 0) {
     return (
       <div className="hero-revisao hero-revisao-limpo">
@@ -1453,14 +1481,15 @@ function IconePilha() {
   );
 }
 
-function VisaoGeral({ decks, pendentesReais }) {
+function VisaoGeral({ decks, pendentesReais, pendentesDesconhecidos = false }) {
   const totalCards = decks.reduce((s, d) => s + (d.total_cards || 0), 0);
   const dominados  = decks.reduce((s, d) =>
     s + Math.round(((d.memorization_pct || 0) / 100) * (d.total_cards || 0)), 0);
   // Antes calculado por aproximação (via memorization_pct); agora usa a
   // mesma soma real de due_now que o Card Herói, pra não mostrar dois
   // números de "pendentes" diferentes na mesma tela.
-  const pendentes = pendentesReais;
+  // "—" em vez de 0: ver pendentesDesconhecidos no Dashboard.
+  const pendentes = pendentesDesconhecidos ? "—" : pendentesReais;
 
   const [heatmapStats, setHeatmapStats] = useState({});
   const [heatmapCarregando, setHeatmapCarregando] = useState(true);

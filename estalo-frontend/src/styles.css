@@ -2157,6 +2157,17 @@ kbd {
 .hero-revisao-sub { font-size: 0.85rem; color: var(--tinta-suave); }
 .hero-revisao-botao { width: auto; flex-shrink: 0; white-space: nowrap; }
 
+/* "Não sei" tem cara própria: cinza, sem o verde de comemoração e sem o
+   violeta de chamada pra ação. Ver pendentesDesconhecidos no Dashboard. */
+.hero-revisao-indefinido {
+  background: var(--papel);
+  border-color: var(--borda);
+}
+.hero-revisao-indefinido .hero-revisao-icone-limpo {
+  background: var(--borda);
+  color: var(--tinta-suave);
+}
+
 .hero-revisao-limpo {
   background: var(--verde-suave);
   border-color: var(--verde);
