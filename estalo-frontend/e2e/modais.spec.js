@@ -68,6 +68,10 @@ async function abrirTelaDeCards(page) {
   await abrirLogado(page, "/?folder=2");
   await page.locator(".lista-deck .lista-info").first().click();
   await expect(page.getByRole("button", { name: /Adicionar card/ })).toBeVisible();
+  // Espera a lista INTEIRA: os testes de rolagem dependem de a página já
+  // ter a altura final. Sem isso, sob carga, o teste rolava uma página
+  // ainda pela metade e media 126px em vez de milhares (aconteceu).
+  await expect(page.locator(".item-card")).toHaveCount(CARDS.length);
 }
 
 /** Qual elemento está focado agora, em texto legível. */
@@ -87,9 +91,9 @@ const FOCADO = () => {
  * falhou sozinho. Espera o valor estabilizar em vez de chutar um timeout.
  */
 async function rolarAteOFim(page) {
-  await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
   let anterior = -1;
   for (let i = 0; i < 40; i++) {
+    await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
     const y = await page.evaluate(() => window.scrollY);
     if (y > 0 && y === anterior) return y;
     anterior = y;
