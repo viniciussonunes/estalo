@@ -120,6 +120,30 @@ async function simularApi(page) {
  * antes da primeira navegação a página ainda está em about:blank -- gravar
  * lá não chega no app.
  */
+/**
+ * Conta recém-criada: sem pasta e sem deck nenhum. É a primeira tela que um
+ * usuário novo vê e tem layout próprio (o bloco de primeiros passos), então
+ * precisa passar pela mesma auditoria das outras.
+ */
+async function abrirContaVazia(page, rota = "/") {
+  await page.route("**/*", async (route) => {
+    const req = route.request();
+    const p = new URL(req.url()).pathname;
+    if (!["xhr", "fetch"].includes(req.resourceType()) || !CAMINHOS_API.test(p)) return route.continue();
+    const json = (corpo) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(corpo) });
+    if (p === "/auth/me") return json({ id: 1, email: "novato@estalo.dev" });
+    if (p === "/folders" || p === "/decks" || p === "/study/global-reviews") return json([]);
+    if (p === "/study/streak") return json({ current_streak: 0, longest_streak: 0 });
+    return json({});
+  });
+  await page.goto("/login");
+  await page.evaluate((t) => {
+    localStorage.setItem("estalo_token", t);
+    localStorage.setItem("estalo_ultimo_usuario", JSON.stringify({ id: 1, email: "novato@estalo.dev" }));
+  }, tokenFalso());
+  await page.goto(rota);
+}
+
 async function abrirLogado(page, rota = "/") {
   await simularApi(page);
   await page.goto("/login");
@@ -251,6 +275,18 @@ test.describe("Layout no celular", () => {
     await page.locator(".quiz-opcao").first().click();
     await expect(page.locator(".quiz-explicacao")).toBeVisible();
     await conferirLayout(page, "aprender — resposta");
+  });
+
+  test("conta nova, ainda sem nada criado", async ({ page }) => {
+    await abrirContaVazia(page);
+    await expect(page.locator(".primeiro-uso")).toBeVisible();
+
+    // Regressão de conteúdo, não de layout: o Card Herói dizia "Parabéns!
+    // Está tudo em dia ✓" pra quem nunca estudou -- parabenizava por um
+    // trabalho inexistente, e era a primeira frase que a pessoa lia.
+    await expect(page.locator(".hero-revisao")).toHaveCount(0);
+
+    await conferirLayout(page, "conta nova");
   });
 
   test("criar deck", async ({ page }) => {

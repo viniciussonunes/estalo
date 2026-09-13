@@ -523,6 +523,15 @@ export default function Dashboard({ usuario, aoSair, aoVerCards, aoEstudar, aoCr
   const podeAdicionarPasta = !pastaAtiva || pastaAtiva.depth < 4;
   const vazio = !carregando && pastasVisiveis.length === 0 && decksVisiveis.length === 0;
 
+  // Conta que nunca teve nada: não é "esta pasta está vazia", é alguém que
+  // acabou de entrar e não sabe por onde começar. Merece direção, não um
+  // aviso de ausência -- e, principalmente, não merece o "está tudo em dia
+  // ✓" do Card Herói, que parabeniza por um trabalho que não existe.
+  // Some sozinho no instante em que o primeiro deck nasce: nada é guardado
+  // pra lembrar se já foi visto, porque a própria conta vazia é o gatilho.
+  const contaNova = !carregando && !falhouCarregar && !emBusca && !pastaAtiva
+    && arvore.length === 0 && todosDecks.length === 0;
+
   // Fonte única pro total de revisões pendentes: soma criticos + hoje (só
   // cards que JÁ têm progresso e estão vencidos) de todos os decks, via
   // statsMap — que já é carregado pra alimentar a barra segmentada de cada
@@ -557,7 +566,7 @@ export default function Dashboard({ usuario, aoSair, aoVerCards, aoEstudar, aoCr
         </div>
       </header>
 
-      {!pastaAtiva && !carregando && !emBusca && !falhouCarregar && (
+      {!pastaAtiva && !carregando && !emBusca && !falhouCarregar && !contaNova && (
         <div className="hero-revisao-faixa">
           <div className="hero-revisao-container">
             <HeroRevisaoGlobal total={totalPendentes} aoEstudarTudo={aoEstudarTudo} />
@@ -622,7 +631,9 @@ export default function Dashboard({ usuario, aoSair, aoVerCards, aoEstudar, aoCr
           ))}
         </nav>
 
-        {/* Busca global + ordenação — acha em toda a árvore, não só na pasta atual */}
+        {/* Busca global + ordenação — acha em toda a árvore, não só na pasta
+            atual. Conta vazia não tem o que buscar nem o que ordenar: some. */}
+        {!contaNova && (
         <div className="busca-e-ordenacao">
           <div className="busca-global">
             <span className="busca-global-icone"><IconeBusca /></span>
@@ -653,6 +664,7 @@ export default function Dashboard({ usuario, aoSair, aoVerCards, aoEstudar, aoCr
             <option value="recentes">Mais recentes</option>
           </select>
         </div>
+        )}
 
         {erro && <p className="erro">{erro}</p>}
 
@@ -700,6 +712,12 @@ export default function Dashboard({ usuario, aoSair, aoVerCards, aoEstudar, aoCr
               uma vez e depois o Estalo funciona offline.
             </p>
           </div>
+        ) : contaNova ? (
+          <PrimeiroUso
+            online={online}
+            aoCriarDeck={() => aoCriarDeck(null)}
+            aoCriarPasta={() => { setCriandoPasta(true); setNomePasta(""); setCorPasta(null); }}
+          />
         ) : vazio ? (
           <div className="vazio-bloco fade-in">
             {emBusca ? (
@@ -1304,6 +1322,50 @@ function rotuloPendentes(total) {
  * Home (todos os decks); com `pasta`, é a versão escopada a ela + subpastas
  * ("Estudar Pasta"), mesmo componente só trocando texto/callback. Dois
  * estados: com pendências (convida a estudar) ou zerado (celebra o "em dia"). */
+/**
+ * Primeira tela de quem acabou de criar a conta.
+ *
+ * O que existia antes: "Nenhum conteúdo ainda / Crie um deck para começar",
+ * acima de um "Parabéns! Está tudo em dia ✓". Ou seja: o app parabenizava
+ * quem nunca estudou e não dizia o que o Estalo faz nem qual caminho é o
+ * bom. O caminho bom é a IA -- CriarDeck abre direto nele --, mas ninguém
+ * era levado até lá.
+ *
+ * Deliberadamente curto: três passos de quatro palavras e um botão. A regra
+ * do projeto é não transformar tela em bíblia; quem chegou aqui quer criar
+ * o primeiro deck, não ler sobre repetição espaçada.
+ */
+function PrimeiroUso({ online, aoCriarDeck, aoCriarPasta }) {
+  return (
+    <div className="primeiro-uso fade-in">
+      <span className="primeiro-uso-selo">Primeiros passos</span>
+      <h2 className="primeiro-uso-titulo">Suas anotações viram cards</h2>
+      <p className="primeiro-uso-sub">
+        Cole um texto e a IA monta as perguntas. Depois o Estalo devolve cada
+        uma na hora certa pra você não esquecer.
+      </p>
+
+      <ol className="primeiro-uso-passos">
+        <li><span className="primeiro-uso-num">1</span> Cole o conteúdo</li>
+        <li><span className="primeiro-uso-num">2</span> A IA gera os cards</li>
+        <li><span className="primeiro-uso-num">3</span> Estude uns minutos por dia</li>
+      </ol>
+
+      <div className="primeiro-uso-acoes">
+        <button className="botao-principal" onClick={aoCriarDeck} disabled={!online}
+          title={online ? undefined : "Precisa de internet — disponível quando a conexão voltar"}>
+          Criar meu primeiro deck
+        </button>
+        <button className="botao-texto primeiro-uso-secundario" onClick={aoCriarPasta}
+          disabled={!online}
+          title={online ? undefined : "Precisa de internet — disponível quando a conexão voltar"}>
+          Prefiro organizar em pastas antes
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function HeroRevisaoGlobal({ total, aoEstudarTudo, pasta = null }) {
   if (total <= 0) {
     return (

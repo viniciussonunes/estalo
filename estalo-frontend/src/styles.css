@@ -373,6 +373,80 @@ body {
 }
 .vazio-dica { font-size: 0.88rem; margin-top: 0.4rem; }
 
+/* ---------- Primeiro uso (conta ainda vazia) ----------
+   Não é um estado vazio: é a única tela que esse usuário viu do Estalo.
+   Por isso tem cara de convite (fundo violeta suave, borda cheia) e não de
+   ausência (moldura tracejada cinza). */
+.primeiro-uso {
+  text-align: center;
+  padding: 2.5rem 1.5rem;
+  border: 1px solid var(--violeta-medio);
+  border-radius: var(--raio);
+  background: var(--violeta-suave);
+}
+.primeiro-uso-selo {
+  display: inline-block;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--violeta);
+}
+.primeiro-uso-titulo {
+  font-family: "Fraunces", serif;
+  font-size: 1.5rem;
+  line-height: 1.25;
+  margin: 0.5rem 0 0;
+  color: var(--tinta);
+}
+.primeiro-uso-sub {
+  max-width: 34rem;
+  margin: 0.5rem auto 0;
+  color: var(--tinta-suave);
+  font-size: 0.95rem;
+  line-height: 1.5;
+}
+.primeiro-uso-passos {
+  list-style: none;
+  margin: 1.5rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.5rem 1.75rem;
+}
+.primeiro-uso-passos li {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.9rem;
+  color: var(--tinta);
+}
+.primeiro-uso-num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  flex: none;
+  border-radius: 50%;
+  background: var(--violeta);
+  color: #fff;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+.primeiro-uso-acoes {
+  margin-top: 1.75rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+}
+/* .botao-principal é width:100% por padrão (nasceu dentro de formulário).
+   Aqui ele é um convite, não um "enviar": largura só do que precisa. */
+.primeiro-uso-acoes .botao-principal { width: auto; min-width: 16rem; padding-inline: 2rem; }
+.primeiro-uso-secundario { font-size: 0.88rem; }
+
 /* ---------- Botões de modo de estudo (Cards header) ---------- */
 .modos-estudo-topo { display: flex; align-items: center; gap: 0.4rem; }
 .botao-modo {
@@ -2739,8 +2813,20 @@ kbd {
   .tutor-botao,
   .undo-toast-botao,
   .errei-mic-botao,
-  .aba { min-height: 40px; }
+  .aba,
+  .primeiro-uso-secundario { min-height: 40px; }
   .botao-principal { min-height: 44px; }
+
+  .primeiro-uso { padding: 2rem 1rem; }
+  /* Empilhado no celular: lado a lado, "Estude uns minutos por dia" quebra
+     no meio e os três passos deixam de se ler como uma sequência. */
+  .primeiro-uso-passos {
+    flex-direction: column;
+    align-items: flex-start;
+    width: fit-content;
+    margin-inline: auto;
+    gap: 0.6rem;
+  }
   .lista-info { min-height: 40px; }
   .aba { min-height: 44px; } /* na tela de login sobra largura, dá pra dar o alvo cheio */
 
