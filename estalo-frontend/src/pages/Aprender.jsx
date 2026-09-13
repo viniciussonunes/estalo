@@ -8,6 +8,7 @@ import useOnline from "../hooks/useOnline.js";
 import { useToast } from "../hooks/ToastContext.jsx";
 import QuotaLimitModal from "../components/QuotaLimitModal.jsx";
 import SeloOffline from "../components/SeloOffline.jsx";
+import Modal from "../components/Modal.jsx";
 
 // Cores da própria paleta do app (violeta de marca + verde/âmbar/rosa dos
 // estados de acerto) -- confete precisa combinar com o resto da UI, não
@@ -942,13 +943,8 @@ export default function Aprender({ deck, aoVoltar, modoGlobal = false, folderId 
         </div>
       </main>
 
-      {tutorAberto && (
-        <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) setTutorAberto(false); }}>
-          <div className="modal-painel modal-tutor">
-            <div className="modal-cabecalho">
-              <h2 className="modal-titulo">Tutor Inteligente</h2>
-              <button className="modal-fechar" onClick={() => setTutorAberto(false)} aria-label="Fechar">×</button>
-            </div>
+      <Modal aberto={tutorAberto} aoFechar={() => setTutorAberto(false)}
+        titulo="Tutor Inteligente" className="modal-tutor">
             {tutorCarregando && <p className="tutor-status">Pensando na melhor forma de explicar…</p>}
             {tutorErro && !tutorCarregando && <p className="tutor-status tutor-status-erro">{tutorErro}</p>}
             {tutorTexto && !tutorCarregando && !tutorErro && (
@@ -956,17 +952,10 @@ export default function Aprender({ deck, aoVoltar, modoGlobal = false, folderId 
                 <ReactMarkdown>{tutorTexto}</ReactMarkdown>
               </div>
             )}
-          </div>
-        </div>
-      )}
+      </Modal>
 
-      {erroExplicacaoAberto && (
-        <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) setErroExplicacaoAberto(false); }}>
-          <div className="modal-painel modal-tutor">
-            <div className="modal-cabecalho">
-              <h2 className="modal-titulo">Por que essa alternativa está errada?</h2>
-              <button className="modal-fechar" onClick={() => setErroExplicacaoAberto(false)} aria-label="Fechar">×</button>
-            </div>
+      <Modal aberto={erroExplicacaoAberto} aoFechar={() => setErroExplicacaoAberto(false)}
+        titulo="Por que essa alternativa está errada?" className="modal-tutor">
             {erroExplicacaoVersao > 1 && !erroExplicacaoCarregando && (
               <span className="erro-feedback-versao">explicação refinada — v{erroExplicacaoVersao}</span>
             )}
@@ -1024,9 +1013,7 @@ export default function Aprender({ deck, aoVoltar, modoGlobal = false, folderId 
                 )}
               </>
             )}
-          </div>
-        </div>
-      )}
+      </Modal>
 
       <QuotaLimitModal aberto={isQuotaModalOpen} aoFechar={() => setIsQuotaModalOpen(false)} />
     </div>

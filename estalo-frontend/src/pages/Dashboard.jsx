@@ -5,6 +5,7 @@ import { api, NetworkException } from "../api.js";
 import useUndoableDelete from "../hooks/useUndoableDelete.js";
 import useOnline from "../hooks/useOnline.js";
 import UndoToasts from "../components/UndoToasts.jsx";
+import Modal from "../components/Modal.jsx";
 import BotaoBaixarOffline from "../components/BotaoBaixarOffline.jsx";
 import { baixarDeck, guardarRetrato, listarBaixados, removerDeck } from "../offlineDecks.js";
 
@@ -883,12 +884,8 @@ export default function Dashboard({ usuario, aoSair, aoVerCards, aoEstudar, aoCr
       </div>{/* dashboard-corpo */}
 
       {movendo && (
-        <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) setMovendo(null); }}>
-          <div className="modal-painel modal-mover">
-            <div className="modal-cabecalho">
-              <h2 className="modal-titulo">Mover "{movendo.title}"</h2>
-              <button className="modal-fechar" onClick={() => setMovendo(null)} aria-label="Fechar">×</button>
-            </div>
+        <Modal aberto aoFechar={() => setMovendo(null)}
+          titulo={`Mover "${movendo.title}"`} className="modal-mover">
             <ul className="mover-lista-pastas">
               <li>
                 <button
@@ -908,8 +905,7 @@ export default function Dashboard({ usuario, aoSair, aoVerCards, aoEstudar, aoCr
                 </li>
               ))}
             </ul>
-          </div>
-        </div>
+        </Modal>
       )}
 
       <UndoToasts pendentes={exclusoesPendentes} aoDesfazer={desfazerExclusao} />

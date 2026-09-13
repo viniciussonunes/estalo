@@ -4,6 +4,7 @@ import useUndoableDelete from "../hooks/useUndoableDelete.js";
 import useOnline from "../hooks/useOnline.js";
 import { baixarDeck, estaBaixado } from "../offlineDecks.js";
 import UndoToasts from "../components/UndoToasts.jsx";
+import Modal from "../components/Modal.jsx";
 
 // Mesma classificação usada nos boxes de resumo (stats-deck) e no backend
 // (ver _memorization_pct em decks.py): 0 repetições = novo, 1 = validando,
@@ -85,18 +86,21 @@ export default function Cards({ deck, aoVoltar, aoEstudar, aoAprender, aoRevelar
     baixarDeck(deck).catch(() => { /* mantém a cópia anterior */ });
   }, [online, deck]);
 
-  // Atalho 'C' abre modal; Escape fecha
+  // Atalho 'C' abre o modal. Fechar com Escape é responsabilidade do
+  // próprio <Modal> -- aqui não dava certo: este handler desiste quando o
+  // foco está num input, que é exatamente onde ele fica com o modal
+  // aberto. Ou seja, o Escape só funcionava se você não tivesse clicado em
+  // nada dentro do modal.
   useEffect(() => {
     function onKey(e) {
-      if (cardEditando) return;
+      if (cardEditando || modalAberto) return;
       const tag = document.activeElement?.tagName;
       if (tag === "INPUT" || tag === "TEXTAREA") return;
-      if (e.key === "c" || e.key === "C") { abrirModal(); return; }
-      if (e.key === "Escape") fecharModal();
+      if (e.key === "c" || e.key === "C") abrirModal();
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [cardEditando]);
+  }, [cardEditando, modalAberto]);
 
   // Foco no primeiro input ao abrir modal
   useEffect(() => {
@@ -355,14 +359,7 @@ export default function Cards({ deck, aoVoltar, aoEstudar, aoAprender, aoRevelar
       </main>
 
       {/* Modal de criação */}
-      {modalAberto && (
-        <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) fecharModal(); }}>
-          <div className="modal-painel">
-            <div className="modal-cabecalho">
-              <h2 className="modal-titulo">Adicionar cards</h2>
-              <button className="modal-fechar" onClick={fecharModal} aria-label="Fechar">×</button>
-            </div>
-
+      <Modal aberto={modalAberto} aoFechar={fecharModal} titulo="Adicionar cards">
             <div className="abas">
               <button className={abaAtiva === "manual" ? "aba ativa" : "aba"}
                 onClick={() => { setAbaAtiva("manual"); setErroIA(""); }}>
@@ -417,9 +414,7 @@ export default function Cards({ deck, aoVoltar, aoEstudar, aoAprender, aoRevelar
                 </div>
               </form>
             )}
-          </div>
-        </div>
-      )}
+      </Modal>
 
       <UndoToasts pendentes={exclusoesPendentes} aoDesfazer={desfazerExclusao} />
     </div>

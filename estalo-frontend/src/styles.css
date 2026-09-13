@@ -301,7 +301,16 @@ body {
 }
 
 /* ---------- Página interna ---------- */
-.pagina { min-height: 100vh; animation: fadeIn 0.18s ease both; }
+/* `backwards`, e não `both`: com `both` o estado final da animação fica
+   colado no elemento pra sempre, e esse estado inclui `transform:
+   translateY(0)`. Transform diferente de `none` cria bloco de contenção --
+   e aí todo descendente `position: fixed` passa a se ancorar na `.pagina`
+   em vez da janela (medido: sonda fixed dentro da .pagina, com a página
+   rolada 4037px, aparecia em y=-4037). Já custou duas gambiarras de
+   portal, no UndoToasts e no Modal. Com `backwards` o fade continua
+   idêntico -- o estado inicial ainda é aplicado antes de começar, que é o
+   que evita o flash -- e, terminada a animação, não sobra transform. */
+.pagina { min-height: 100vh; animation: fadeIn 0.18s ease backwards; }
 .topo {
   display: flex;
   align-items: center;
