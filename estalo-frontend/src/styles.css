@@ -509,6 +509,9 @@ body {
   color: var(--tinta);
 }
 .conta-acao-botao:hover:not(:disabled) { border-color: var(--violeta); color: var(--violeta); }
+/* Sair não é destrutivo (nada se perde), mas é uma saída: a borda vermelha
+   no hover marca que ali a sessão acaba, sem gritar antes da intenção. */
+.conta-acao-botao.perigo:hover:not(:disabled) { border-color: var(--perigo); color: var(--perigo); }
 
 /* Lista de decks guardados no aparelho. */
 .conta-baixados { margin-top: 1rem; }

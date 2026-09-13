@@ -72,12 +72,11 @@ function RequireAuth({ usuario, children }) {
 
 // ─── Páginas com acesso ao router ──────────────────────────────────────────
 
-function DashboardPage({ usuario, sair }) {
+function DashboardPage({ usuario }) {
   const navigate = useNavigate();
   return (
     <Dashboard
       usuario={usuario}
-      aoSair={sair}
       aoVerCards={deck => navigate(`/deck/${deck.id}`, { state: { deck } })}
       aoEstudar={deck => navigate(`/deck/${deck.id}/aprender`, { state: { deck } })}
       aoCriarDeck={pastaId => navigate("/criar-deck", { state: { pastaId } })}
@@ -178,9 +177,9 @@ function AdminPage() {
   return <Admin aoVoltar={() => navigate("/")} />;
 }
 
-function ContaPage({ usuario }) {
+function ContaPage({ usuario, sair }) {
   const navigate = useNavigate();
-  return <Conta usuario={usuario} aoVoltar={() => navigate("/")} />;
+  return <Conta usuario={usuario} aoVoltar={() => navigate("/")} aoSair={sair} />;
 }
 
 // ─── App root ──────────────────────────────────────────────────────────────
@@ -198,7 +197,7 @@ export default function App() {
 
       <Route path="/" element={
         <RequireAuth usuario={usuario}>
-          <DashboardPage usuario={usuario} sair={sair} />
+          <DashboardPage usuario={usuario} />
         </RequireAuth>
       } />
 
@@ -227,7 +226,7 @@ export default function App() {
       } />
 
       <Route path="/conta" element={
-        <RequireAuth usuario={usuario}><ContaPage usuario={usuario} /></RequireAuth>
+        <RequireAuth usuario={usuario}><ContaPage usuario={usuario} sair={sair} /></RequireAuth>
       } />
 
       <Route path="/admin" element={

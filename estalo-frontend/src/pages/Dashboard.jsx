@@ -285,7 +285,7 @@ function SeletorCorPasta({ corSelecionada, onSelecionar }) {
   );
 }
 
-export default function Dashboard({ usuario, aoSair, aoVerCards, aoEstudar, aoCriarDeck, aoEstudarTudo, aoEstudarPasta, aoAbrirConta }) {
+export default function Dashboard({ usuario, aoVerCards, aoEstudar, aoCriarDeck, aoEstudarTudo, aoEstudarPasta, aoAbrirConta }) {
   const [arvore, setArvore]         = useState([]);
   const [todosDecks, setTodosDecks] = useState([]);
   const [statsMap, setStatsMap]     = useState({});   // { [deckId]: StudyStats }
@@ -622,7 +622,6 @@ export default function Dashboard({ usuario, aoSair, aoVerCards, aoEstudar, aoCr
             </span>
             <span className="usuario-email">{usuario.email}</span>
           </button>
-          <button className="botao-texto" onClick={aoSair}>Sair</button>
         </div>
       </header>
 

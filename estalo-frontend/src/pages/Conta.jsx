@@ -18,7 +18,7 @@ import { listarBaixados, removerDeck } from "../offlineDecks.js";
  * como saber em qual conta você estava. Quem tem conta pessoal e de estudo
  * descobria pelo conteúdo -- ou não descobria.
  */
-export default function Conta({ usuario, aoVoltar }) {
+export default function Conta({ usuario, aoVoltar, aoSair }) {
   const [trocandoSenha, setTrocandoSenha] = useState(false);
   const mostrarToast = useToast();
   const online = useOnline();
@@ -65,6 +65,18 @@ export default function Conta({ usuario, aoVoltar }) {
               disabled={!online}
               title={online ? undefined : "Precisa de internet — disponível quando a conexão voltar"}>
               Trocar senha
+            </button>
+          </div>
+
+          <div className="conta-acao">
+            <div className="conta-acao-texto">
+              <span className="conta-acao-titulo">Sair</span>
+              <span className="conta-acao-sub">
+                Encerra a sessão neste aparelho. Os decks baixados continuam aqui.
+              </span>
+            </div>
+            <button className="botao-texto conta-acao-botao perigo" onClick={aoSair}>
+              Sair da conta
             </button>
           </div>
         </section>

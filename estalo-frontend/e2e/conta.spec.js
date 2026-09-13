@@ -120,7 +120,8 @@ test.describe("Área da conta", () => {
 
     await page.getByRole("button", { name: /Sua conta/ }).click();
     await expect(page.getByRole("button", { name: "Trocar senha" })).toBeVisible();
-    await expect(page.locator(".conta-acao")).toContainText("Não existe recuperação de senha");
+    await expect(page.locator(".conta-acao").filter({ hasText: "Senha" }).first())
+      .toContainText("Não existe recuperação de senha");
   });
 
   test("sem nada baixado, explica como baixar", async ({ page }) => {
@@ -174,6 +175,37 @@ test.describe("Área da conta", () => {
     await expect(remover).toBeEnabled();
     await remover.click();
     await expect(page.locator(".baixados-item")).toHaveCount(0);
+  });
+
+  test("sair mora aqui, e não mais no cabeçalho", async ({ page }) => {
+    await abrirLogado(page);
+    // Saiu do topo de todas as telas junto com "Trocar senha" -- era o que
+    // deixava o cabeçalho quebrando linha no celular.
+    await expect(page.getByRole("button", { name: /^Sair/ })).toHaveCount(0);
+
+    await page.getByRole("button", { name: /Sua conta/ }).click();
+    await page.getByRole("button", { name: "Sair da conta" }).click();
+
+    // Volta pro login e o crachá some do aparelho.
+    await expect(page.locator(".cartao-auth")).toBeVisible();
+    expect(await page.evaluate(() => localStorage.getItem("estalo_token"))).toBeNull();
+  });
+
+  test("sair não apaga os decks baixados", async ({ page }) => {
+    // A sessão acaba; o que está guardado no aparelho, não. Quem estuda
+    // offline não pode perder o download por ter saído da conta.
+    await abrirLogado(page);
+    await page.evaluate(() => {
+      localStorage.setItem("estalo_decks_offline", JSON.stringify({
+        "1:10": { deck: { id: 10, title: "Intune" }, baixadoEm: "2026-09-01T10:00:00.000Z", totalCards: 40 },
+      }));
+    });
+    await page.goto("/conta");
+    await page.getByRole("button", { name: "Sair da conta" }).click();
+    await expect(page.locator(".cartao-auth")).toBeVisible();
+
+    const registro = await page.evaluate(() => localStorage.getItem("estalo_decks_offline"));
+    expect(registro, "o download foi apagado junto com a sessão").toContain("Intune");
   });
 
   test("identidade sem data de cadastro não quebra a página", async ({ page }) => {
