@@ -66,7 +66,7 @@ export const token = {
 };
 
 // Função base: monta a requisição, anexa o crachá e trata erro.
-async function request(path, { method = "GET", body, form, headers: extra } = {}) {
+async function request(path, { method = "GET", body, form, headers: extra, semToastDeRede = false } = {}) {
   const headers = { "X-User-Timezone": FUSO_HORARIO, ...extra };
   const t = token.get();
   if (t) headers["Authorization"] = `Bearer ${t}`;
@@ -98,7 +98,10 @@ async function request(path, { method = "GET", body, form, headers: extra } = {}
     // a faixa fixa do OfflineBanner já está na tela dizendo isso -- não
     // precisa também de um toast, ainda mais durante um retry que pode se
     // recuperar sozinho.
-    if (typeof navigator === "undefined" || navigator.onLine) {
+    // `semToastDeRede`: quem já mostra o erro no próprio formulário (a tela
+    // de login) pede pra não receber o toast também. Falhar e ser avisado
+    // duas vezes da mesma coisa, no mesmo instante, é ruído.
+    if (!semToastDeRede && (typeof navigator === "undefined" || navigator.onLine)) {
       emitirToastErro("Sem conexão com o servidor. Verifique sua internet e tente de novo.");
     }
     // NetworkException (não Error cru): mensagem amigável já embutida
@@ -150,11 +153,14 @@ async function _comQuedaParaOffline(promessa, lerLocal) {
 // --- Funções específicas que as telas usam ---
 
 export const api = {
+  // As duas chamadas do formulário de entrada não disparam o toast de rede:
+  // a própria tela mostra o erro dentro do cartão, onde a pessoa está
+  // olhando (ver Auth.jsx).
   registrar: (email, password) =>
-    request("/auth/register", { method: "POST", body: { email, password } }),
+    request("/auth/register", { method: "POST", body: { email, password }, semToastDeRede: true }),
 
   login: (email, password) =>
-    request("/auth/login", { method: "POST", form: { username: email, password } }),
+    request("/auth/login", { method: "POST", form: { username: email, password }, semToastDeRede: true }),
 
   eu: () => request("/auth/me"),
 

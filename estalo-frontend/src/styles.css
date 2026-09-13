@@ -231,7 +231,8 @@ body {
 
 /* ---------- Campos de formulário ---------- */
 .campo { display: block; margin-bottom: 1rem; }
-.campo span {
+.campo span,
+.campo > label {
   display: block;
   font-size: 0.85rem;
   font-weight: 500;
@@ -254,6 +255,47 @@ body {
   border-color: var(--violeta);
   box-shadow: 0 0 0 3px rgba(91, 75, 232, 0.15);
 }
+
+/* ---------- Campo de senha com o botão de mostrar/ocultar ---------- */
+.campo-senha { position: relative; }
+/* Espaço à direita pro botão não cobrir o que está sendo digitado. */
+.campo-senha input { padding-right: 2.9rem; }
+.botao-ver-senha {
+  position: absolute;
+  top: 50%;
+  right: 0.25rem;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--tinta-suave);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.botao-ver-senha:hover { background: var(--papel); color: var(--tinta); }
+.botao-ver-senha[aria-pressed="true"] { color: var(--violeta); }
+
+/* Aviso discreto sob um campo (Caps Lock). Âmbar, não vermelho: é uma
+   observação útil, não um erro -- a pessoa pode muito bem querer maiúsculas.
+   Seletor com duas classes de propósito: `.campo span` (0,1,1) venceria
+   `.campo-aviso` sozinho e pintaria o aviso de cinza.
+   O tom é o âmbar escuro, não o `--ambar` da marca: #f59e0b em fundo claro
+   dá ~2.2:1 de contraste, ilegível pro texto pequeno. */
+.campo .campo-aviso {
+  display: block;
+  margin-top: 0.4rem;
+  margin-bottom: 0;
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: #92400e;
+}
+.tema-escuro .campo .campo-aviso { color: var(--ambar); }
 
 /* ---------- Botões ---------- */
 .botao-principal {
@@ -2793,6 +2835,8 @@ kbd {
      Mínimo recomendado é 44px (Apple HIG / WCAG 2.5.5). A auditoria de
      layout achou o app inteiro entre 24px e 34px -- desenhado pro mouse,
      que acerta um alvo de 24px sem esforço; o dedo, não. */
+  .botao-ver-senha { width: 40px; height: 40px; }
+
   .icone-acao,
   .toggle-tema,
   .view-toggle-btn,
