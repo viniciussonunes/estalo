@@ -34,7 +34,7 @@ async function abrirConta(page, resposta = "ok") {
       if (resposta === "obvia") {
         return json({ detail: "Essa senha é uma das mais usadas do mundo e seria adivinhada em segundos. Escolha outra." }, 400);
       }
-      return route.fulfill({ status: 204, body: "" });
+      return json({ access_token: "novo.cracha.aqui", token_type: "bearer" });
     }
     if (p === "/auth/me") return json({ id: 1, email: "estudante@estalo.dev", created_at: "2026-03-05T14:20:00" });
     if (p === "/auth/me/quota") return json({ consumido: 0, limite: 50000, restante: 50000, renova_em: "2026-09-14T00:00:00" });
@@ -138,6 +138,30 @@ test.describe("Trocar senha", () => {
     await page.locator(".modal-painel").getByRole("button", { name: "Trocar senha" }).click();
 
     await expect(page.getByRole("alert")).toContainText(/mais usadas do mundo/i);
+  });
+
+  test("guarda o crachá novo — senão quem trocou cairia no login", async ({ page }) => {
+    // Trocar a senha derruba TODOS os tokens da geração anterior, o desta
+    // aba inclusive. O backend devolve um crachá novo; se o frontend não
+    // guardar, a request seguinte leva 401 e a pessoa é expulsa por ter
+    // trocado a própria senha.
+    await abrirConta(page);
+    await abrirModal(page);
+    await campo(page, "Senha atual").fill("a-antiga-2026");
+    await campo(page, "Nova senha").fill("a-nova-boa-2026");
+    await campo(page, "Repita a nova senha").fill("a-nova-boa-2026");
+    await page.locator(".modal-painel").getByRole("button", { name: "Trocar senha" }).click();
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+
+    expect(await page.evaluate(() => localStorage.getItem("estalo_token"))).toBe("novo.cracha.aqui");
+  });
+
+  test("diz que os outros aparelhos vão cair, antes de confirmar", async ({ page }) => {
+    await abrirConta(page);
+    await abrirModal(page);
+    // Ninguém gosta de ser surpreendido por um efeito colateral desses --
+    // ainda que ele seja o objetivo.
+    await expect(page.locator(".modal-senha-nota")).toContainText("desconecta a sua conta nos outros aparelhos");
   });
 
   test("avisa que não existe recuperação de senha", async ({ page }) => {

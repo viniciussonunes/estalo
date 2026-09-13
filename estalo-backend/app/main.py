@@ -84,6 +84,13 @@ def _migrar():
             ))
         if "locked_until" not in colunas_usuarios:
             conn.execute(text("ALTER TABLE users ADD COLUMN locked_until TIMESTAMP"))
+        # DEFAULT 1 (não 0) de propósito: é o valor que um token emitido
+        # ANTES desta mudança assume quando o campo `ver` está ausente.
+        # Com 0, todo mundo seria deslogado no deploy.
+        if "token_version" not in colunas_usuarios:
+            conn.execute(text(
+                "ALTER TABLE users ADD COLUMN token_version INTEGER NOT NULL DEFAULT 1"
+            ))
 
         # Backfill do content_hash pra cards que ainda não têm — SHA-256
         # não é nativo nem em SQLite nem em Postgres sem extensão, então

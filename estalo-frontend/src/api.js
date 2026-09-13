@@ -170,12 +170,20 @@ export const api = {
 
   // Mesma razão do semToastDeRede acima: o modal de troca mostra o erro
   // dentro dele mesmo.
-  trocarSenha: (senhaAtual, senhaNova) =>
-    request("/auth/change-password", {
+  //
+  // Guarda o crachá novo que o backend devolve, e isso NÃO é detalhe:
+  // trocar a senha derruba todos os tokens da geração anterior -- o desta
+  // aba inclusive. Sem trocar aqui, quem acabou de mudar a senha levaria
+  // 401 na request seguinte e cairia no login.
+  trocarSenha: async (senhaAtual, senhaNova) => {
+    const r = await request("/auth/change-password", {
       method: "POST",
       body: { senha_atual: senhaAtual, senha_nova: senhaNova },
       semToastDeRede: true,
-    }),
+    });
+    if (r?.access_token) token.set(r.access_token);
+    return r;
+  },
 
   // As quatro chamadas que desenham o Dashboard caem no retrato local
   // quando não há rede -- é o que faz a tela offline ser IGUAL à online

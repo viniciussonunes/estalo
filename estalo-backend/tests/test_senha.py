@@ -96,7 +96,7 @@ def test_troca_de_senha_muda_o_login(client):
     _cadastrar(client)
     token = _token(client)
 
-    assert _trocar(client, token, CONTA["password"], NOVA).status_code == 204
+    assert _trocar(client, token, CONTA["password"], NOVA).status_code == 200
 
     assert _entrar(client, CONTA["password"]).status_code == 401
     assert _entrar(client, NOVA).status_code == 200
@@ -159,8 +159,83 @@ def test_trocar_a_senha_limpa_a_sequencia_de_erros(client):
     for _ in range(ERROS_ATE_BLOQUEAR - 1):
         _entrar(client, "chute")
 
-    assert _trocar(client, token, CONTA["password"], NOVA).status_code == 204
+    assert _trocar(client, token, CONTA["password"], NOVA).status_code == 200
 
     # Retomou o controle da conta: o contador zera junto.
     for _ in range(ERROS_ATE_BLOQUEAR - 1):
         assert _entrar(client, "chute").status_code == 401
+
+
+# ------------------------------------- trocar a senha derruba as sessões
+
+def test_trocar_a_senha_derruba_a_sessao_do_outro_aparelho(client):
+    """O ponto todo da mudança.
+
+    Antes: JWT é assinado, não consultado -- um aparelho perdido continuava
+    com a conta aberta por até 7 dias, e trocar a senha não adiantava nada
+    contra ele. Agora cada crachá carrega a geração em que foi emitido, e
+    trocar a senha vira a geração.
+    """
+    _cadastrar(client)
+    aparelho_a = _token(client)
+    aparelho_b = _token(client)  # segundo login, outro aparelho
+
+    # Os dois estão dentro.
+    assert client.get("/auth/me", headers={"Authorization": f"Bearer {aparelho_b}"}).status_code == 200
+
+    _trocar(client, aparelho_a, CONTA["password"], NOVA)
+
+    r = client.get("/auth/me", headers={"Authorization": f"Bearer {aparelho_b}"})
+    assert r.status_code == 401
+
+
+def test_quem_trocou_continua_dentro(client):
+    # Não pode ser vítima do próprio ato: o endpoint devolve crachá novo.
+    _cadastrar(client)
+    antigo = _token(client)
+    novo = _trocar(client, antigo, CONTA["password"], NOVA).json()["access_token"]
+
+    assert novo != antigo
+    assert client.get("/auth/me", headers={"Authorization": f"Bearer {novo}"}).status_code == 200
+    # E o crachá com que ele entrou também caiu -- é a mesma geração velha.
+    assert client.get("/auth/me", headers={"Authorization": f"Bearer {antigo}"}).status_code == 401
+
+
+def test_token_revogado_nao_abre_os_endpoints_de_estudo(client):
+    """Sem isto, "derruba as sessões" seria propaganda enganosa.
+
+    A maioria dos endpoints usa get_current_user_id, que NÃO consultava o
+    banco -- o token revogado continuaria abrindo tudo que interessa
+    (decks, cards, estudo) e só /auth/me recusaria.
+    """
+    _cadastrar(client)
+    aparelho_a = _token(client)
+    aparelho_b = _token(client)
+    h_b = {"Authorization": f"Bearer {aparelho_b}"}
+
+    assert client.get("/decks", headers=h_b).status_code == 200
+
+    _trocar(client, aparelho_a, CONTA["password"], NOVA)
+
+    assert client.get("/decks", headers=h_b).status_code == 401
+    assert client.get("/folders", headers=h_b).status_code == 401
+
+
+def test_cracha_sem_versao_continua_valendo(client):
+    """Compatibilidade com quem já estava logado no dia do deploy.
+
+    Tokens emitidos antes de o campo `ver` existir não têm o claim. Se
+    fossem recusados, o deploy deslogaria TODO MUNDO de uma vez -- por
+    isso ausente é lido como geração 1, que é o default da coluna.
+    """
+    from jose import jwt
+    from app.core.config import settings
+    from app.core.security import ALGORITHM
+    from datetime import datetime, timedelta, timezone
+
+    _cadastrar(client)
+    antigo = jwt.encode(
+        {"sub": "1", "exp": datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(days=1)},
+        settings.SECRET_KEY, algorithm=ALGORITHM,
+    )
+    assert client.get("/auth/me", headers={"Authorization": f"Bearer {antigo}"}).status_code == 200

@@ -336,6 +336,12 @@ body {
 
 /* ---------- Modal de trocar senha ---------- */
 .modal-senha { max-width: 400px; }
+.modal-senha-nota {
+  margin: -0.6rem 0 1rem;
+  font-size: 0.8rem;
+  line-height: 1.45;
+  color: var(--tinta-suave);
+}
 .modal-senha-aviso {
   margin: 0.25rem 0 1rem;
   padding: 0.6rem 0.8rem;

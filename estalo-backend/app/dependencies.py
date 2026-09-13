@@ -17,7 +17,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.database import get_db
-from app.core.security import decode_access_token
+from app.core.security import ler_token
 from app.models import User
 
 # Diz ao FastAPI: o crachá chega via login no endpoint /auth/login.
@@ -56,31 +56,41 @@ def get_current_user(
         headers={"WWW-Authenticate": "Bearer"},
     )
 
-    user_id = decode_access_token(token)
-    if user_id is None:
+    dados = ler_token(token)
+    if dados is None:
         raise erro
+    user_id, versao = dados
 
     user = db.query(User).filter(User.id == int(user_id)).first()
-    if user is None:
+    if user is None or user.token_version != versao:
         raise erro
 
     return user
 
 
-def get_current_user_id(token: str = Depends(oauth2_scheme)) -> int:
+def get_current_user_id(
+    token: str = Depends(oauth2_scheme),
+    db: Session = Depends(get_db),
+) -> int:
     """Versão leve de get_current_user: só decodifica e valida o JWT, SEM
     consultar o banco. Use nos endpoints que só precisam do id pra filtrar
     queries (a grande maioria) — evita um SELECT redundante em toda
     request, já que o próprio token já é uma prova criptográfica válida da
     identidade.
 
-    Trade-off consciente: se o usuário for excluído do banco, um token
-    dele ainda dentro da validade (7 dias) continua sendo aceito aqui — a
-    request só falharia se tentasse usar um recurso que realmente não
-    existe mais (ex: dono de um deck). Hoje o app não tem endpoint de
-    exclusão de conta, então isso não acontece na prática. Se um dia
-    existir "excluir minha conta", reavaliar esse trade-off (ex: invalidar
-    tokens ativos no logout/exclusão).
+    Deixou de ser 100% "sem consultar o banco" quando a troca de senha
+    passou a derrubar sessões: agora lê UMA coluna (token_version) pra
+    conferir se o crachá ainda é da geração vigente. Sem isso, "trocar a
+    senha derruba as outras sessões" seria propaganda enganosa -- o token
+    revogado continuaria abrindo todos os endpoints de estudo, que são
+    justamente os que usam esta dependência. O custo é um SELECT de uma
+    coluna por chave primária, numa request que já vai ao banco de
+    qualquer jeito.
+
+    Trade-off que continua de pé: se o usuário for excluído do banco, um
+    token dele dentro da validade (7 dias) ainda passa por aqui -- a
+    consulta devolve None e o token é recusado, então na prática isso
+    também ficou coberto. Hoje não existe endpoint de exclusão de conta.
 
     Pra rotas que precisam dos dados de verdade do usuário (email, etc.),
     use get_current_user — ex: GET /auth/me.
@@ -91,8 +101,13 @@ def get_current_user_id(token: str = Depends(oauth2_scheme)) -> int:
         headers={"WWW-Authenticate": "Bearer"},
     )
 
-    user_id = decode_access_token(token)
-    if user_id is None:
+    dados = ler_token(token)
+    if dados is None:
+        raise erro
+    user_id, versao = dados
+
+    atual = db.query(User.token_version).filter(User.id == int(user_id)).scalar()
+    if atual is None or atual != versao:
         raise erro
 
     return int(user_id)

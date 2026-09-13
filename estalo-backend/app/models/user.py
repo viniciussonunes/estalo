@@ -26,6 +26,14 @@ class User(Base):
     failed_login_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
     locked_until: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
+    # Geração dos crachás válidos. Todo token carrega a versão em que foi
+    # emitido; trocar a senha incrementa isto e, com isso, todo token
+    # antigo deixa de valer -- é o único jeito de derrubar uma sessão
+    # aberta em outro aparelho, já que JWT é assinado e não consultado.
+    # Começa em 1 pra que token ANTIGO (sem o campo `ver`) continue
+    # valendo: ausente é lido como 1. Ver security.py e dependencies.py.
+    token_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
+
     # Um usuário tem várias pastas, decks e reviews.
     folders: Mapped[list["Folder"]] = relationship(back_populates="owner")
     decks: Mapped[list["Deck"]] = relationship(back_populates="owner")

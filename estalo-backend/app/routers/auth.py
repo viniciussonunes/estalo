@@ -91,7 +91,7 @@ def login(
         login_throttle.registrar_sucesso(user)
         db.commit()
 
-    token = create_access_token(subject=str(user.id))
+    token = create_access_token(subject=str(user.id), token_version=user.token_version)
     return Token(access_token=token)
 
 
@@ -158,7 +158,7 @@ def _exigir_senha_aceitavel(senha: str, email: str | None = None) -> None:
         ) from fraca
 
 
-@router.post("/change-password", status_code=status.HTTP_204_NO_CONTENT)
+@router.post("/change-password", response_model=Token)
 def trocar_senha(
     dados: PasswordChange,
     db: Session = Depends(get_db),
@@ -208,11 +208,18 @@ def trocar_senha(
     # Trocar a senha com sucesso é retomada de controle da conta: limpa
     # qualquer sequência de erros pendente.
     login_throttle.registrar_sucesso(user)
+
+    # Vira a geração dos crachás: todo token emitido antes desta linha
+    # para de valer na hora (ver token_version em models/user.py). É o que
+    # faz "troquei a senha" significar "quem estava dentro caiu" -- sem
+    # isto, um aparelho perdido continuaria com a conta aberta por até 7
+    # dias, e trocar a senha não adiantaria nada contra ele.
+    user.token_version += 1
     db.commit()
 
-    # Limitação conhecida: os tokens JWT já emitidos continuam válidos até
-    # expirarem -- eles são assinados, não consultados no banco, e não há
-    # lista de revogação. Ou seja, trocar a senha NÃO derruba na hora uma
-    # sessão que já esteja aberta em outro aparelho. Resolver isso pede um
-    # campo de "versão do token" no usuário, conferido no
-    # get_current_user; ficou de fora deste passo de propósito.
+    # Quem trocou a senha não pode ser vítima do próprio ato: devolve um
+    # crachá novo, já na geração nova, pra a sessão ATUAL continuar. As
+    # outras é que caem.
+    return Token(access_token=create_access_token(
+        subject=str(user.id), token_version=user.token_version,
+    ))

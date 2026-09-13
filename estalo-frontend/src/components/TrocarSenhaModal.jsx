@@ -89,6 +89,14 @@ export default function TrocarSenhaModal({ aberto, aoFechar, aoTrocar }) {
           Guarde a senha nova num lugar seguro. O Estalo ainda não tem
           recuperação de senha.
         </p>
+        {/* Consequência que a pessoa precisa saber ANTES de confirmar:
+            trocar a senha desconecta a conta nos outros aparelhos. É o
+            comportamento desejado (é assim que se expulsa quem não devia
+            estar lá), mas ninguém gosta de ser surpreendido. */}
+        <p className="modal-senha-nota">
+          Trocar a senha desconecta a sua conta nos outros aparelhos. Aqui você
+          continua conectado.
+        </p>
 
         <button className="botao-principal" type="submit"
           disabled={salvando || !atual || !nova || !confirmacao}>

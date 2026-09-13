@@ -58,7 +58,8 @@ export default function Conta({ usuario, aoVoltar, aoSair, aoAbrirAdmin }) {
             <div className="conta-acao-texto">
               <span className="conta-acao-titulo">Senha</span>
               <span className="conta-acao-sub">
-                Não existe recuperação de senha no Estalo — guarde a sua em lugar seguro.
+                Trocar a senha desconecta os outros aparelhos. Não existe
+                recuperação de senha no Estalo — guarde a sua em lugar seguro.
               </span>
             </div>
             <button className="botao-texto conta-acao-botao" onClick={() => setTrocandoSenha(true)}
