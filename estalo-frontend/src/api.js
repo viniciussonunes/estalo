@@ -3,7 +3,7 @@
 // Toda conversa com a API passa por aqui. Isso centraliza duas coisas chatas
 // que senão você repetiria em toda tela: o endereço base e o crachá (token).
 
-import { emitirToastErro } from "./toastBus.js";
+import { marcarOk, marcarQueda } from "./conexao.js";
 
 const BASE = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
@@ -66,7 +66,7 @@ export const token = {
 };
 
 // Função base: monta a requisição, anexa o crachá e trata erro.
-async function request(path, { method = "GET", body, form, headers: extra, semToastDeRede = false } = {}) {
+async function request(path, { method = "GET", body, form, headers: extra } = {}) {
   const headers = { "X-User-Timezone": FUSO_HORARIO, ...extra };
   const t = token.get();
   if (t) headers["Authorization"] = `Bearer ${t}`;
@@ -84,30 +84,27 @@ async function request(path, { method = "GET", body, form, headers: extra, semTo
   let resp;
   try {
     resp = await fetch(`${BASE}${path}`, { method, headers, body: payload });
+    // Respondeu: existe servidor do outro lado. Tira a faixa de offline
+    // se ela estiver na tela.
+    marcarOk();
   } catch (falhaDeRede) {
     // fetch só lança aqui por falha de REDE de verdade (servidor
     // inalcançável, sem internet) -- nunca por causa de um status de erro
     // HTTP normal (isso vira resp.ok=false abaixo, sempre tratado por quem
-    // chamou). É exatamente o caso que hoje passava batido pro usuário:
-    // a internet cai no meio de uma sessão e ninguém avisa -- só um
-    // console.error que ninguém vê. Aqui sim generaliza pra toda chamada
-    // da API de uma vez, sem precisar mexer tela por tela.
-    // Só dispara o toast quando o navegador acha que ESTÁ online -- ou
-    // seja, "você tem internet mas o servidor não respondeu" (aí o toast é
-    // o único sinal). Se está offline de verdade (navigator.onLine false),
-    // a faixa fixa do OfflineBanner já está na tela dizendo isso -- não
-    // precisa também de um toast, ainda mais durante um retry que pode se
-    // recuperar sozinho.
-    // `semToastDeRede`: quem já mostra o erro no próprio formulário (a tela
-    // de login) pede pra não receber o toast também. Falhar e ser avisado
-    // duas vezes da mesma coisa, no mesmo instante, é ruído.
-    if (!semToastDeRede && (typeof navigator === "undefined" || navigator.onLine)) {
-      emitirToastErro("Sem conexão com o servidor. Verifique sua internet e tente de novo.");
-    }
+    // chamou).
+    //
+    // Aqui NÃO se avisa nada: só se registra o fato. Quem conta pro
+    // usuário é a faixa de offline, uma vez, enquanto durar. Antes saía um
+    // toast vermelho por request falhada -- e como cada navegação refaz as
+    // chamadas, virava um aviso por tela. Pior: saía mesmo quando a tela
+    // funcionava inteira a partir da cópia local (ver
+    // _comQuedaParaOffline abaixo), ou seja, erro na cara do usuário por
+    // algo que não falhou pra ele. Ver src/conexao.js.
+    marcarQueda();
     // NetworkException (não Error cru): mensagem amigável já embutida
     // (`.message` = "Sem conexão com o servidor.", pega pelos <p class="erro">
     // de Cards.jsx/CriarDeck.jsx no lugar do "Failed to fetch" do navegador)
-    // e tipo identificável pra quem quiser re-tentar (comRetry em Aprender.jsx).
+    // e tipo identificável pra quem quiser tratar diferente.
     throw new NetworkException();
   }
 
@@ -153,14 +150,11 @@ async function _comQuedaParaOffline(promessa, lerLocal) {
 // --- Funções específicas que as telas usam ---
 
 export const api = {
-  // As duas chamadas do formulário de entrada não disparam o toast de rede:
-  // a própria tela mostra o erro dentro do cartão, onde a pessoa está
-  // olhando (ver Auth.jsx).
   registrar: (email, password) =>
-    request("/auth/register", { method: "POST", body: { email, password }, semToastDeRede: true }),
+    request("/auth/register", { method: "POST", body: { email, password } }),
 
   login: (email, password) =>
-    request("/auth/login", { method: "POST", form: { username: email, password }, semToastDeRede: true }),
+    request("/auth/login", { method: "POST", form: { username: email, password } }),
 
   eu: () => request("/auth/me"),
 
@@ -168,8 +162,6 @@ export const api = {
   // descobria o limite batendo nele (ver QuotaLimitModal).
   minhaCota: () => request("/auth/me/quota"),
 
-  // Mesma razão do semToastDeRede acima: o modal de troca mostra o erro
-  // dentro dele mesmo.
   //
   // Guarda o crachá novo que o backend devolve, e isso NÃO é detalhe:
   // trocar a senha derruba todos os tokens da geração anterior -- o desta
@@ -179,7 +171,6 @@ export const api = {
     const r = await request("/auth/change-password", {
       method: "POST",
       body: { senha_atual: senhaAtual, senha_nova: senhaNova },
-      semToastDeRede: true,
     });
     if (r?.access_token) token.set(r.access_token);
     return r;

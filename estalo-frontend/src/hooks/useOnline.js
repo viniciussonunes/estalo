@@ -1,30 +1,19 @@
-import { useEffect, useState } from "react";
+import { useSyncExternalStore } from "react";
+import { assinar, estaOnline } from "../conexao.js";
 
 /**
- * true/false conforme o navegador acha que tem conexão, acompanhando os
- * eventos `online`/`offline` em tempo real.
+ * true enquanto dá pra falar com o servidor.
  *
- * Limite conhecido: `navigator.onLine` só sabe se existe *alguma* rede
- * (wifi conectado, dados ligados) -- não garante que o servidor responde.
- * Cobre bem o caso comum (avião, sem sinal, wifi caiu) e a volta da
- * conexão; falha de rede com `onLine === true` continua sendo pega pelo
- * toast automático do api.js.
+ * Antes olhava só `navigator.onLine`, que mente com frequência: Wi-Fi sem
+ * internet, portal cativo e sinal fantasma reportam `true` com a rede
+ * inútil. O estado agora vem do que as requests de verdade fazem -- ver
+ * src/conexao.js, que explica o sintoma que motivou a troca.
+ *
+ * Isso muda pra melhor os ~14 botões que dependem deste hook (Tutor,
+ * "Gerar com IA", renomear, excluir…): eles passam a ficar indisponíveis
+ * também quando existe rede mas o servidor não responde -- que é
+ * exatamente quando clicar neles daria erro.
  */
 export default function useOnline() {
-  const [online, setOnline] = useState(
-    typeof navigator === "undefined" ? true : navigator.onLine,
-  );
-
-  useEffect(() => {
-    const marcarOnline = () => setOnline(true);
-    const marcarOffline = () => setOnline(false);
-    window.addEventListener("online", marcarOnline);
-    window.addEventListener("offline", marcarOffline);
-    return () => {
-      window.removeEventListener("online", marcarOnline);
-      window.removeEventListener("offline", marcarOffline);
-    };
-  }, []);
-
-  return online;
+  return useSyncExternalStore(assinar, estaOnline, () => true);
 }

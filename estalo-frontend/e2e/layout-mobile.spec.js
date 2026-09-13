@@ -253,18 +253,23 @@ test.describe("Layout no celular", () => {
   });
 
   test("lista de cards de um deck", async ({ page }) => {
-    await abrirLogado(page, "/deck/10");
-    // A tela de Cards exige o deck no state do router; sem ele volta pra
-    // raiz. Entrar pelo Dashboard é o caminho real do usuário.
-    await page.goto("/?folder=2");
+    // A tela de Cards exige o deck no state do router: abrir /deck/10
+    // direto volta pra raiz. Entrar pelo Dashboard é o caminho real do
+    // usuário -- e é só o que este teste precisa. (Antes ele carregava
+    // /deck/10 primeiro, só pra ver o bounce: duas cargas de página a
+    // mais, num teste que já era o mais lento da suíte.)
+    await abrirLogado(page, "/?folder=2");
     // Espera a linha existir antes de clicar. Sem isso o teste piscava sob
     // carga (a suíte inteira em paralelo): o Dashboard redesenha a linha
     // quando as stats chegam, e um clique disparado nesse meio-tempo mira
     // um elemento que some -- 30s de timeout esperando um alvo que já foi
     // substituído.
-    await expect(page.locator(".lista-deck .lista-info").first()).toBeVisible();
+    await expect(page.locator(".lista-deck .lista-info").first()).toBeVisible({ timeout: 15000 });
     await page.locator(".lista-deck .lista-info").first().click();
-    await expect(page.locator(".lista-cards, .cards-lista-topo").first()).toBeVisible();
+    // Timeout generoso: a tela de cards ainda busca a lista ao montar, e
+    // com a suíte inteira em paralelo os 5s padrão do expect não bastavam
+    // (~1 falha a cada 3 execuções). Não é bug do app, é máquina ocupada.
+    await expect(page.locator(".lista-cards, .cards-lista-topo").first()).toBeVisible({ timeout: 15000 });
     await conferirLayout(page, "cards do deck");
   });
 

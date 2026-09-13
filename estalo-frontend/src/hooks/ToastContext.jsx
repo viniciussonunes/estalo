@@ -1,6 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { registrarToastBus } from "../toastBus.js";
 
 const ToastContext = createContext(null);
 
@@ -37,10 +36,6 @@ export function ToastProvider({ children }) {
     setTimeout(() => remover(id, chave), duracaoMs);
   }, [remover]);
 
-  // api.js não é componente React -- não pode chamar useContext. Registra
-  // `mostrar` no barramento uma vez, pra qualquer módulo fora da árvore
-  // (hoje só api.js, pra erro de rede) conseguir disparar um toast.
-  useEffect(() => { registrarToastBus(mostrar); }, [mostrar]);
 
   return (
     <ToastContext.Provider value={mostrar}>
