@@ -7,6 +7,7 @@ from datetime import date, datetime, time, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.core import fuso
@@ -16,7 +17,7 @@ from app.dependencies import eh_admin, get_current_user
 from app.models import User
 from app.schemas.token import Token
 from app.schemas.user import PasswordChange, QuotaOut, UserCreate, UserOut
-from app.services import login_throttle, password_policy, quota_service
+from app.services import email_policy, login_throttle, password_policy, quota_service
 
 router = APIRouter(prefix="/auth", tags=["Autenticação"])
 
@@ -24,17 +25,27 @@ router = APIRouter(prefix="/auth", tags=["Autenticação"])
 @router.post("/register", response_model=UserOut, status_code=status.HTTP_201_CREATED)
 def cadastrar(dados: UserCreate, db: Session = Depends(get_db)):
     """Cria um novo usuário com a senha já criptografada."""
-    # Não deixa cadastrar email repetido.
-    if db.query(User).filter(User.email == dados.email).first():
+    email = email_policy.normalizar(dados.email)
+    try:
+        email_policy.validar(email)
+    except email_policy.EmailInvalido as invalido:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail=str(invalido),
+        ) from invalido
+
+    # Não deixa cadastrar email repetido. Comparação sem caixa: senão
+    # "Vini@x.com" e "vini@x.com" viram duas contas, e o login (que agora
+    # também ignora caixa) encontraria uma das duas por sorteio.
+    if db.query(User).filter(func.lower(User.email) == email).first():
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Esse email já está cadastrado",
         )
 
-    _exigir_senha_aceitavel(dados.password, dados.email)
+    _exigir_senha_aceitavel(dados.password, email)
 
     novo = User(
-        email=dados.email,
+        email=email,
         hashed_password=hash_password(dados.password),
     )
     db.add(novo)
@@ -57,7 +68,13 @@ def login(
     Erros seguidos bloqueiam a conta por um tempo crescente (429 +
     Retry-After) -- ver services/login_throttle.py pro porquê e pra escada.
     """
-    user = db.query(User).filter(User.email == form.username).first()
+    # Sem caixa e sem espaços nas pontas: quem se cadastrou como
+    # "Vini@x.com" e digita "vini@x.com" tem que entrar. Antes não
+    # entrava, e a pessoa não tinha como descobrir o porquê -- a senha
+    # estava certa. Funciona também pras contas gravadas ANTES da
+    # normalização, porque a comparação é que baixa a caixa dos dois lados.
+    email = email_policy.normalizar(form.username)
+    user = db.query(User).filter(func.lower(User.email) == email).first()
 
     # Conta bloqueada nem chega a conferir a senha -- inclusive porque
     # verify_password é bcrypt, caro de propósito: responder cedo tira do
