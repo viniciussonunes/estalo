@@ -1,7 +1,6 @@
 import { useState, useEffect } from "react";
 import { Routes, Route, Navigate, useNavigate, useLocation, useParams } from "react-router-dom";
 import { api, token, NetworkException } from "./api.js";
-import useTheme from "./hooks/useTheme.js";
 import Auth from "./pages/Auth.jsx";
 import Dashboard from "./pages/Dashboard.jsx";
 import Cards from "./pages/Cards.jsx";
@@ -72,14 +71,12 @@ function RequireAuth({ usuario, children }) {
 
 // ─── Páginas com acesso ao router ──────────────────────────────────────────
 
-function DashboardPage({ usuario, sair, tema, proximoTema }) {
+function DashboardPage({ usuario, sair }) {
   const navigate = useNavigate();
   return (
     <Dashboard
       usuario={usuario}
       aoSair={sair}
-      tema={tema}
-      proximoTema={proximoTema}
       aoVerCards={deck => navigate(`/deck/${deck.id}`, { state: { deck } })}
       aoEstudar={deck => navigate(`/deck/${deck.id}/aprender`, { state: { deck } })}
       aoCriarDeck={pastaId => navigate("/criar-deck", { state: { pastaId } })}
@@ -183,7 +180,6 @@ function AdminPage() {
 
 export default function App() {
   const { usuario, setUsuario, sair, carregando } = useAuth();
-  const { tema, proximoTema } = useTheme();
 
   if (carregando) return <div className="tela-centro">Carregando…</div>;
 
@@ -195,7 +191,7 @@ export default function App() {
 
       <Route path="/" element={
         <RequireAuth usuario={usuario}>
-          <DashboardPage usuario={usuario} sair={sair} tema={tema} proximoTema={proximoTema} />
+          <DashboardPage usuario={usuario} sair={sair} />
         </RequireAuth>
       } />
 

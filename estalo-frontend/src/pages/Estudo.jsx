@@ -4,6 +4,7 @@ import { api } from "../api.js";
 import { enfileirar, sincronizar } from "../outbox.js";
 import useOnline from "../hooks/useOnline.js";
 import SeloOffline from "../components/SeloOffline.jsx";
+import ToggleTema from "../components/ToggleTema.jsx";
 
 // quality "Acertei" sem nuance -- 4 é neutro pro ease_factor do SM-2 (nem
 // sobe nem desce, ver services/sm2.py), o default mais honesto quando não
@@ -282,13 +283,16 @@ function CabecalhoEstudo({ deck, stats, aoVoltar }) {
         <span className="estudo-deck-nome">{deck.title}</span>
         <SeloOffline />
       </div>
-      {stats !== null && (
-        <span className="estudo-contador">
-          {stats.due_now > 0
-            ? `${stats.due_now} card${stats.due_now > 1 ? "s" : ""} pra revisar`
-            : "Em dia!"}
-        </span>
-      )}
+      <div className="topo-direita">
+        {stats !== null && (
+          <span className="estudo-contador">
+            {stats.due_now > 0
+              ? `${stats.due_now} card${stats.due_now > 1 ? "s" : ""} pra revisar`
+              : "Em dia!"}
+          </span>
+        )}
+        <ToggleTema />
+      </div>
     </header>
   );
 }

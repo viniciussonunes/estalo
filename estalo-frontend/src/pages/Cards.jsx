@@ -5,6 +5,7 @@ import useOnline from "../hooks/useOnline.js";
 import { baixarDeck, estaBaixado } from "../offlineDecks.js";
 import UndoToasts from "../components/UndoToasts.jsx";
 import Modal from "../components/Modal.jsx";
+import ToggleTema from "../components/ToggleTema.jsx";
 
 // Mesma classificação usada nos boxes de resumo (stats-deck) e no backend
 // (ver _memorization_pct em decks.py): 0 repetições = novo, 1 = validando,
@@ -203,6 +204,7 @@ export default function Cards({ deck, aoVoltar, aoEstudar, aoAprender, aoRevelar
           <button className="botao-texto" onClick={aoVoltar}>← Voltar</button>
           <span className="estudo-deck-nome">{deck.title}</span>
         </div>
+        <div className="topo-direita">
         <div className="modos-estudo-topo">
           <button className="botao-modo-ghost" onClick={aoRevelar}>Revelar</button>
           <button className="botao-modo-ghost" onClick={aoEstudar}>Estudo clássico</button>
@@ -223,6 +225,8 @@ export default function Cards({ deck, aoVoltar, aoEstudar, aoAprender, aoRevelar
               Aprender
             </button>
           )}
+        </div>
+        <ToggleTema />
         </div>
       </header>
 

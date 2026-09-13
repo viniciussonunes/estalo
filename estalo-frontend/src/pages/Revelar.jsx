@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import ReactMarkdown from "react-markdown";
 import { api } from "../api.js";
 import useOnline from "../hooks/useOnline.js";
+import ToggleTema from "../components/ToggleTema.jsx";
 
 export default function Revelar({ deck, aoVoltar }) {
   const [cards, setCards] = useState([]);
@@ -63,7 +64,10 @@ export default function Revelar({ deck, aoVoltar }) {
         <button className="botao-texto" onClick={aoVoltar}>← Voltar</button>
         <span className="estudo-deck-nome">{deck.title}</span>
       </div>
-      <span className="modo-label">Revelar cards</span>
+      <div className="topo-direita">
+        <span className="modo-label">Revelar cards</span>
+        <ToggleTema />
+      </div>
     </header>
   );
 

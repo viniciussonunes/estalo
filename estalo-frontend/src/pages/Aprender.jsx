@@ -9,6 +9,7 @@ import { useToast } from "../hooks/ToastContext.jsx";
 import QuotaLimitModal from "../components/QuotaLimitModal.jsx";
 import SeloOffline from "../components/SeloOffline.jsx";
 import Modal from "../components/Modal.jsx";
+import ToggleTema from "../components/ToggleTema.jsx";
 
 // Cores da própria paleta do app (violeta de marca + verde/âmbar/rosa dos
 // estados de acerto) -- confete precisa combinar com o resto da UI, não
@@ -656,7 +657,10 @@ export default function Aprender({ deck, aoVoltar, modoGlobal = false, folderId 
             : deck.title}
         </span>
       </div>
-      <span className="modo-label">{modoPraticaViloes ? "Revisão de vilões" : "Múltipla escolha"}</span>
+      <div className="topo-direita">
+        <span className="modo-label">{modoPraticaViloes ? "Revisão de vilões" : "Múltipla escolha"}</span>
+        <ToggleTema />
+      </div>
     </header>
   );
 

@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { api } from "../api.js";
 import useOnline from "../hooks/useOnline.js";
+import ToggleTema from "../components/ToggleTema.jsx";
 
 const MSGS_IA = [
   "Lendo o texto fornecido...",
@@ -98,6 +99,7 @@ export default function CriarDeck({ pastaId, aoVoltar, aoVerCards }) {
           <button className="botao-texto" onClick={aoVoltar}>← Voltar</button>
           <span className="estudo-deck-nome">Novo deck</span>
         </div>
+        <ToggleTema />
       </header>
 
       <main className="conteudo">

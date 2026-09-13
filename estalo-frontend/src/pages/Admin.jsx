@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { api } from "../api.js";
+import ToggleTema from "../components/ToggleTema.jsx";
 
 export default function Admin({ aoVoltar }) {
   const [usuarios, setUsuarios]     = useState([]);
@@ -56,6 +57,7 @@ export default function Admin({ aoVoltar }) {
           <button className="botao-texto" onClick={aoVoltar}>← Voltar</button>
           <span className="estudo-deck-nome">Administração — Cotas de IA</span>
         </div>
+        <ToggleTema />
       </header>
 
       <main className="conteudo admin-conteudo">
