@@ -143,6 +143,32 @@ test.describe("Tela de entrar", () => {
     await expect(page.getByRole("dialog"), "não é caso de modal").toHaveCount(0);
   });
 
+  test("cadastro avisa o mínimo de senha antes de tentar", async ({ page }) => {
+    let chamouRegistro = false;
+    await page.route("**/auth/register", (route) => { chamouRegistro = true; route.abort(); });
+    await simularApi(page);
+
+    await page.getByRole("button", { name: "Criar conta" }).click();
+    // A exigência fica visível no campo, não escondida até o erro.
+    await expect(page.locator(".campo-dica")).toContainText("8 caracteres");
+
+    await page.getByPlaceholder("voce@email.com").fill("novo@estalo.dev");
+    await page.locator(".campo-senha input").fill("curta");
+    await page.getByRole("button", { name: "Criar conta e entrar" }).click();
+
+    await expect(page.getByRole("alert")).toContainText("8 caracteres");
+    // Barra aqui: não gasta uma ida ao servidor pra ouvir o que a tela já
+    // sabia. (O servidor continua sendo a autoridade -- ver senha.js.)
+    expect(chamouRegistro, "não devia ter chamado /auth/register").toBe(false);
+  });
+
+  test("no login a dica de tamanho não aparece", async ({ page }) => {
+    // Dizer "curta demais" na tela de ENTRAR contaria a um atacante que
+    // aquela senha nem poderia existir. A regra é do cadastro.
+    await simularApi(page);
+    await expect(page.locator(".campo-dica")).toHaveCount(0);
+  });
+
   test("login que dá certo entra no app", async ({ page }) => {
     await simularApi(page, "ok");
     await page.getByPlaceholder("voce@email.com").fill("estudante@estalo.dev");

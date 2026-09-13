@@ -6,6 +6,8 @@ import useUndoableDelete from "../hooks/useUndoableDelete.js";
 import useOnline from "../hooks/useOnline.js";
 import UndoToasts from "../components/UndoToasts.jsx";
 import Modal from "../components/Modal.jsx";
+import TrocarSenhaModal from "../components/TrocarSenhaModal.jsx";
+import { useToast } from "../hooks/ToastContext.jsx";
 import BotaoBaixarOffline from "../components/BotaoBaixarOffline.jsx";
 import { baixarDeck, guardarRetrato, listarBaixados, removerDeck } from "../offlineDecks.js";
 
@@ -289,6 +291,8 @@ export default function Dashboard({ usuario, aoSair, aoVerCards, aoEstudar, aoCr
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro]             = useState("");
   const [falhouCarregar, setFalhouCarregar] = useState(false);
+  const [trocandoSenha, setTrocandoSenha] = useState(false);
+  const mostrarToast = useToast();
   // Excluir pasta/deck: some da tela na hora (otimista), mas só chama a API
   // de verdade se ninguém apertar "Desfazer" no toast a tempo (ver
   // useUndoableDelete.js) -- substitui o antigo confirm() nativo.
@@ -563,6 +567,14 @@ export default function Dashboard({ usuario, aoSair, aoVerCards, aoEstudar, aoCr
           {import.meta.env.DEV && <BotaoTesteSentry />}
           <ToggleTema tema={tema} proximoTema={proximoTema} />
           <span className="usuario-email">{usuario.email}</span>
+          {/* Enquanto não existe uma área de conta, a troca de senha mora
+              aqui -- o cabeçalho é o único lugar que aparece em toda tela.
+              Offline não dá: a senha é conferida no servidor. */}
+          <button className="botao-texto" onClick={() => setTrocandoSenha(true)}
+            disabled={!online}
+            title={online ? undefined : "Precisa de internet — disponível quando a conexão voltar"}>
+            Trocar senha
+          </button>
           <button className="botao-texto" onClick={aoSair}>Sair</button>
         </div>
       </header>
@@ -907,6 +919,12 @@ export default function Dashboard({ usuario, aoSair, aoVerCards, aoEstudar, aoCr
             </ul>
         </Modal>
       )}
+
+      <TrocarSenhaModal
+        aberto={trocandoSenha}
+        aoFechar={() => setTrocandoSenha(false)}
+        aoTrocar={() => mostrarToast("Senha trocada.", "sucesso")}
+      />
 
       <UndoToasts pendentes={exclusoesPendentes} aoDesfazer={desfazerExclusao} />
     </div>

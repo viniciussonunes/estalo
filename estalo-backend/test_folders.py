@@ -4,7 +4,7 @@ from app.main import app
 
 client = TestClient(app)
 
-def criar_usuario_e_logar(email, senha="senha123"):
+def criar_usuario_e_logar(email, senha="senha-de-teste-2026"):
     client.post("/auth/register", json={"email": email, "password": senha})
     r = client.post("/auth/login", data={"username": email, "password": senha})
     token = r.json()["access_token"]

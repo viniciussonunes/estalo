@@ -24,9 +24,9 @@ def test_factories_criam_e_persistem(db_session):
 
 def test_client_e_db_session_veem_o_mesmo_banco(client, db_session):
     from app.models import Deck
-    r = client.post("/auth/register", json={"email": "sanity@estalo.dev", "password": "senha123"})
+    r = client.post("/auth/register", json={"email": "sanity@estalo.dev", "password": "senha-de-teste-2026"})
     assert r.status_code == 201
-    login = client.post("/auth/login", data={"username": "sanity@estalo.dev", "password": "senha123"})
+    login = client.post("/auth/login", data={"username": "sanity@estalo.dev", "password": "senha-de-teste-2026"})
     auth = {"Authorization": f"Bearer {login.json()['access_token']}"}
     client.post("/decks", json={"title": "Deck Sanity"}, headers=auth)
     assert db_session.query(Deck).filter(Deck.title == "Deck Sanity").count() == 1

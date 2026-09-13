@@ -15,6 +15,19 @@ class UserCreate(BaseModel):
     password: str
 
 
+class PasswordChange(BaseModel):
+    """Troca de senha de quem já está logado.
+
+    Pede a senha atual mesmo com o token na mão: token roubado (aparelho
+    esquecido aberto, sessão vazada) não pode virar posse da conta. Sem essa
+    confirmação, quem pegasse o crachá trocaria a senha e trancaria o dono
+    do lado de fora -- e, como não existe recuperação de senha, seria
+    definitivo.
+    """
+    senha_atual: str
+    senha_nova: str
+
+
 class UserOut(BaseModel):
     """O que a API devolve sobre um usuário. Sem senha, nunca."""
     id: int

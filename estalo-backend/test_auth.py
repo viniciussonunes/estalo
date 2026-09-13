@@ -5,7 +5,7 @@ from app.main import app
 client = TestClient(app)
 
 print("1) Cadastro de usuário...")
-r = client.post("/auth/register", json={"email": "vini@estalo.dev", "password": "senha123"})
+r = client.post("/auth/register", json={"email": "vini@estalo.dev", "password": "senha-de-teste-2026"})
 print("   status:", r.status_code, "| resposta:", r.json())
 assert r.status_code == 201
 assert "hashed_password" not in r.json()  # senha NUNCA volta
@@ -24,7 +24,7 @@ assert r.status_code == 401
 print("   OK — barrou senha errada\n")
 
 print("4) Login correto...")
-r = client.post("/auth/login", data={"username": "vini@estalo.dev", "password": "senha123"})
+r = client.post("/auth/login", data={"username": "vini@estalo.dev", "password": "senha-de-teste-2026"})
 print("   status:", r.status_code)
 token = r.json()["access_token"]
 print("   token (início):", token[:25], "...")

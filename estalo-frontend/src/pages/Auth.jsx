@@ -1,5 +1,7 @@
 import { useId, useState } from "react";
 import { api, token, NetworkException } from "../api.js";
+import CampoSenha from "../components/CampoSenha.jsx";
+import { TAMANHO_MINIMO_SENHA, validarSenha } from "../senha.js";
 
 /**
  * Traduz a falha pra uma frase que ajuda.
@@ -30,28 +32,27 @@ export default function Auth({ aoEntrar }) {
   const [senha, setSenha] = useState("");
   const [erro, setErro] = useState("");
   const [enviando, setEnviando] = useState(false);
-  const [senhaVisivel, setSenhaVisivel] = useState(false);
-  const [capsLigado, setCapsLigado] = useState(false);
   const idErro = useId();
-  const idSenha = useId();
 
   function trocarModo(novo) {
     setModo(novo);
     setErro("");
-    setSenhaVisivel(false);
   }
 
-  // Caps Lock aceso é a explicação de boa parte dos "minha senha não
-  // funciona" -- e, com o campo mascarado, não tem como perceber sozinho.
-  // Teclado de celular não reporta o estado; lá o aviso simplesmente nunca
-  // aparece, o que é o certo.
-  function conferirCaps(e) {
-    setCapsLigado(e.getModifierState?.("CapsLock") ?? false);
-  }
 
   async function enviar(e) {
     e.preventDefault();
     setErro("");
+
+    // Recusa o que dá pra saber aqui, sem gastar uma ida ao servidor. Só
+    // no cadastro: no login, senha curta é problema do backend responder
+    // "incorretos" -- dizer "curta demais" aqui contaria a um atacante que
+    // aquela senha nem poderia existir.
+    if (modo === "cadastro") {
+      const problema = validarSenha(senha);
+      if (problema) { setErro(problema); return; }
+    }
+
     setEnviando(true);
     try {
       if (modo === "cadastro") {
@@ -113,45 +114,17 @@ export default function Auth({ aoEntrar }) {
             />
           </label>
 
-          {/* Aqui o rótulo é um <label for>, e não um <label> envolvendo
-              tudo como no campo de email: clique em qualquer filho de um
-              label é redirecionado pro campo, o que faria o botão do olho
-              disparar duas vezes. */}
-          <div className="campo">
-            <label htmlFor={idSenha}>Senha</label>
-            <div className="campo-senha">
-              <input
-                id={idSenha}
-                type={senhaVisivel ? "text" : "password"}
-                value={senha}
-                onChange={(e) => setSenha(e.target.value)}
-                onKeyUp={conferirCaps}
-                onKeyDown={conferirCaps}
-                onBlur={() => setCapsLigado(false)}
-                placeholder="••••••••"
-                autoComplete={modo === "login" ? "current-password" : "new-password"}
-                aria-invalid={erro ? true : undefined}
-                aria-describedby={erro ? idErro : undefined}
-                required
-              />
-              <button
-                type="button"
-                className="botao-ver-senha"
-                onClick={() => setSenhaVisivel((v) => !v)}
-                // O nome não muda com o estado: quem usa leitor de tela
-                // ouve o mesmo botão sempre, e `aria-pressed` diz se está
-                // ligado. Rótulo que troca de nome vira botão diferente.
-                aria-label="Mostrar senha"
-                aria-pressed={senhaVisivel}
-                title={senhaVisivel ? "Ocultar senha" : "Mostrar senha"}
-              >
-                {senhaVisivel ? <IconeOlhoFechado /> : <IconeOlho />}
-              </button>
-            </div>
-            {capsLigado && (
-              <span className="campo-aviso">Caps Lock está ligado</span>
-            )}
-          </div>
+          <CampoSenha
+            rotulo="Senha"
+            valor={senha}
+            aoMudar={setSenha}
+            autoComplete={modo === "login" ? "current-password" : "new-password"}
+            invalido={!!erro}
+            descritoPor={erro ? idErro : undefined}
+            // A exigência aparece ANTES de tentar, não como recusa depois
+            // do clique -- é o mesmo texto que o backend usaria pra negar.
+            dica={modo === "cadastro" ? `Mínimo de ${TAMANHO_MINIMO_SENHA} caracteres.` : undefined}
+          />
 
           {/* role="alert" faz o leitor de tela anunciar a falha na hora.
               Sem isso, quem não enxerga clica em "Entrar", nada acontece e
@@ -167,24 +140,3 @@ export default function Auth({ aoEntrar }) {
   );
 }
 
-function IconeOlho() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor"
-      strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M1.8 10S4.9 4.6 10 4.6 18.2 10 18.2 10 15.1 15.4 10 15.4 1.8 10 1.8 10z" />
-      <circle cx="10" cy="10" r="2.4" />
-    </svg>
-  );
-}
-
-function IconeOlhoFechado() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor"
-      strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M8.8 5.1A7.4 7.4 0 0110 5c5.1 0 8.2 5 8.2 5a13.4 13.4 0 01-2.7 3.2" />
-      <path d="M5.5 6.5A12.7 12.7 0 001.8 10s3.1 5 8.2 5c1.3 0 2.4-.3 3.4-.8" />
-      <path d="M11.7 11.7a2.4 2.4 0 01-3.4-3.4" />
-      <path d="M3.2 3.2l13.6 13.6" />
-    </svg>
-  );
-}

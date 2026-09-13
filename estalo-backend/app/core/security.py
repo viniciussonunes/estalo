@@ -23,6 +23,12 @@ ALGORITHM = "HS256"
 def hash_password(senha: str) -> str:
     """Embaralha a senha pra guardar no banco. Sentido único: não dá pra voltar."""
     # bcrypt trabalha com bytes e tem limite de 72 bytes por senha.
+    # Desde services/password_policy.py, senha maior que isso é RECUSADA na
+    # entrada em vez de cortada em silêncio -- este corte virou só uma
+    # última linha de defesa. O corte no verify_password abaixo, ao
+    # contrário, precisa continuar existindo: senhas gravadas antes da
+    # regra podem ter passado dos 72 bytes, e quem tem uma delas ainda
+    # precisa conseguir entrar.
     senha_bytes = senha.encode("utf-8")[:72]
     salt = bcrypt.gensalt()
     return bcrypt.hashpw(senha_bytes, salt).decode("utf-8")

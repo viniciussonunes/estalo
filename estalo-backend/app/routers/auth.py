@@ -1,5 +1,5 @@
 """
-Endpoints de autenticação: cadastro, login e "quem sou eu".
+Endpoints de autenticação: cadastro, login, "quem sou eu" e troca de senha.
 
 Esses são os primeiros endpoints DE VERDADE do Estalo.
 """
@@ -12,8 +12,8 @@ from app.core.security import create_access_token, hash_password, verify_passwor
 from app.dependencies import get_current_user
 from app.models import User
 from app.schemas.token import Token
-from app.schemas.user import UserCreate, UserOut
-from app.services import login_throttle
+from app.schemas.user import PasswordChange, UserCreate, UserOut
+from app.services import login_throttle, password_policy
 
 router = APIRouter(prefix="/auth", tags=["Autenticação"])
 
@@ -27,6 +27,8 @@ def cadastrar(dados: UserCreate, db: Session = Depends(get_db)):
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Esse email já está cadastrado",
         )
+
+    _exigir_senha_aceitavel(dados.password, dados.email)
 
     novo = User(
         email=dados.email,
@@ -95,3 +97,76 @@ def login(
 def quem_sou_eu(user: User = Depends(get_current_user)):
     """Endpoint protegido: só responde se você mostrar um crachá válido."""
     return user
+
+
+def _exigir_senha_aceitavel(senha: str, email: str | None = None) -> None:
+    """Aplica a regra de senha, traduzindo a recusa em 400 com frase pronta
+    (ver services/password_policy.py sobre por que não é validação de
+    schema do Pydantic)."""
+    try:
+        password_policy.validar(senha, email)
+    except password_policy.SenhaFraca as fraca:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(fraca),
+        ) from fraca
+
+
+@router.post("/change-password", status_code=status.HTTP_204_NO_CONTENT)
+def trocar_senha(
+    dados: PasswordChange,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Troca a senha de quem está logado.
+
+    Antes disso não existia jeito NENHUM de trocar de senha -- quem tinha
+    uma senha ruim (e o cadastro aceitava qualquer uma) estava preso a ela.
+
+    Erros na senha atual contam no mesmo freio do login
+    (services/login_throttle.py): o token já prova quem é, mas a senha
+    atual é adivinhável do mesmo jeito, e um endpoint sem freio seria a
+    porta dos fundos do que o /login fechou.
+    """
+    espera = login_throttle.segundos_de_bloqueio(user)
+    if espera > 0:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=login_throttle.mensagem_de_bloqueio(espera),
+            headers={"Retry-After": str(espera)},
+        )
+
+    if not verify_password(dados.senha_atual, user.hashed_password):
+        espera = login_throttle.registrar_falha(user)
+        db.commit()
+        if espera > 0:
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail=login_throttle.mensagem_de_bloqueio(espera),
+                headers={"Retry-After": str(espera)},
+            )
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="A senha atual está incorreta",
+        )
+
+    _exigir_senha_aceitavel(dados.senha_nova, user.email)
+
+    if verify_password(dados.senha_nova, user.hashed_password):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="A senha nova precisa ser diferente da atual",
+        )
+
+    user.hashed_password = hash_password(dados.senha_nova)
+    # Trocar a senha com sucesso é retomada de controle da conta: limpa
+    # qualquer sequência de erros pendente.
+    login_throttle.registrar_sucesso(user)
+    db.commit()
+
+    # Limitação conhecida: os tokens JWT já emitidos continuam válidos até
+    # expirarem -- eles são assinados, não consultados no banco, e não há
+    # lista de revogação. Ou seja, trocar a senha NÃO derruba na hora uma
+    # sessão que já esteja aberta em outro aparelho. Resolver isso pede um
+    # campo de "versão do token" no usuário, conferido no
+    # get_current_user; ficou de fora deste passo de propósito.

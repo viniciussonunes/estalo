@@ -21,8 +21,8 @@ from tests.factories import CardFactory, DeckFactory, FolderFactory, ReviewFacto
 
 
 def _registrar_e_logar(client, db_session, email="study_service@estalo.dev"):
-    client.post("/auth/register", json={"email": email, "password": "senha123"})
-    login = client.post("/auth/login", data={"username": email, "password": "senha123"})
+    client.post("/auth/register", json={"email": email, "password": "senha-de-teste-2026"})
+    login = client.post("/auth/login", data={"username": email, "password": "senha-de-teste-2026"})
     auth = {"Authorization": f"Bearer {login.json()['access_token']}"}
     user = db_session.query(User).filter(User.email == email).first()
     return auth, user

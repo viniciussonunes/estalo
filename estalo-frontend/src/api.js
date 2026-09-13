@@ -164,6 +164,15 @@ export const api = {
 
   eu: () => request("/auth/me"),
 
+  // Mesma razão do semToastDeRede acima: o modal de troca mostra o erro
+  // dentro dele mesmo.
+  trocarSenha: (senhaAtual, senhaNova) =>
+    request("/auth/change-password", {
+      method: "POST",
+      body: { senha_atual: senhaAtual, senha_nova: senhaNova },
+      semToastDeRede: true,
+    }),
+
   // As quatro chamadas que desenham o Dashboard caem no retrato local
   // quando não há rede -- é o que faz a tela offline ser IGUAL à online
   // (mesma hierarquia, mesma trilha, decks nas pastas certas), em vez de

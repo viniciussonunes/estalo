@@ -21,7 +21,7 @@ client = TestClient(app)
 SCRATCH = Path(tempfile.mkdtemp(prefix="estalo_test_orchestrator_"))
 
 
-def logar(email, senha="senha123"):
+def logar(email, senha="senha-de-teste-2026"):
     client.post("/auth/register", json={"email": email, "password": senha})
     r = client.post("/auth/login", data={"username": email, "password": senha})
     token = r.json()["access_token"]

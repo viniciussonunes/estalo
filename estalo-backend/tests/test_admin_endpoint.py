@@ -12,7 +12,7 @@ from app.core.config import settings
 from app.models.user_quota import DEFAULT_DAILY_LIMIT
 
 
-def _registrar_e_logar(client, email, senha="senha123"):
+def _registrar_e_logar(client, email, senha="senha-de-teste-2026"):
     client.post("/auth/register", json={"email": email, "password": senha})
     login = client.post("/auth/login", data={"username": email, "password": senha})
     return {"Authorization": f"Bearer {login.json()['access_token']}"}

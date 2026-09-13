@@ -12,7 +12,7 @@ from app.routers.study import _data_no_fuso, _hoje_no_fuso
 client = TestClient(app)
 
 
-def logar(email, senha="senha123"):
+def logar(email, senha="senha-de-teste-2026"):
     client.post("/auth/register", json={"email": email, "password": senha})
     r = client.post("/auth/login", data={"username": email, "password": senha})
     return {"Authorization": f"Bearer {r.json()['access_token']}"}

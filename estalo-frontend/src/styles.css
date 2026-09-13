@@ -297,6 +297,29 @@ body {
 }
 .tema-escuro .campo .campo-aviso { color: var(--ambar); }
 
+/* Exigência dita ANTES de tentar, não como recusa depois do clique.
+   Duas classes pelo mesmo motivo do aviso acima: `.campo span` venceria. */
+.campo .campo-dica {
+  display: block;
+  margin-top: 0.35rem;
+  margin-bottom: 0;
+  font-size: 0.78rem;
+  font-weight: 400;
+  color: var(--tinta-suave);
+}
+
+/* ---------- Modal de trocar senha ---------- */
+.modal-senha { max-width: 400px; }
+.modal-senha-aviso {
+  margin: 0.25rem 0 1rem;
+  padding: 0.6rem 0.8rem;
+  border-radius: 9px;
+  background: var(--ambar-suave);
+  color: var(--tinta);
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+
 /* ---------- Botões ---------- */
 .botao-principal {
   width: 100%;

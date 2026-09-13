@@ -51,8 +51,8 @@ def _apkg_minimo(caminho: Path) -> None:
 
 
 def _registrar_e_logar(client, email="smoke@estalo.dev"):
-    client.post("/auth/register", json={"email": email, "password": "senha123"})
-    login = client.post("/auth/login", data={"username": email, "password": "senha123"})
+    client.post("/auth/register", json={"email": email, "password": "senha-de-teste-2026"})
+    login = client.post("/auth/login", data={"username": email, "password": "senha-de-teste-2026"})
     return {"Authorization": f"Bearer {login.json()['access_token']}"}
 
 
