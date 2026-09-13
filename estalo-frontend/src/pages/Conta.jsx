@@ -1,6 +1,9 @@
 import { useEffect, useState } from "react";
 import { api, NetworkException } from "../api.js";
+import { useToast } from "../hooks/ToastContext.jsx";
+import useOnline from "../hooks/useOnline.js";
 import ToggleTema from "../components/ToggleTema.jsx";
+import TrocarSenhaModal from "../components/TrocarSenhaModal.jsx";
 
 /**
  * Área da conta.
@@ -15,6 +18,10 @@ import ToggleTema from "../components/ToggleTema.jsx";
  * descobria pelo conteúdo -- ou não descobria.
  */
 export default function Conta({ usuario, aoVoltar }) {
+  const [trocandoSenha, setTrocandoSenha] = useState(false);
+  const mostrarToast = useToast();
+  const online = useOnline();
+
   return (
     <div className="pagina">
       <header className="topo">
@@ -39,7 +46,32 @@ export default function Conta({ usuario, aoVoltar }) {
         </section>
 
         <CotaDeIA />
+
+        {/* A troca de senha morava no cabeçalho de TODAS as telas, por
+            falta de lugar melhor. Aqui ela tem endereço, e o cabeçalho
+            volta a caber no celular. */}
+        <section className="conta-bloco conta-acoes">
+          <div className="conta-acao">
+            <div className="conta-acao-texto">
+              <span className="conta-acao-titulo">Senha</span>
+              <span className="conta-acao-sub">
+                Não existe recuperação de senha no Estalo — guarde a sua em lugar seguro.
+              </span>
+            </div>
+            <button className="botao-texto conta-acao-botao" onClick={() => setTrocandoSenha(true)}
+              disabled={!online}
+              title={online ? undefined : "Precisa de internet — disponível quando a conexão voltar"}>
+              Trocar senha
+            </button>
+          </div>
+        </section>
       </main>
+
+      <TrocarSenhaModal
+        aberto={trocandoSenha}
+        aoFechar={() => setTrocandoSenha(false)}
+        aoTrocar={() => mostrarToast("Senha trocada.", "sucesso")}
+      />
     </div>
   );
 }

@@ -485,6 +485,31 @@ body {
 .conta-cota-texto { margin-top: 0.7rem; font-size: 0.88rem; line-height: 1.5; color: var(--tinta-suave); }
 .conta-cota-renova { margin-top: 0.3rem; font-size: 0.8rem; color: var(--tinta-suave); }
 
+/* Linhas de ação da conta (trocar senha, sair, …): rótulo + explicação de
+   um lado, botão do outro. Empilha no celular. */
+.conta-acoes { margin-top: 1rem; }
+.conta-acao {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+.conta-acao + .conta-acao {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--borda);
+}
+.conta-acao-texto { display: flex; flex-direction: column; min-width: 12rem; flex: 1; }
+.conta-acao-titulo { font-weight: 600; color: var(--tinta); }
+.conta-acao-sub { font-size: 0.82rem; color: var(--tinta-suave); margin-top: 0.15rem; line-height: 1.45; }
+.conta-acao-botao {
+  flex: none;
+  border: 1px solid var(--borda);
+  color: var(--tinta);
+}
+.conta-acao-botao:hover:not(:disabled) { border-color: var(--violeta); color: var(--violeta); }
+
 .toggle-tema {
   display: flex;
   align-items: center;

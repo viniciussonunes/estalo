@@ -19,8 +19,10 @@ function tokenFalso() {
   return `${b64({ alg: "HS256", typ: "JWT" })}.${b64({ sub: "1", exp: 9999999999 })}.assinatura-de-teste`;
 }
 
-/** `resposta` decide o que /auth/change-password devolve. */
-async function abrirDashboard(page, resposta = "ok") {
+/** Abre a ÁREA DA CONTA, que é onde a troca de senha passou a morar (antes
+ *  ficava no cabeçalho de todas as telas, por falta de lugar melhor).
+ *  `resposta` decide o que /auth/change-password devolve. */
+async function abrirConta(page, resposta = "ok") {
   await page.route("**/*", async (route) => {
     const req = route.request();
     const p = new URL(req.url()).pathname;
@@ -34,7 +36,8 @@ async function abrirDashboard(page, resposta = "ok") {
       }
       return route.fulfill({ status: 204, body: "" });
     }
-    if (p === "/auth/me") return json({ id: 1, email: "estudante@estalo.dev" });
+    if (p === "/auth/me") return json({ id: 1, email: "estudante@estalo.dev", created_at: "2026-03-05T14:20:00" });
+    if (p === "/auth/me/quota") return json({ consumido: 0, limite: 50000, restante: 50000, renova_em: "2026-09-14T00:00:00" });
     if (p === "/folders" || p === "/decks") return json([]);
     if (p === "/study/streak") return json({ current_streak: 0, longest_streak: 0 });
     return json({});
@@ -44,7 +47,7 @@ async function abrirDashboard(page, resposta = "ok") {
     localStorage.setItem("estalo_token", t);
     localStorage.setItem("estalo_ultimo_usuario", JSON.stringify({ id: 1, email: "estudante@estalo.dev" }));
   }, tokenFalso());
-  await page.goto("/");
+  await page.goto("/conta");
   await expect(page.getByRole("button", { name: "Trocar senha" }).first()).toBeVisible();
 }
 
@@ -61,7 +64,7 @@ function campo(page, rotulo) {
 
 test.describe("Trocar senha", () => {
   test("troca a senha e confirma que trocou", async ({ page }) => {
-    await abrirDashboard(page);
+    await abrirConta(page);
     await abrirModal(page);
 
     await campo(page, "Senha atual").fill("a-antiga-2026");
@@ -78,7 +81,7 @@ test.describe("Trocar senha", () => {
   test("confirmação que não bate barra antes de sair da tela", async ({ page }) => {
     let chamou = false;
     await page.route("**/auth/change-password", (route) => { chamou = true; route.abort(); });
-    await abrirDashboard(page);
+    await abrirConta(page);
     await abrirModal(page);
 
     await campo(page, "Senha atual").fill("a-antiga-2026");
@@ -96,7 +99,7 @@ test.describe("Trocar senha", () => {
   test("senha nova curta é barrada sem ida ao servidor", async ({ page }) => {
     let chamou = false;
     await page.route("**/auth/change-password", (route) => { chamou = true; route.abort(); });
-    await abrirDashboard(page);
+    await abrirConta(page);
     await abrirModal(page);
 
     await campo(page, "Senha atual").fill("a-antiga-2026");
@@ -109,7 +112,7 @@ test.describe("Trocar senha", () => {
   });
 
   test("recusa do servidor aparece dentro do modal, sem fechar", async ({ page }) => {
-    await abrirDashboard(page, "atual-errada");
+    await abrirConta(page, "atual-errada");
     await abrirModal(page);
 
     await campo(page, "Senha atual").fill("chute-errado");
@@ -126,7 +129,7 @@ test.describe("Trocar senha", () => {
     // O cliente só checa TAMANHO (ver src/senha.js): duplicar a lista de
     // senhas óbvias criaria duas listas pra manter em sincronia. Este teste
     // garante que a recusa do servidor não se perde no caminho.
-    await abrirDashboard(page, "obvia");
+    await abrirConta(page, "obvia");
     await abrirModal(page);
 
     await campo(page, "Senha atual").fill("a-antiga-2026");
@@ -138,14 +141,14 @@ test.describe("Trocar senha", () => {
   });
 
   test("avisa que não existe recuperação de senha", async ({ page }) => {
-    await abrirDashboard(page);
+    await abrirConta(page);
     await abrirModal(page);
     // Dito na hora de escolher a senha, não depois de perdê-la.
     await expect(page.locator(".modal-senha-aviso")).toContainText(/recuperação de senha/i);
   });
 
   test("cada olho diz de qual campo é", async ({ page }) => {
-    await abrirDashboard(page);
+    await abrirConta(page);
     await abrirModal(page);
     // Três campos de senha: três botões chamados só "Mostrar senha" seriam
     // indistinguíveis num leitor de tela.

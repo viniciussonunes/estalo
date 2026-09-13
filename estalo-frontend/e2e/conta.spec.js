@@ -111,6 +111,18 @@ test.describe("Área da conta", () => {
     await expect(page.locator(".erro")).toHaveCount(0);
   });
 
+  test("a troca de senha mora aqui, e não mais no cabeçalho", async ({ page }) => {
+    await abrirLogado(page);
+    // Saiu do cabeçalho de TODAS as telas: era o que entulhava o topo no
+    // celular. Este assert é o que impede alguém de recolocar lá "porque
+    // é mais rápido de achar".
+    await expect(page.getByRole("button", { name: "Trocar senha" })).toHaveCount(0);
+
+    await page.getByRole("button", { name: /Sua conta/ }).click();
+    await expect(page.getByRole("button", { name: "Trocar senha" })).toBeVisible();
+    await expect(page.locator(".conta-acao")).toContainText("Não existe recuperação de senha");
+  });
+
   test("identidade sem data de cadastro não quebra a página", async ({ page }) => {
     // Identidade em cache de uma versão anterior do app pode não ter
     // created_at (ver estalo_ultimo_usuario em App.jsx). Faltar a linha é
