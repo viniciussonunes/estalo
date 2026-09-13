@@ -3,12 +3,13 @@ Endpoints de autenticação: cadastro, login, "quem sou eu" e troca de senha.
 
 Esses são os primeiros endpoints DE VERDADE do Estalo.
 """
-from datetime import date, datetime, time, timedelta
+from datetime import date, datetime, time, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 
+from app.core import fuso
 from app.core.database import get_db
 from app.core.security import create_access_token, hash_password, verify_password
 from app.dependencies import eh_admin, get_current_user
@@ -131,18 +132,17 @@ def minha_cota(
 
 
 def _proxima_virada() -> datetime:
-    """Meia-noite seguinte no relógio do SERVIDOR -- que é onde o
-    quota_service compara `last_reset_date != date.today()`.
+    """Meia-noite seguinte NO FUSO DE QUEM PERGUNTA, devolvida em naive-UTC
+    (a convenção de data do projeto; o frontend converte pro relógio local).
 
-    Em produção o servidor roda em UTC, então pra quem está no Brasil a
-    cota renova às 21h locais, não à meia-noite. É uma inconsistência real
-    com o resto do projeto (streak, "hoje" e elegibilidade usam o fuso de
-    quem estuda, ver _hoje_no_fuso em study.py) -- mas mudar a REGRA de
-    reset é outra tarefa. Aqui a escolha é contar a verdade: devolver o
-    instante em que o contador de fato zera, pro frontend exibir no fuso
-    de quem lê.
+    Antes isto era a meia-noite do SERVIDOR, e o servidor roda em UTC: quem
+    estava no Brasil via a cota renovar às 21h. Agora bate com a regra de
+    reset do quota_service, que também passou a usar o dia local (ver
+    app/core/fuso.py).
     """
-    return datetime.combine(date.today() + timedelta(days=1), time.min)
+    tz = fuso.atual()
+    amanha = datetime.combine(fuso.hoje_local() + timedelta(days=1), time.min, tzinfo=tz)
+    return amanha.astimezone(timezone.utc).replace(tzinfo=None)
 
 
 def _exigir_senha_aceitavel(senha: str, email: str | None = None) -> None:

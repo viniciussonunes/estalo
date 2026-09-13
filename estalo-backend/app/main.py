@@ -8,6 +8,7 @@ from sentry_sdk.integrations.starlette import StarletteIntegration
 from sqlalchemy import inspect, text
 
 from app.core.config import settings
+from app.core import fuso
 from app.core.database import Base, engine
 from app import models  # noqa: F401
 from app.models.card import calcular_content_hash
@@ -149,6 +150,35 @@ if os.getenv("RUN_MIGRATIONS") == "1" or not os.getenv("VERCEL"):
     _migrar()
 
 app = FastAPI(title="Estalo API", version="0.8.0")
+
+
+class FusoMiddleware:
+    """Lê X-User-Timezone uma vez por request e deixa disponível pra
+    qualquer camada (ver app/core/fuso.py).
+
+    Existe porque a cota diária de IA é debitada lá no fundo, dentro de
+    services/ai.py, longe de qualquer dependência de request -- e ela
+    precisa saber quando vira o dia PARA O USUÁRIO, não pro servidor.
+
+    É middleware ASGI puro, e NÃO o açúcar `@app.middleware("http")`: o
+    açúcar usa BaseHTTPMiddleware, que roda o resto da aplicação numa
+    TASK SEPARADA -- contextvar definido nele não chega ao endpoint.
+    Descoberto testando: a cota continuava virando às 21h no Brasil mesmo
+    com o middleware no lugar. Aqui a definição acontece na mesma task.
+    """
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] == "http":
+            cabecalhos = dict(scope.get("headers") or [])
+            valor = cabecalhos.get(b"x-user-timezone")
+            fuso.definir(valor.decode("latin-1") if valor else None)
+        await self.app(scope, receive, send)
+
+
+app.add_middleware(FusoMiddleware)
 
 # CORS dinâmico: sempre permite localhost em dev; adiciona a URL da Vercel em prod.
 _origens = ["http://localhost:5173", "http://localhost:3000"]

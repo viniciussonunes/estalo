@@ -232,4 +232,21 @@ test.describe("Área da conta", () => {
     await expect(page.locator(".conta-email")).toHaveText("antigo@estalo.dev");
     await expect(page.locator(".conta-desde")).toHaveCount(0);
   });
+
+  // Fuso fixo pra a asserção de horário ser determinística, em vez de
+  // depender do relógio de quem roda o teste.
+  test.describe("com fuso de São Paulo", () => {
+    test.use({ timezoneId: "America/Sao_Paulo" });
+
+    test("a renovação aparece na meia-noite de quem lê", async ({ page }) => {
+      // O backend passou a devolver a meia-noite LOCAL de quem pergunta,
+      // em naive-UTC. Pra São Paulo (UTC-3), 00:00 local = 03:00 UTC.
+      // Antes era a meia-noite do servidor e aparecia como 21:00 aqui.
+      await abrirLogado(page, USUARIO, {
+        consumido: 0, limite: 50000, restante: 50000, renova_em: "2026-09-14T03:00:00",
+      });
+      await page.getByRole("button", { name: /Sua conta/ }).click();
+      await expect(page.locator(".conta-cota-renova")).toHaveText("Renova amanhã às 00:00.");
+    });
+  });
 });

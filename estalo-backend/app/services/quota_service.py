@@ -8,9 +8,9 @@ grosseira de propósito (caracteres/4, ver _estimar_tokens em ai.py) — o
 objetivo não é contar exato (isso exigiria o tokenizer real do modelo), e
 sim ter um teto que barre ANTES de gastar cota numa chamada.
 """
-from datetime import date
-
 from sqlalchemy.orm import Session
+
+from app.core import fuso
 
 from app.models.user_quota import UserQuota
 
@@ -40,7 +40,11 @@ def reset_quotas_if_needed(user_id: int, db: Session) -> UserQuota:
     get_all_deck_ids_in_folder, por motivo idêntico).
     """
     quota = _buscar_ou_criar(user_id, db)
-    hoje = date.today()
+    # Dia de QUEM ESTUDA, não do servidor. Com date.today() a cota de um
+    # usuário no Brasil renovava às 21h locais (servidor em UTC), fora de
+    # compasso com o streak e o "hoje" do resto do app, que sempre usaram
+    # o fuso da request. Ver app/core/fuso.py.
+    hoje = fuso.hoje_local()
     if quota.last_reset_date != hoje:
         quota.daily_tokens_consumed = 0
         quota.last_reset_date = hoje

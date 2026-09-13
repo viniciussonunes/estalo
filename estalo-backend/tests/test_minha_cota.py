@@ -113,3 +113,47 @@ def test_is_admin_nao_libera_nada_sozinho(client, monkeypatch):
     monkeypatch.setattr(settings, "ADMIN_EMAILS", "")
     h = _entrar(client)
     assert client.get("/admin/users", headers=h).status_code == 403
+
+
+# ------------------------------------- a cota vira no dia DE QUEM ESTUDA
+
+SP = {"X-User-Timezone": "America/Sao_Paulo"}
+TOQUIO = {"X-User-Timezone": "Asia/Tokyo"}
+
+
+def test_renovacao_e_a_meia_noite_de_quem_pergunta(client):
+    """Antes, a virada era a do servidor (UTC): quem estava no Brasil via a
+    cota renovar às 21h locais -- fora de compasso com o streak e o "hoje"
+    do resto do app, que sempre usaram o fuso da request."""
+    from datetime import datetime, timezone
+    from zoneinfo import ZoneInfo
+    h = _entrar(client)
+
+    renova = client.get("/auth/me/quota", headers={**h, **SP}).json()["renova_em"]
+    # Vem em naive-UTC; convertido pro fuso pedido tem que cair em 00:00.
+    local = datetime.fromisoformat(renova).replace(tzinfo=timezone.utc).astimezone(ZoneInfo("America/Sao_Paulo"))
+    assert (local.hour, local.minute) == (0, 0)
+
+
+def test_cada_fuso_recebe_a_sua_virada(client):
+    h = _entrar(client)
+    sp = client.get("/auth/me/quota", headers={**h, **SP}).json()["renova_em"]
+    tokyo = client.get("/auth/me/quota", headers={**h, **TOQUIO}).json()["renova_em"]
+    # Fusos diferentes viram o dia em instantes diferentes -- se isto for
+    # igual, alguém voltou a usar o relógio do servidor.
+    assert sp != tokyo
+
+
+def test_sem_cabecalho_de_fuso_continua_funcionando(client):
+    # Cliente antigo, teste, chamada direta à API: cai pra UTC em vez de
+    # quebrar a request.
+    h = _entrar(client)
+    r = client.get("/auth/me/quota", headers=h)
+    assert r.status_code == 200
+    assert r.json()["renova_em"].endswith("00:00:00")
+
+
+def test_fuso_invalido_nao_derruba_a_request(client):
+    h = _entrar(client)
+    r = client.get("/auth/me/quota", headers={**h, "X-User-Timezone": "Mordor/Barad-dur"})
+    assert r.status_code == 200
