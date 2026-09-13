@@ -52,6 +52,22 @@ function coletarIdsPastas(pasta) {
 }
 
 /**
+ * "3 subpastas, 12 decks e 148 cards" — só as partes que existem.
+ *
+ * Some as que são zero de propósito: "0 subpastas" ocupa espaço e não
+ * informa nada. E os cards entram porque são o que a pessoa realmente
+ * perde -- pasta e deck se recriam em segundos, card estudado não.
+ */
+function listarEstrago({ subpastas, decks, cards }) {
+  const partes = [];
+  if (subpastas > 0) partes.push(`${subpastas} subpasta${subpastas !== 1 ? "s" : ""}`);
+  if (decks > 0) partes.push(`${decks} deck${decks !== 1 ? "s" : ""}`);
+  if (cards > 0) partes.push(`${cards} card${cards !== 1 ? "s" : ""}`);
+  if (partes.length <= 1) return partes[0] ?? "";
+  return `${partes.slice(0, -1).join(", ")} e ${partes[partes.length - 1]}`;
+}
+
+/**
  * Ordena uma lista (pastas OU decks, nunca misturados — cada seção chama
  * essa função com a própria lista) conforme o critério ativo.
  *
@@ -323,6 +339,9 @@ export default function Dashboard({ usuario, aoSair, aoVerCards, aoEstudar, aoCr
   const [salvandoPasta, setSalvandoPasta] = useState(false);
   const [editando, setEditando] = useState(null); // { tipo: "pasta"|"deck", id, valor, cor? }
   const [movendo, setMovendo]   = useState(null); // deck sendo movido, ou null
+  // Pasta aguardando confirmação de exclusão, com o estrago já contado:
+  // { pasta, subpastas, decks, cards }. null = nenhum pop-up aberto.
+  const [pastaParaExcluir, setPastaParaExcluir] = useState(null);
   const [viewMode, setViewMode] = useState(() => {
     try { return localStorage.getItem("dashboard_view_mode") === "list" ? "list" : "grid"; }
     catch { return "grid"; }
@@ -440,6 +459,33 @@ export default function Dashboard({ usuario, aoSair, aoVerCards, aoEstudar, aoCr
     finally { setSalvandoPasta(false); }
   }
 
+  /**
+   * Clique no "excluir pasta": mede o estrago antes de fazer qualquer coisa.
+   *
+   * Pasta é a exceção à regra do desfazer (ver useUndoableDelete.js, que
+   * substituiu o confirm() nativo no resto do app). O desfazer protege
+   * contra o clique errado que a pessoa PERCEBE -- e uma pasta fechada
+   * esconde tudo que tem dentro: subpastas, decks e cards somem em cascata
+   * sem que nada disso estivesse na tela. Aqui os 5 segundos do toast
+   * podem passar antes de alguém entender o tamanho do erro.
+   *
+   * Pasta vazia não pergunta nada: sem conteúdo, não há cascata, e um
+   * pop-up ali seria só atrito. O desfazer continua cobrindo esse caso.
+   */
+  function excluirPasta(pasta, e) {
+    e.stopPropagation();
+    const idsRemovidos = new Set(coletarIdsPastas(pasta));
+    const subpastas = idsRemovidos.size - 1; // tira a própria
+    const decks = todosDecks.filter(d => d.folder_id !== null && idsRemovidos.has(d.folder_id));
+    const cards = decks.reduce((soma, d) => soma + (d.total_cards ?? 0), 0);
+
+    if (subpastas === 0 && decks.length === 0) {
+      _apagarPasta(pasta);
+      return;
+    }
+    setPastaParaExcluir({ pasta, subpastas, decks: decks.length, cards });
+  }
+
   // Otimista + desfazer (ver useUndoableDelete.js): some da árvore/lista na
   // hora, e só chama DELETE de verdade no backend se o toast "Desfazer"
   // expirar sem clique. `arvoreAnterior`/`decksRemovidos`/`statsRemovidos`
@@ -447,8 +493,7 @@ export default function Dashboard({ usuario, aoSair, aoVerCards, aoEstudar, aoCr
   // uma SEGUNDA pasta antes de decidir sobre a primeira, desfazer a
   // primeira restaura a árvore de antes dela (não desfaz a segunda,
   // que seguiu seu próprio timer/estado independente).
-  function excluirPasta(pasta, e) {
-    e.stopPropagation();
+  function _apagarPasta(pasta) {
     const arvoreAnterior = arvore;
     const idsRemovidos = new Set(coletarIdsPastas(pasta));
     const decksRemovidos = todosDecks.filter(d => d.folder_id !== null && idsRemovidos.has(d.folder_id));
@@ -918,6 +963,29 @@ export default function Dashboard({ usuario, aoSair, aoVerCards, aoEstudar, aoCr
                 </li>
               ))}
             </ul>
+        </Modal>
+      )}
+
+      {pastaParaExcluir && (
+        <Modal aberto aoFechar={() => setPastaParaExcluir(null)}
+          titulo={`Excluir "${pastaParaExcluir.pasta.name}"?`} className="modal-excluir">
+          {/* Números, não um "tem certeza?" genérico: o estrago é
+              justamente o que não está na tela na hora do clique. */}
+          <p className="modal-excluir-texto">
+            Isso apaga também {listarEstrago(pastaParaExcluir)}.
+          </p>
+          <p className="modal-excluir-aviso">Não dá pra recuperar depois.</p>
+          <div className="modal-excluir-botoes">
+            <button className="botao-principal perigo" onClick={() => {
+              _apagarPasta(pastaParaExcluir.pasta);
+              setPastaParaExcluir(null);
+            }}>
+              Excluir pasta
+            </button>
+            <button className="botao-texto" onClick={() => setPastaParaExcluir(null)}>
+              Cancelar
+            </button>
+          </div>
         </Modal>
       )}
 
