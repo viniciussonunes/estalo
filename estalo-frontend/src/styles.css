@@ -510,6 +510,28 @@ body {
 }
 .conta-acao-botao:hover:not(:disabled) { border-color: var(--violeta); color: var(--violeta); }
 
+/* Lista de decks guardados no aparelho. */
+.conta-baixados { margin-top: 1rem; }
+.baixados-lista { list-style: none; margin: 0.9rem 0 0; padding: 0; }
+.baixados-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.6rem 0;
+}
+.baixados-item + .baixados-item { border-top: 1px solid var(--borda); }
+.baixados-item-texto { display: flex; flex-direction: column; min-width: 0; }
+.baixados-nome {
+  font-weight: 500;
+  color: var(--tinta);
+  /* Nome longo encurta em vez de empurrar o botão pra fora da linha. */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.baixados-meta { font-size: 0.8rem; color: var(--tinta-suave); margin-top: 0.1rem; }
+
 .toggle-tema {
   display: flex;
   align-items: center;

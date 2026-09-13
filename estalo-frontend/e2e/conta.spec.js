@@ -123,6 +123,59 @@ test.describe("Área da conta", () => {
     await expect(page.locator(".conta-acao")).toContainText("Não existe recuperação de senha");
   });
 
+  test("sem nada baixado, explica como baixar", async ({ page }) => {
+    await abrirLogado(page);
+    await page.getByRole("button", { name: /Sua conta/ }).click();
+    await expect(page.locator(".conta-baixados")).toContainText("Nenhum deck baixado");
+  });
+
+  test("lista o que está guardado no aparelho e deixa remover", async ({ page }) => {
+    // Antes disto, ver e desfazer download só dava deck a deck: era
+    // preciso navegar até cada um. Quem quisesse liberar espaço não tinha
+    // por onde começar.
+    await abrirLogado(page);
+    await page.evaluate(() => {
+      localStorage.setItem("estalo_decks_offline", JSON.stringify({
+        "1:10": { deck: { id: 10, title: "Intune" }, baixadoEm: "2026-09-01T10:00:00.000Z", totalCards: 40 },
+        "1:11": { deck: { id: 11, title: "Autopilot" }, baixadoEm: "2026-09-02T10:00:00.000Z", totalCards: 8 },
+        // De OUTRO usuário no mesmo navegador: não pode aparecer aqui.
+        "2:99": { deck: { id: 99, title: "Deck de outra conta" }, baixadoEm: "2026-09-02T10:00:00.000Z", totalCards: 5 },
+      }));
+    });
+    await page.goto("/conta");
+
+    await expect(page.locator(".baixados-item")).toHaveCount(2);
+    await expect(page.locator(".conta-baixados")).toContainText("2 decks · 48 cards");
+    await expect(page.locator(".conta-baixados")).not.toContainText("Deck de outra conta");
+
+    await page.locator(".baixados-item").filter({ hasText: "Intune" })
+      .getByRole("button", { name: /Remover Intune/ }).click();
+
+    await expect(page.locator(".baixados-item")).toHaveCount(1);
+    await expect(page.locator(".conta-baixados")).not.toContainText("Intune");
+  });
+
+  test("dá pra conferir e remover downloads sem internet", async ({ page }) => {
+    // É tudo local. E é justamente sem conexão que alguém vai querer saber
+    // o que tem guardado.
+    await abrirLogado(page);
+    await page.evaluate(() => {
+      localStorage.setItem("estalo_decks_offline", JSON.stringify({
+        "1:10": { deck: { id: 10, title: "Intune" }, baixadoEm: "2026-09-01T10:00:00.000Z", totalCards: 40 },
+      }));
+    });
+    await page.addInitScript(() => {
+      Object.defineProperty(navigator, "onLine", { get: () => false, configurable: true });
+    });
+    await page.goto("/conta");
+
+    await expect(page.locator(".baixados-item")).toHaveCount(1);
+    const remover = page.getByRole("button", { name: /Remover Intune/ });
+    await expect(remover).toBeEnabled();
+    await remover.click();
+    await expect(page.locator(".baixados-item")).toHaveCount(0);
+  });
+
   test("identidade sem data de cadastro não quebra a página", async ({ page }) => {
     // Identidade em cache de uma versão anterior do app pode não ter
     // created_at (ver estalo_ultimo_usuario em App.jsx). Faltar a linha é

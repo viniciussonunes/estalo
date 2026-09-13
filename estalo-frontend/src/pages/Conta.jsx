@@ -4,6 +4,7 @@ import { useToast } from "../hooks/ToastContext.jsx";
 import useOnline from "../hooks/useOnline.js";
 import ToggleTema from "../components/ToggleTema.jsx";
 import TrocarSenhaModal from "../components/TrocarSenhaModal.jsx";
+import { listarBaixados, removerDeck } from "../offlineDecks.js";
 
 /**
  * Área da conta.
@@ -46,6 +47,8 @@ export default function Conta({ usuario, aoVoltar }) {
         </section>
 
         <CotaDeIA />
+
+        <DecksBaixados />
 
         {/* A troca de senha morava no cabeçalho de TODAS as telas, por
             falta de lugar melhor. Aqui ela tem endereço, e o cabeçalho
@@ -163,4 +166,74 @@ function formatarRenovacao(iso) {
   const hoje = new Date();
   const mesmoDia = quando.toDateString() === hoje.toDateString();
   return `${mesmoDia ? "hoje" : "amanhã"} às ${hora}`;
+}
+
+/**
+ * O que está guardado no aparelho pra estudar sem internet.
+ *
+ * Antes disto, ver e desfazer downloads só dava deck a deck: era preciso
+ * navegar até cada um pra descobrir se estava baixado e pra remover. Quem
+ * quisesse liberar espaço não tinha por onde começar -- nem como saber o
+ * que tinha baixado meses atrás.
+ *
+ * Funciona offline de propósito: é tudo local (registro no localStorage +
+ * cards na Cache API, ver offlineDecks.js). Remover não pede rede, e
+ * justamente sem internet é quando alguém vai querer conferir o que tem
+ * guardado.
+ */
+function DecksBaixados() {
+  const [baixados, setBaixados] = useState(() => listarBaixados());
+  const entradas = Object.entries(baixados);
+
+  async function remover(deckId) {
+    await removerDeck(Number(deckId));
+    setBaixados(listarBaixados());
+  }
+
+  const totalCards = entradas.reduce((soma, [, v]) => soma + (v.totalCards ?? 0), 0);
+
+  return (
+    <section className="conta-bloco conta-baixados">
+      <div className="conta-cota-topo">
+        <span className="conta-cota-titulo">Estudo offline</span>
+        {entradas.length > 0 && (
+          <span className="conta-cota-pct">
+            {entradas.length} deck{entradas.length !== 1 ? "s" : ""} · {totalCards} card{totalCards !== 1 ? "s" : ""}
+          </span>
+        )}
+      </div>
+
+      {entradas.length === 0 ? (
+        <p className="conta-cota-texto">
+          Nenhum deck baixado. Baixe um deck na tela inicial pra poder estudar
+          sem internet.
+        </p>
+      ) : (
+        <ul className="baixados-lista">
+          {entradas.map(([id, item]) => (
+            <li key={id} className="baixados-item">
+              <div className="baixados-item-texto">
+                <span className="baixados-nome">{item.deck?.title ?? `Deck ${id}`}</span>
+                <span className="baixados-meta">
+                  {item.totalCards ?? 0} card{(item.totalCards ?? 0) !== 1 ? "s" : ""}
+                  {formatarBaixadoEm(item.baixadoEm)}
+                </span>
+              </div>
+              <button className="botao-texto conta-acao-botao" onClick={() => remover(id)}
+                aria-label={`Remover ${item.deck?.title ?? "deck"} do aparelho`}>
+                Remover
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
+function formatarBaixadoEm(iso) {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  return ` · baixado em ${d.toLocaleDateString("pt-BR", { day: "2-digit", month: "short" })}`;
 }
