@@ -9,6 +9,7 @@ import Estudo from "./pages/Estudo.jsx";
 import Aprender from "./pages/Aprender.jsx";
 import Revelar from "./pages/Revelar.jsx";
 import Admin from "./pages/Admin.jsx";
+import Conta from "./pages/Conta.jsx";
 
 // Última identidade confirmada pelo servidor, guardada pra conseguir abrir
 // o app offline sem parecer deslogado. Não é credencial (quem autentica é
@@ -83,6 +84,7 @@ function DashboardPage({ usuario, sair }) {
       aoEstudarTudo={() => navigate("/revisao-global")}
       aoEstudarPasta={(folderId, folderName) =>
         navigate("/revisao-global", { state: { folderId, folderName } })}
+      aoAbrirConta={() => navigate("/conta")}
     />
   );
 }
@@ -176,6 +178,11 @@ function AdminPage() {
   return <Admin aoVoltar={() => navigate("/")} />;
 }
 
+function ContaPage({ usuario }) {
+  const navigate = useNavigate();
+  return <Conta usuario={usuario} aoVoltar={() => navigate("/")} />;
+}
+
 // ─── App root ──────────────────────────────────────────────────────────────
 
 export default function App() {
@@ -217,6 +224,10 @@ export default function App() {
 
       <Route path="/deck/:id/revelar" element={
         <RequireAuth usuario={usuario}><RevelarPage /></RequireAuth>
+      } />
+
+      <Route path="/conta" element={
+        <RequireAuth usuario={usuario}><ContaPage usuario={usuario} /></RequireAuth>
       } />
 
       <Route path="/admin" element={

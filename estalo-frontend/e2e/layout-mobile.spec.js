@@ -296,6 +296,12 @@ test.describe("Layout no celular", () => {
     await conferirLayout(page, "conta nova");
   });
 
+  test("área da conta", async ({ page }) => {
+    await abrirLogado(page, "/conta");
+    await expect(page.locator(".conta-identidade")).toBeVisible();
+    await conferirLayout(page, "conta");
+  });
+
   test("criar deck", async ({ page }) => {
     await abrirLogado(page, "/criar-deck");
     await expect(page.getByText("Criar deck")).toBeVisible();

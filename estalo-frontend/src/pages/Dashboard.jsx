@@ -287,7 +287,7 @@ function SeletorCorPasta({ corSelecionada, onSelecionar }) {
   );
 }
 
-export default function Dashboard({ usuario, aoSair, aoVerCards, aoEstudar, aoCriarDeck, aoEstudarTudo, aoEstudarPasta }) {
+export default function Dashboard({ usuario, aoSair, aoVerCards, aoEstudar, aoCriarDeck, aoEstudarTudo, aoEstudarPasta, aoAbrirConta }) {
   const [arvore, setArvore]         = useState([]);
   const [todosDecks, setTodosDecks] = useState([]);
   const [statsMap, setStatsMap]     = useState({});   // { [deckId]: StudyStats }
@@ -612,7 +612,20 @@ export default function Dashboard({ usuario, aoSair, aoVerCards, aoEstudar, aoCr
         <div className="topo-direita">
           {import.meta.env.DEV && <BotaoTesteSentry />}
           <ToggleTema />
-          <span className="usuario-email">{usuario.email}</span>
+          {/* O email deixa de ser enfeite e vira a porta da conta. No
+              celular ele some por falta de espaço, mas a inicial fica --
+              antes não havia NADA lá, e não dava pra saber em que conta
+              você estava (ver Conta.jsx). */}
+          {/* aria-label nomeia a AÇÃO e a identidade: só o email como nome
+              acessível ("estudante@estalo.dev") não diz que ali se clica
+              pra abrir a conta -- e no celular o email nem é renderizado. */}
+          <button className="botao-conta" onClick={aoAbrirConta} title="Sua conta"
+            aria-label={`Sua conta (${usuario.email})`}>
+            <span className="botao-conta-avatar" aria-hidden="true">
+              {(usuario.email?.[0] ?? "?").toUpperCase()}
+            </span>
+            <span className="usuario-email">{usuario.email}</span>
+          </button>
           {/* Enquanto não existe uma área de conta, a troca de senha mora
               aqui -- o cabeçalho é o único lugar que aparece em toda tela.
               Offline não dá: a senha é conferida no servidor. */}

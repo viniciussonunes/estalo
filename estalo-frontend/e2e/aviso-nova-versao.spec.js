@@ -74,8 +74,13 @@ test.describe("Aviso de nova versão", () => {
     await faixa(page).getByRole("button", { name: "Atualizar" }).click();
 
     // Recarregou de verdade: a marca deixada no window não sobrevive.
+    //
+    // O try/catch não é preguiça: se a leitura cair EXATAMENTE durante a
+    // navegação, o Playwright derruba o contexto e lança. Isso é a própria
+    // prova de que recarregou -- tratar como erro fazia o teste piscar
+    // (aconteceu). Contexto destruído = marca foi embora.
     await expect.poll(
-      () => page.evaluate(() => window.__marcaAntesDoReload ?? false),
+      () => page.evaluate(() => window.__marcaAntesDoReload ?? false).catch(() => false),
       // Até 3s é a rede de segurança do atualizacao.js: se o service
       // worker não recarregar sozinho, a página recarrega na marra. Um
       // botão "Atualizar" que não faz nada é pior que não ter botão.

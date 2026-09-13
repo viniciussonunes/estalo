@@ -413,6 +413,54 @@ body {
 .topo-direita { display: flex; align-items: center; gap: 0.75rem; }
 .usuario-email { color: var(--tinta-suave); font-size: 0.9rem; }
 
+/* ---------- Porta pra área da conta (cabeçalho) ----------
+   A inicial não some no celular. O email sim -- não cabe -- mas antes o
+   celular ficava sem NADA identificando a conta. */
+.botao-conta {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.2rem 0.45rem 0.2rem 0.2rem;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  font: inherit;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.botao-conta:hover { background: var(--papel); }
+.botao-conta-avatar,
+.conta-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  border-radius: 50%;
+  background: var(--violeta);
+  color: #fff;
+  font-weight: 700;
+  line-height: 1;
+}
+.botao-conta-avatar { width: 28px; height: 28px; font-size: 0.8rem; }
+
+/* ---------- Área da conta ---------- */
+.conta-conteudo { max-width: 560px; }
+.conta-bloco {
+  background: var(--superficie);
+  border: 1px solid var(--borda);
+  border-radius: var(--raio);
+  padding: 1.25rem;
+}
+.conta-identidade { display: flex; align-items: center; gap: 1rem; }
+.conta-avatar { width: 48px; height: 48px; font-size: 1.25rem; }
+.conta-identidade-texto { display: flex; flex-direction: column; min-width: 0; }
+.conta-email {
+  font-weight: 600;
+  color: var(--tinta);
+  overflow-wrap: anywhere; /* email longo não empurra o cartão pra fora */
+}
+.conta-desde { font-size: 0.85rem; color: var(--tinta-suave); margin-top: 0.15rem; }
+
 .toggle-tema {
   display: flex;
   align-items: center;
@@ -2905,6 +2953,9 @@ kbd {
      layout achou o app inteiro entre 24px e 34px -- desenhado pro mouse,
      que acerta um alvo de 24px sem esforço; o dedo, não. */
   .botao-ver-senha { width: 40px; height: 40px; }
+  /* Com o email escondido, sobra só a inicial: sem isto o botão da conta
+     fica em ~32px e vira alvo pequeno demais (a suíte pegou). */
+  .botao-conta { min-width: 40px; min-height: 40px; justify-content: center; padding: 0; }
 
   .icone-acao,
   .toggle-tema,
