@@ -79,6 +79,25 @@ const FOCADO = () => {
   return `${dentro ? "dentro" : "FORA"}:${el.tagName.toLowerCase()}${classe ? "." + classe : ""}`;
 };
 
+/**
+ * Rola até o fim e SÓ volta quando a rolagem parou.
+ *
+ * `mouse.wheel` devolve o controle antes de a rolagem terminar: sob carga
+ * (a suíte inteira em paralelo) a leitura veio 802 em vez de 4037 e o teste
+ * falhou sozinho. Espera o valor estabilizar em vez de chutar um timeout.
+ */
+async function rolarAteOFim(page) {
+  await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+  let anterior = -1;
+  for (let i = 0; i < 40; i++) {
+    const y = await page.evaluate(() => window.scrollY);
+    if (y > 0 && y === anterior) return y;
+    anterior = y;
+    await page.waitForTimeout(50);
+  }
+  return anterior;
+}
+
 test.describe("Modais", () => {
   test("Esc fecha, inclusive com o foco dentro de um campo", async ({ page }) => {
     await abrirTelaDeCards(page);
@@ -137,9 +156,7 @@ test.describe("Modais", () => {
     // Playwright rolar a página até o botão sozinho, o que mascararia
     // qualquer rolagem causada pelo modal.
     await abrirTelaDeCards(page);
-    await page.mouse.wheel(0, 4000);
-    await page.waitForTimeout(250);
-    const antes = await page.evaluate(() => window.scrollY);
+    const antes = await rolarAteOFim(page);
     expect(antes, "a página precisa estar rolada pro teste valer").toBeGreaterThan(1000);
 
     await page.keyboard.press("c");
@@ -164,8 +181,7 @@ test.describe("Modais", () => {
     // silenciosa: quem trocar de volta não vê nada de errado na tela, e o
     // próximo elemento fixo que alguém criar é que vai nascer quebrado.
     await abrirTelaDeCards(page);
-    await page.mouse.wheel(0, 4000);
-    await page.waitForTimeout(250);
+    await rolarAteOFim(page);
 
     const r = await page.evaluate(() => {
       const pag = document.querySelector(".pagina");
