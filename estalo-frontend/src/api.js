@@ -164,6 +164,10 @@ export const api = {
 
   eu: () => request("/auth/me"),
 
+  // Quanto de IA esta conta já usou hoje. Antes disso o usuário só
+  // descobria o limite batendo nele (ver QuotaLimitModal).
+  minhaCota: () => request("/auth/me/quota"),
+
   // Mesma razão do semToastDeRede acima: o modal de troca mostra o erro
   // dentro dele mesmo.
   trocarSenha: (senhaAtual, senhaNova) =>

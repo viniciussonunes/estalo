@@ -1,3 +1,5 @@
+import { useEffect, useState } from "react";
+import { api, NetworkException } from "../api.js";
 import ToggleTema from "../components/ToggleTema.jsx";
 
 /**
@@ -35,6 +37,8 @@ export default function Conta({ usuario, aoVoltar }) {
             )}
           </div>
         </section>
+
+        <CotaDeIA />
       </main>
     </div>
   );
@@ -57,4 +61,74 @@ function textoDesde(criadoEm) {
   if (Number.isNaN(data.getTime())) return "";
   const quando = data.toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
   return `No Estalo desde ${quando}`;
+}
+
+/**
+ * Quanto de IA a conta já usou hoje.
+ *
+ * Antes disto, o limite era invisível até você bater nele: um modal
+ * aparecia no meio de um Tutor dizendo que a cota acabou. Não havia
+ * NENHUMA tela onde olhar antes. Aqui a informação existe sem alarme --
+ * e a barra só ganha cor de alerta quando resta pouco.
+ *
+ * Falha em silêncio de propósito: se a cota não carregar (offline, por
+ * exemplo), o bloco simplesmente não aparece. Um erro vermelho na área da
+ * conta por causa de um número acessório seria pior que a ausência dele.
+ */
+function CotaDeIA() {
+  const [cota, setCota] = useState(null);
+
+  useEffect(() => {
+    let vivo = true;
+    api.minhaCota()
+      .then(c => { if (vivo) setCota(c); })
+      .catch(err => { if (!(err instanceof NetworkException)) console.error("[Conta] cota:", err.message); });
+    return () => { vivo = false; };
+  }, []);
+
+  if (!cota) return null;
+
+  const pct = cota.limite > 0 ? Math.min(100, Math.round((cota.consumido / cota.limite) * 100)) : 0;
+  const apertado = pct >= 80;
+
+  return (
+    <section className="conta-bloco conta-cota">
+      <div className="conta-cota-topo">
+        <span className="conta-cota-titulo">Uso de IA hoje</span>
+        <span className={`conta-cota-pct${apertado ? " apertado" : ""}`}>{pct}%</span>
+      </div>
+      <div className="conta-cota-barra">
+        <div className={`conta-cota-fill${apertado ? " apertado" : ""}`} style={{ width: `${pct}%` }} />
+      </div>
+      {/* Sem "tokens": ninguém sabe quanto é um token, e o número exato não
+          ajuda a decidir nada. O que importa é se dá pra continuar hoje. */}
+      <p className="conta-cota-texto">
+        {pct >= 100
+          ? "Você usou toda a cota de hoje."
+          : apertado
+            ? "Resta pouco por hoje."
+            : "Sobra bastante por hoje."}
+        {" "}Serve pra gerar cards, o Tutor e as explicações.
+      </p>
+      <p className="conta-cota-renova">Renova {formatarRenovacao(cota.renova_em)}.</p>
+    </section>
+  );
+}
+
+/**
+ * "hoje às 21:00" / "amanhã às 21:00".
+ *
+ * O backend devolve o instante em naive-UTC (o relógio do servidor é quem
+ * manda no reset). Aqui vira horário de quem está lendo -- daí "amanhã às
+ * 21h" pra quem está no Brasil, que é a verdade, por mais estranha que
+ * pareça. Ver _proxima_virada no backend sobre por que não é meia-noite
+ * local.
+ */
+function formatarRenovacao(iso) {
+  const quando = new Date(`${iso}Z`); // naive-UTC: o Z é o que falta pro JS
+  if (Number.isNaN(quando.getTime())) return "amanhã";
+  const hora = quando.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+  const hoje = new Date();
+  const mesmoDia = quando.toDateString() === hoje.toDateString();
+  return `${mesmoDia ? "hoje" : "amanhã"} às ${hora}`;
 }

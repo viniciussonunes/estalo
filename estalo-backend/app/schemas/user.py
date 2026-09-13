@@ -28,6 +28,22 @@ class PasswordChange(BaseModel):
     senha_nova: str
 
 
+class QuotaOut(BaseModel):
+    """Quanto de IA a própria pessoa já usou hoje.
+
+    Existia só o /admin/users, que lista TODO MUNDO e exige ser admin --
+    ou seja, o usuário comum não tinha como saber sua situação. Ele
+    descobria o limite batendo nele, com um modal (ver QuotaLimitModal no
+    frontend). Isto é a mesma informação, sobre si mesmo.
+    """
+    consumido: int
+    limite: int
+    restante: int
+    # Instante em que o contador zera, naive-UTC como toda data do projeto.
+    # Quem formata pro fuso de quem lê é o frontend.
+    renova_em: datetime
+
+
 class UserOut(BaseModel):
     """O que a API devolve sobre um usuário. Sem senha, nunca."""
     id: int

@@ -15,19 +15,25 @@ import { test, expect } from "@playwright/test";
 
 const CAMINHOS_API = /^\/(auth|folders|decks|cards|study)(\/|$)/;
 const USUARIO = { id: 1, email: "estudante@estalo.dev", created_at: "2026-03-05T14:20:00" };
+// Cota padrão do projeto (DEFAULT_DAILY_LIMIT no backend).
+const COTA_TRANQUILA = { consumido: 5000, limite: 50000, restante: 45000, renova_em: "2026-09-14T00:00:00" };
 
 function tokenFalso() {
   const b64 = (o) => Buffer.from(JSON.stringify(o)).toString("base64url");
   return `${b64({ alg: "HS256", typ: "JWT" })}.${b64({ sub: "1", exp: 9999999999 })}.assinatura-de-teste`;
 }
 
-async function abrirLogado(page, usuario = USUARIO) {
+async function abrirLogado(page, usuario = USUARIO, cota = COTA_TRANQUILA) {
   await page.route("**/*", async (route) => {
     const req = route.request();
     const p = new URL(req.url()).pathname;
     if (!["xhr", "fetch"].includes(req.resourceType()) || !CAMINHOS_API.test(p)) return route.continue();
     const json = (c) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(c) });
     if (p === "/auth/me") return json(usuario);
+    if (p === "/auth/me/quota") {
+      if (cota === null) return route.abort("internetdisconnected");
+      return json(cota);
+    }
     if (p === "/folders" || p === "/decks") return json([]);
     if (p === "/study/streak") return json({ current_streak: 0, longest_streak: 0 });
     return json({});
@@ -69,6 +75,40 @@ test.describe("Área da conta", () => {
     await expect(page.locator(".botao-conta-avatar")).toHaveText("E");
     await page.locator(".botao-conta").click();
     await expect(page.locator(".conta-email")).toHaveText("estudante@estalo.dev");
+  });
+
+  test("mostra o uso de IA do dia, sem falar em tokens", async ({ page }) => {
+    // Antes disto o limite era invisível até você BATER nele, com um modal
+    // no meio de um Tutor. Não havia tela nenhuma onde olhar antes.
+    await abrirLogado(page);
+    await page.getByRole("button", { name: /Sua conta/ }).click();
+
+    await expect(page.locator(".conta-cota-pct")).toHaveText("10%");
+    await expect(page.locator(".conta-cota")).toContainText("Sobra bastante por hoje");
+    // "Tokens" não diz nada a ninguém, e o número exato não ajuda a
+    // decidir nada -- o que importa é se dá pra continuar hoje.
+    await expect(page.locator(".conta-cota")).not.toContainText(/token/i);
+    await expect(page.locator(".conta-cota")).not.toContainText("5000");
+  });
+
+  test("avisa quando resta pouco", async ({ page }) => {
+    await abrirLogado(page, USUARIO, { consumido: 45000, limite: 50000, restante: 5000, renova_em: "2026-09-14T00:00:00" });
+    await page.getByRole("button", { name: /Sua conta/ }).click();
+
+    await expect(page.locator(".conta-cota-pct")).toHaveText("90%");
+    await expect(page.locator(".conta-cota-pct")).toHaveClass(/apertado/);
+    await expect(page.locator(".conta-cota")).toContainText("Resta pouco por hoje");
+  });
+
+  test("cota que não carrega não vira erro na tela", async ({ page }) => {
+    // Offline, por exemplo. Um erro vermelho na área da conta por causa de
+    // um número acessório seria pior que a ausência dele.
+    await abrirLogado(page, USUARIO, null);
+    await page.getByRole("button", { name: /Sua conta/ }).click();
+
+    await expect(page.locator(".conta-email")).toBeVisible();
+    await expect(page.locator(".conta-cota")).toHaveCount(0);
+    await expect(page.locator(".erro")).toHaveCount(0);
   });
 
   test("identidade sem data de cadastro não quebra a página", async ({ page }) => {

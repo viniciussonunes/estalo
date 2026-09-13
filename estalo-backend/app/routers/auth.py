@@ -3,6 +3,8 @@ Endpoints de autenticação: cadastro, login, "quem sou eu" e troca de senha.
 
 Esses são os primeiros endpoints DE VERDADE do Estalo.
 """
+from datetime import date, datetime, time, timedelta
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
@@ -12,8 +14,8 @@ from app.core.security import create_access_token, hash_password, verify_passwor
 from app.dependencies import get_current_user
 from app.models import User
 from app.schemas.token import Token
-from app.schemas.user import PasswordChange, UserCreate, UserOut
-from app.services import login_throttle, password_policy
+from app.schemas.user import PasswordChange, QuotaOut, UserCreate, UserOut
+from app.services import login_throttle, password_policy, quota_service
 
 router = APIRouter(prefix="/auth", tags=["Autenticação"])
 
@@ -97,6 +99,45 @@ def login(
 def quem_sou_eu(user: User = Depends(get_current_user)):
     """Endpoint protegido: só responde se você mostrar um crachá válido."""
     return user
+
+
+@router.get("/me/quota", response_model=QuotaOut)
+def minha_cota(
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Quanto de IA esta conta já usou hoje.
+
+    Até aqui, o usuário comum não tinha como saber: existia só
+    /admin/users, que lista todo mundo e exige ser admin. Ele descobria o
+    limite BATENDO nele -- um modal aparecia no meio de um Tutor.
+
+    Passa por reset_quotas_if_needed de propósito: sem isso a tela
+    mostraria o consumo de ontem até a primeira chamada de IA do dia. Só
+    zera o contador quando virou o dia; não consome nada.
+    """
+    quota = quota_service.reset_quotas_if_needed(user.id, db)
+    return QuotaOut(
+        consumido=quota.daily_tokens_consumed,
+        limite=quota.daily_limit,
+        restante=max(0, quota.daily_limit - quota.daily_tokens_consumed),
+        renova_em=_proxima_virada(),
+    )
+
+
+def _proxima_virada() -> datetime:
+    """Meia-noite seguinte no relógio do SERVIDOR -- que é onde o
+    quota_service compara `last_reset_date != date.today()`.
+
+    Em produção o servidor roda em UTC, então pra quem está no Brasil a
+    cota renova às 21h locais, não à meia-noite. É uma inconsistência real
+    com o resto do projeto (streak, "hoje" e elegibilidade usam o fuso de
+    quem estuda, ver _hoje_no_fuso em study.py) -- mas mudar a REGRA de
+    reset é outra tarefa. Aqui a escolha é contar a verdade: devolver o
+    instante em que o contador de fato zera, pro frontend exibir no fuso
+    de quem lê.
+    """
+    return datetime.combine(date.today() + timedelta(days=1), time.min)
 
 
 def _exigir_senha_aceitavel(senha: str, email: str | None = None) -> None:

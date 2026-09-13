@@ -461,6 +461,30 @@ body {
 }
 .conta-desde { font-size: 0.85rem; color: var(--tinta-suave); margin-top: 0.15rem; }
 
+/* Uso de IA. Informação, não alarme: só ganha cor de aviso quando resta
+   pouco -- ver CotaDeIA em Conta.jsx. */
+.conta-cota { margin-top: 1rem; }
+.conta-cota-topo { display: flex; align-items: baseline; justify-content: space-between; }
+.conta-cota-titulo { font-weight: 600; color: var(--tinta); }
+.conta-cota-pct { font-size: 0.85rem; color: var(--tinta-suave); font-variant-numeric: tabular-nums; }
+.conta-cota-pct.apertado { color: var(--ambar); font-weight: 600; }
+.conta-cota-barra {
+  margin-top: 0.6rem;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--papel);
+  overflow: hidden;
+}
+.conta-cota-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--violeta);
+  transition: width 0.3s ease;
+}
+.conta-cota-fill.apertado { background: var(--ambar); }
+.conta-cota-texto { margin-top: 0.7rem; font-size: 0.88rem; line-height: 1.5; color: var(--tinta-suave); }
+.conta-cota-renova { margin-top: 0.3rem; font-size: 0.8rem; color: var(--tinta-suave); }
+
 .toggle-tema {
   display: flex;
   align-items: center;
