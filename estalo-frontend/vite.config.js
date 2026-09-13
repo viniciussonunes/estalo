@@ -12,10 +12,16 @@ export default defineConfig({
     // carregava, por mais que a fila offline (Nível 2) estivesse pronta
     // pra guardar respostas.
     VitePWA({
-      // autoUpdate: quando sai um deploy novo, o service worker se
-      // substitui sozinho -- sem isso o usuário ficaria preso numa versão
-      // antiga até limpar o cache na mão, que é o pesadelo clássico de PWA.
-      registerType: "autoUpdate",
+      // "prompt", e não "autoUpdate": o autoUpdate parece resolver o
+      // problema clássico de PWA (usuário preso numa versão antiga) mas só
+      // troca depois que TODAS as abas do app fecham. Num app instalado na
+      // tela inicial isso leva dias, e o usuário fica numa versão velha sem
+      // pista nenhuma -- aconteceu de verdade em 2026-09-13: uma mudança
+      // recém-publicada "não tinha subido", quando na verdade só não tinha
+      // chegado naquele navegador. Com "prompt", a versão nova fica baixada
+      // e esperando, e a interface oferece o botão de aplicar (ver
+      // src/atualizacao.js e components/AvisoNovaVersao.jsx).
+      registerType: "prompt",
       includeAssets: ["apple-touch-icon.png", "favicon-32x32.png"],
       manifest: {
         name: "Estalo",

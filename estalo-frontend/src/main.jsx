@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect } from "react";
 import ReactDOM from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
 import * as Sentry from "@sentry/react";
@@ -7,6 +7,8 @@ import App from "./App.jsx";
 import { ToastProvider } from "./hooks/ToastContext.jsx";
 import { ThemeProvider } from "./hooks/ThemeContext.jsx";
 import OfflineBanner from "./components/OfflineBanner.jsx";
+import AvisoNovaVersao from "./components/AvisoNovaVersao.jsx";
+import { registrarAtualizacoes } from "./atualizacao.js";
 import useOutboxSync from "./hooks/useOutboxSync.js";
 import "./styles.css";
 
@@ -34,9 +36,13 @@ function ErroFallback({ error }) {
 // já que a sincronização avisa por toast quando a fila sobe.
 function Raiz() {
   useOutboxSync();
+  // Registra o service worker e liga o aviso de versão nova. Uma vez só,
+  // no boot -- fora do React, porque não é estado de componente nenhum.
+  useEffect(() => { registrarAtualizacoes(); }, []);
   return (
     <>
       <OfflineBanner />
+      <AvisoNovaVersao />
       <BrowserRouter>
         <App />
       </BrowserRouter>

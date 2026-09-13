@@ -3160,6 +3160,43 @@ kbd {
   .offline-banner { animation: none; }
   .offline-banner-ponto { animation: none; }
 }
+/* Faixa de "saiu versão nova" (AvisoNovaVersao.jsx). Mesma cadeira do
+   offline-banner (rodapé, fina, não bloqueia) -- os dois nunca aparecem
+   juntos na prática: sem conexão não chega versão nova. Violeta e não
+   âmbar: não é um problema, é uma oferta. */
+.aviso-versao {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 55;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  padding: 0.5rem 1rem;
+  background: var(--violeta-suave);
+  border-top: 1px solid var(--violeta);
+  color: var(--tinta);
+  font-size: 0.8rem;
+  font-weight: 500;
+  animation: undoToastEntra 0.25s ease;
+}
+@media (prefers-reduced-motion: reduce) { .aviso-versao { animation: none; } }
+.aviso-versao-botao {
+  border: none;
+  border-radius: 7px;
+  padding: 0.3rem 0.8rem;
+  background: var(--violeta);
+  color: #fff;
+  font: inherit;
+  font-weight: 600;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+.aviso-versao-botao:hover { background: var(--violeta-escuro); }
+.aviso-versao-botao:disabled { opacity: 0.6; cursor: default; }
+
 /* Selo inline de "respondendo offline" (SeloOffline.jsx) -- ambiente, não
    interrupção: vive dentro do fluxo de estudo em vez de aparecer por cima
    dele como um toast. */
