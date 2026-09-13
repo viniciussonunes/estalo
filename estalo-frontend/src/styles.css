@@ -1907,6 +1907,18 @@ kbd {
   transition: background var(--transicao), transform var(--transicao);
 }
 .botao-estudar-primary:hover  { background: var(--violeta-escuro); }
+/* Deck que existe na conta mas não foi baixado, com o app offline: o
+   botão fica visivelmente indisponível em vez de o deck sumir da lista
+   (ver estudoIndisponivel em AcoesDeck). */
+.botao-estudar:disabled,
+.botao-estudar-primary:disabled,
+.botao-estudar-critico:disabled {
+  opacity: 0.4;
+  cursor: default;
+  background: transparent;
+  color: var(--tinta-suave);
+  border: 1px solid var(--borda);
+}
 .botao-estudar-primary:active { transform: scale(0.96); }
 
 /* ---------- Dashboard V3 — inline section actions ---------- */
@@ -1965,6 +1977,7 @@ kbd {
 .btn-secao-acao:hover { border-color: var(--violeta); color: var(--violeta); background: var(--violeta-suave); }
 .btn-secao-acao:active { transform: scale(0.96); }
 .btn-secao-acao:disabled { opacity: 0.45; cursor: default; }
+.btn-secao-acao.primario:disabled:hover { background: var(--violeta); border-color: var(--violeta); }
 .btn-secao-acao:disabled:hover {
   border-color: var(--borda);
   color: var(--tinta-suave);

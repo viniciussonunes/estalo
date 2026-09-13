@@ -6,7 +6,7 @@ import useUndoableDelete from "../hooks/useUndoableDelete.js";
 import useOnline from "../hooks/useOnline.js";
 import UndoToasts from "../components/UndoToasts.jsx";
 import BotaoBaixarOffline from "../components/BotaoBaixarOffline.jsx";
-import { baixarDeck, listarBaixados, removerDeck } from "../offlineDecks.js";
+import { baixarDeck, guardarRetrato, listarBaixados, removerDeck } from "../offlineDecks.js";
 
 /** Devolve o caminho (array de pastas) da raiz até `targetId` */
 function caminhoParaPasta(arvore, targetId, path = []) {
@@ -338,20 +338,27 @@ export default function Dashboard({ usuario, aoSair, aoVerCards, aoEstudar, aoCr
       ]);
       setArvore(novaArvore);
       setTodosDecks(novosDecks);
+      // Retrato da conta pra próxima vez que faltar internet: é o que faz
+      // o Dashboard offline manter a MESMA cara (hierarquia, trilha, decks
+      // nas pastas certas) em vez de virar uma lista chapada.
+      // Ver offlineDecks.js. Só grava o que veio da REDE -- quando estes
+      // dados já vieram do próprio retrato, regravar seria só ruído.
+      if (navigator.onLine) guardarRetrato({ pastas: novaArvore, decks: novosDecks });
 
       // Carrega stats de todos os decks numa única chamada (sem bloquear a UI)
       if (novosDecks.length > 0) {
         setStatsCarregando(true);
         api.statsMultiplos(novosDecks.map(d => d.id))
-          .then(mapa => setStatsMap(mapa))
+          .then(mapa => {
+            setStatsMap(mapa);
+            if (navigator.onLine) guardarRetrato({ stats: mapa });
+          })
           .finally(() => setStatsCarregando(false));
       }
       setFalhouCarregar(false);
     } catch (err) {
-      // Sem rede, o Dashboard não tem o que mostrar -- e mostrar os
-      // estados vazios normais seria MENTIR ("tudo em dia", "nenhum
-      // conteúdo ainda") sobre dados que simplesmente não chegaram.
-      // Ver o bloco de offline no render.
+      // Só chega aqui se nem a rede nem o retrato local responderam --
+      // ou seja, offline numa conta que nunca carregou neste aparelho.
       setFalhouCarregar(err instanceof NetworkException);
       setErro(err instanceof NetworkException ? "" : err.message);
     } finally {
@@ -680,50 +687,19 @@ export default function Dashboard({ usuario, aoSair, aoVerCards, aoEstudar, aoCr
         {carregando ? (
           <ExplorerSkeleton viewMode={viewMode} />
         ) : falhouCarregar ? (
-          /* Sem rede, a única coisa que o app sabe de verdade é o que foi
-             baixado. Mostrar a lista normal seria afirmar "nenhum conteúdo
-             ainda" sobre dados que nunca chegaram -- errado com confiança.
-             Aqui a tela mostra exatamente o que dá pra estudar agora. */
-          Object.keys(baixados).length > 0 ? (
-            <div className="explorer-secoes fade-in">
-              <section className="explorer-secao">
-                <div className="explorer-secao-header">
-                  <h2 className="explorer-secao-titulo">Disponíveis offline</h2>
-                </div>
-                <ul className="lista-explorer">
-                  {Object.values(baixados)
-                    .sort((a, b) => a.deck.title.localeCompare(b.deck.title, "pt-BR", { sensitivity: "base" }))
-                    .map(({ deck, totalCards }) => (
-                      <li key={deck.id} className="lista-item lista-deck">
-                        <span className="lista-icone deck"><IconeDeck /></span>
-                        <div className="lista-info">
-                          <span className="lista-nome">{deck.title}</span>
-                          <span className="lista-meta">
-                            {totalCards} card{totalCards !== 1 ? "s" : ""} · no aparelho
-                          </span>
-                        </div>
-                        <div className="lista-acoes">
-                          <button className="botao-estudar-primary" onClick={() => aoEstudar(deck)}>
-                            Estudar
-                          </button>
-                        </div>
-                      </li>
-                    ))}
-                </ul>
-              </section>
-            </div>
-          ) : (
-            <div className="vazio-bloco fade-in">
-              <p style={{ fontWeight: 600, marginBottom: "0.35rem" }}>
-                Nenhum deck baixado
-              </p>
-              <p className="vazio-dica">
-                Seus decks precisam de internet pra carregar. Da próxima vez que
-                estiver conectado, toque no ícone de baixar num deck pra poder
-                estudar ele sem conexão.
-              </p>
-            </div>
-          )
+          /* Só cai aqui offline numa conta que nunca carregou NESTE
+             aparelho -- sem retrato local, não há o que mostrar. Com
+             retrato (o caso normal), a tela offline renderiza igual à
+             online e este bloco nem aparece. Ver offlineDecks.js. */
+          <div className="vazio-bloco fade-in">
+            <p style={{ fontWeight: 600, marginBottom: "0.35rem" }}>
+              Ainda não dá pra mostrar seus decks aqui
+            </p>
+            <p className="vazio-dica">
+              Este aparelho ainda não carregou sua conta nenhuma vez. Conecte-se
+              uma vez e depois o Estalo funciona offline.
+            </p>
+          </div>
         ) : vazio ? (
           <div className="vazio-bloco fade-in">
             {emBusca ? (
@@ -781,7 +757,8 @@ export default function Dashboard({ usuario, aoSair, aoVerCards, aoEstudar, aoCr
                       </button>
                     </div>
                     {podeAdicionarPasta && !emBusca && (
-                      <button className="btn-secao-acao"
+                      <button className="btn-secao-acao" disabled={!online}
+                        title={online ? undefined : "Precisa de internet"}
                         onClick={() => { setCriandoPasta(true); setNomePasta(""); setCorPasta(null); }}>
                         + Nova Pasta
                       </button>
@@ -818,7 +795,8 @@ export default function Dashboard({ usuario, aoSair, aoVerCards, aoEstudar, aoCr
                 <div className="explorer-secao-header">
                   <h2 className="explorer-secao-titulo">{emBusca ? "Decks encontrados" : "Decks"}</h2>
                   {!emBusca && (
-                    <button className="btn-secao-acao primario"
+                    <button className="btn-secao-acao primario" disabled={!online}
+                      title={online ? undefined : "Precisa de internet"}
                       onClick={() => aoCriarDeck(pastaAtiva?.id ?? null)}>
                       + Novo Deck
                     </button>
@@ -942,20 +920,30 @@ function AcoesDeck({
   baixado, aoBaixar, aoRemoverOffline,
 }) {
   const [maisAberto, setMaisAberto] = useState(false);
+  const online = useOnline();
+
+  // Offline, o deck que NÃO foi baixado continua aparecendo na lista, no
+  // lugar certo -- some só a possibilidade de estudá-lo. Escondê-lo faria
+  // a tela mentir sobre o que existe na conta; deixá-lo clicável faria a
+  // pessoa entrar num beco sem saída.
+  const estudoIndisponivel = !online && !baixado;
 
   return (
     <div className={`lista-acoes${maisAberto ? " lista-acoes-expandida" : ""}`}>
       {maisAberto ? (
         <>
-          <button className="icone-acao" title="Renomear deck"
+          <button className="icone-acao" disabled={!online}
+            aria-label="Renomear deck" title={online ? "Renomear deck" : "Renomear deck — precisa de internet"}
             onClick={e => { setMaisAberto(false); iniciarEdicao("deck", deck.id, deck.title, e); }}>
             <IcoLapis />
           </button>
-          <button className="icone-acao" title="Mover deck"
+          <button className="icone-acao" disabled={!online}
+            aria-label="Mover deck" title={online ? "Mover deck" : "Mover deck — precisa de internet"}
             onClick={e => { setMaisAberto(false); abrirMover(deck, e); }}>
             <IcoMover />
           </button>
-          <button className="icone-acao perigo" title="Excluir deck"
+          <button className="icone-acao perigo" disabled={!online}
+            aria-label="Excluir deck" title={online ? "Excluir deck" : "Excluir deck — precisa de internet"}
             onClick={e => { setMaisAberto(false); excluirDeck(deck, e); }}>
             <IcoTrash />
           </button>
@@ -968,21 +956,26 @@ function AcoesDeck({
         <>
           <button
             className={temCriticos ? "botao-estudar-critico" : temPendentes ? "botao-estudar-primary" : "botao-estudar"}
-            onClick={() => aoEstudar(deck)}>
-            {temCriticos ? `🔴 ${stats.criticos}` : "Estudar"}
+            onClick={() => aoEstudar(deck)}
+            disabled={estudoIndisponivel}
+            title={estudoIndisponivel ? "Não baixado — precisa de internet pra estudar este deck" : undefined}>
+            {temCriticos && !estudoIndisponivel ? `🔴 ${stats.criticos}` : "Estudar"}
           </button>
           <BotaoBaixarOffline baixado={baixado} aoBaixar={aoBaixar} aoRemover={aoRemoverOffline} />
           {/* No desktop estes três aparecem direto (o CSS esconde o ⋯);
               no celular ficam atrás dele. */}
-          <button className="icone-acao lista-deck-editar acoes-secundaria" title="Renomear deck"
+          <button className="icone-acao lista-deck-editar acoes-secundaria" disabled={!online}
+            aria-label="Renomear deck" title={online ? "Renomear deck" : "Renomear deck — precisa de internet"}
             onClick={e => iniciarEdicao("deck", deck.id, deck.title, e)}>
             <IcoLapis />
           </button>
-          <button className="icone-acao lista-deck-editar acoes-secundaria" title="Mover deck"
+          <button className="icone-acao lista-deck-editar acoes-secundaria" disabled={!online}
+            aria-label="Mover deck" title={online ? "Mover deck" : "Mover deck — precisa de internet"}
             onClick={e => abrirMover(deck, e)}>
             <IcoMover />
           </button>
-          <button className="icone-acao perigo lista-deck-excluir acoes-secundaria" title="Excluir deck"
+          <button className="icone-acao perigo lista-deck-excluir acoes-secundaria" disabled={!online}
+            aria-label="Excluir deck" title={online ? "Excluir deck" : "Excluir deck — precisa de internet"}
             onClick={e => excluirDeck(deck, e)}>
             <IcoTrash />
           </button>
@@ -1011,6 +1004,7 @@ function PastaItem({
   editando, setEditando, confirmarEdicao, iniciarEdicao, entrarPasta, excluirPasta,
   baixados, aoBaixarPasta, aoRemoverPasta,
 }) {
+  const online = useOnline();
   const decksDaPasta = coletarDecks(pasta, todosDecks);
   const nDecks   = decksDaPasta.length;
   const nSubpast = (pasta.children || []).length;
@@ -1075,13 +1069,15 @@ function PastaItem({
         )}
         {barra}
         <div className="lista-acoes">
-          <button className="icone-acao lista-deck-editar"
-            onClick={e => iniciarEdicao("pasta", pasta.id, pasta.name, e, pasta.color)} title="Renomear pasta">
+          <button className="icone-acao lista-deck-editar" disabled={!online}
+            onClick={e => iniciarEdicao("pasta", pasta.id, pasta.name, e, pasta.color)}
+            aria-label="Renomear pasta" title={online ? "Renomear pasta" : "Renomear pasta — precisa de internet"}>
             <IcoLapis />
           </button>
           {botaoOffline}
-          <button className="icone-acao perigo lista-deck-excluir"
-            onClick={e => excluirPasta(pasta, e)} title="Excluir pasta">
+          <button className="icone-acao perigo lista-deck-excluir" disabled={!online}
+            onClick={e => excluirPasta(pasta, e)}
+            aria-label="Excluir pasta" title={online ? "Excluir pasta" : "Excluir pasta — precisa de internet"}>
             <IcoTrash />
           </button>
         </div>
@@ -1106,13 +1102,15 @@ function PastaItem({
           {barra}
         </button>
       )}
-      <button className="pasta-card-editar icone-acao"
-        onClick={e => iniciarEdicao("pasta", pasta.id, pasta.name, e, pasta.color)} title="Renomear pasta">
+      <button className="pasta-card-editar icone-acao" disabled={!online}
+        onClick={e => iniciarEdicao("pasta", pasta.id, pasta.name, e, pasta.color)}
+        aria-label="Renomear pasta" title={online ? "Renomear pasta" : "Renomear pasta — precisa de internet"}>
         <IcoLapis />
       </button>
       {botaoOffline && <span className="pasta-card-offline">{botaoOffline}</span>}
-      <button className="pasta-card-excluir icone-acao perigo"
-        onClick={e => excluirPasta(pasta, e)} title="Excluir pasta">
+      <button className="pasta-card-excluir icone-acao perigo" disabled={!online}
+        onClick={e => excluirPasta(pasta, e)}
+        aria-label="Excluir pasta" title={online ? "Excluir pasta" : "Excluir pasta — precisa de internet"}>
         <IcoTrash />
       </button>
     </div>
@@ -1368,14 +1366,16 @@ function VisaoGeral({ decks, pendentesReais }) {
   const [heatmapCarregando, setHeatmapCarregando] = useState(true);
   useEffect(() => {
     api.heatmapStats()
-      .then(setHeatmapStats)
+      .then(h => { setHeatmapStats(h); if (navigator.onLine) guardarRetrato({ heatmap: h }); })
       .catch(() => setHeatmapStats({}))
       .finally(() => setHeatmapCarregando(false));
   }, []);
 
   const [streak, setStreak] = useState(null);
   useEffect(() => {
-    api.streak().then(setStreak).catch(() => setStreak(null));
+    api.streak()
+      .then(v => { setStreak(v); if (navigator.onLine) guardarRetrato({ streak: v }); })
+      .catch(() => setStreak(null));
   }, []);
 
   const dias = ultimosDias(30);

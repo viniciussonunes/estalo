@@ -158,7 +158,14 @@ export const api = {
 
   eu: () => request("/auth/me"),
 
-  listarPastas: () => request("/folders"),
+  // As quatro chamadas que desenham o Dashboard caem no retrato local
+  // quando não há rede -- é o que faz a tela offline ser IGUAL à online
+  // (mesma hierarquia, mesma trilha, decks nas pastas certas), em vez de
+  // virar uma lista chapada. Ver "Retrato da conta" em offlineDecks.js.
+  listarPastas: () => _comQuedaParaOffline(
+    request("/folders"),
+    async () => (await import("./offlineDecks.js")).pastasOffline(),
+  ),
 
   criarPasta: (name, parent_id = null, color = null) =>
     request("/folders", { method: "POST", body: { name, parent_id, color } }),
@@ -168,7 +175,10 @@ export const api = {
 
   excluirPasta: (id) => request(`/folders/${id}`, { method: "DELETE" }),
 
-  listarDecks: () => request("/decks"),
+  listarDecks: () => _comQuedaParaOffline(
+    request("/decks"),
+    async () => (await import("./offlineDecks.js")).decksOffline(),
+  ),
 
   criarDeck: (title, description = null, folder_id = null) =>
     request("/decks", { method: "POST", body: { title, description, folder_id } }),
@@ -219,9 +229,15 @@ export const api = {
     async () => (await import("./offlineDecks.js")).statsOffline(deckId),
   ),
 
-  heatmapStats: () => request("/study/heatmap-stats"),
+  heatmapStats: () => _comQuedaParaOffline(
+    request("/study/heatmap-stats"),
+    async () => (await import("./offlineDecks.js")).heatmapOffline(),
+  ),
 
-  streak: () => request("/study/streak"),
+  streak: () => _comQuedaParaOffline(
+    request("/study/streak"),
+    async () => (await import("./offlineDecks.js")).streakOffline(),
+  ),
 
   // Tutor Inteligente: explicação didática sob demanda pra um card (ver
   // botão "Perguntar ao Tutor" em Aprender.jsx). Primeira chamada gera via
@@ -268,7 +284,10 @@ export const api = {
   // quantidade fixa, independente de quantos decks existam.
   statsMultiplos: (deckIds) => {
     if (deckIds.length === 0) return Promise.resolve({});
-    return request(`/study/decks/stats?ids=${deckIds.join(",")}`);
+    return _comQuedaParaOffline(
+      request(`/study/decks/stats?ids=${deckIds.join(",")}`),
+      async () => (await import("./offlineDecks.js")).statsOfflineTodos(),
+    );
   },
 
   listarCards: (deckId) => _comQuedaParaOffline(

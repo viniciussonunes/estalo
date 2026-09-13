@@ -130,6 +130,66 @@ export async function cardsOffline(deckId) {
   }
 }
 
+// ===================================================================
+//  Retrato da conta (pastas, decks, números)
+// ===================================================================
+//
+// Diferente dos downloads acima, isto NÃO é escolha do usuário: é uma
+// cópia do formato da conta, atualizada sozinha toda vez que o Dashboard
+// carrega com internet.
+//
+// Existe pra que ficar offline não mude a CARA do app. Antes, sem rede, o
+// Dashboard virava uma lista chapada dos decks baixados -- sem hierarquia,
+// sem trilha de navegação, e com o deck aparecendo em qualquer pasta que
+// você abrisse, porque a lista ignorava a pasta dele. Informação errada é
+// pior que informação ausente.
+//
+// Com o retrato, offline você vê exatamente a mesma tela: mesmas pastas,
+// mesma trilha, mesmos decks nos lugares certos. A única diferença é que
+// só dá pra ESTUDAR o que foi baixado.
+//
+// É um retrato, não a verdade: mostra como a conta estava no último
+// acesso com internet. Como toda mutação (criar/renomear/mover/excluir)
+// fica desabilitada offline, ele não sai de sincronia sozinho.
+const CHAVE_RETRATO = "estalo_retrato_offline";
+
+/** Guarda o retrato atual. Chamado após uma carga bem-sucedida. */
+export function guardarRetrato({ pastas, decks, stats, heatmap, streak }) {
+  const uid = token.usuarioId();
+  if (!uid) return;
+  try {
+    const todos = JSON.parse(localStorage.getItem(CHAVE_RETRATO) || "{}");
+    todos[uid] = {
+      ...(todos[uid] || {}),
+      ...(pastas !== undefined ? { pastas } : {}),
+      ...(decks !== undefined ? { decks } : {}),
+      ...(stats !== undefined ? { stats } : {}),
+      ...(heatmap !== undefined ? { heatmap } : {}),
+      ...(streak !== undefined ? { streak } : {}),
+      salvoEm: new Date().toISOString(),
+    };
+    localStorage.setItem(CHAVE_RETRATO, JSON.stringify(todos));
+  } catch {
+    // Sem espaço/permissão: offline cai no estado antigo de "não carregou".
+  }
+}
+
+function _retrato() {
+  const uid = token.usuarioId();
+  if (!uid) return null;
+  try {
+    return JSON.parse(localStorage.getItem(CHAVE_RETRATO) || "{}")[uid] ?? null;
+  } catch {
+    return null;
+  }
+}
+
+export const pastasOffline = () => _retrato()?.pastas ?? null;
+export const decksOffline = () => _retrato()?.decks ?? null;
+export const statsOfflineTodos = () => _retrato()?.stats ?? null;
+export const heatmapOffline = () => _retrato()?.heatmap ?? null;
+export const streakOffline = () => _retrato()?.streak ?? null;
+
 /** Stats guardadas de um deck, ou null. */
 export async function statsOffline(deckId) {
   const uid = token.usuarioId();
