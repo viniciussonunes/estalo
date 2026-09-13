@@ -134,10 +134,16 @@ export default function Aprender({ deck, aoVoltar, modoGlobal = false, folderId 
   // esvaziava, e a barra nunca tinha tempo de deslizar até 100% (ver
   // proximo()). Também trava novos cliques/Enter nesse intervalo.
   const [concluindoAnimacao, setConcluindoAnimacao] = useState(false);
-  // true durante o "Rever Vilões": um loop de treino extra, 100% em memória,
-  // que reaproveita a mesma UI de pergunta/resposta sem tocar no banco nem
-  // no snapshot de F5 (ver os dois useEffect abaixo e proximo()).
-  const [modoPraticaViloes, setModoPraticaViloes] = useState(false);
+  // Treino extra, 100% em memória: reaproveita a mesma UI de
+  // pergunta/resposta sem tocar no banco nem no snapshot de F5 (ver os dois
+  // useEffect abaixo e proximo()). null = sessão de verdade.
+  //   "viloes" -> só os cards que custaram 2+ erros
+  //   "tudo"   -> a sessão inteira de novo, a pedido de quem quer repetir
+  // O "tudo" existe porque o botão que fazia isso ANTES refazia a sessão
+  // valendo: o card ia de "volta amanhã" pra "volta em 6 dias" e ganhava o
+  // selo de Dominado, com base num acerto 3 minutos depois de aprender.
+  // Praticar e pontuar viraram coisas separadas.
+  const [modoPratica, setModoPratica] = useState(null);
 
   // Map<card_id, quantidade de vezes que errou nesta sessão> — antes era um
   // Set (só "errou ou não"). Agora contamos de verdade, pra graduar a nota
@@ -292,14 +298,14 @@ export default function Aprender({ deck, aoVoltar, modoGlobal = false, folderId 
   // Salva o progresso a cada mudança (inclusive a alternativa marcada na
   // questão atual, ainda não confirmada), pra sobreviver a reload/saída.
   //
-  // modoPraticaViloes também barra o save aqui — sem essa trava, o "Rever
+  // modoPratica também barra o save aqui — sem essa trava, o "Rever
   // Vilões" reaproveita `fila`/`concluido=false` pra rodar a mesma UI de
   // pergunta, e esse efeito escreveria um snapshot com só o subconjunto de
   // vilões. Um F5 nesse momento leria esse snapshot errado e ofereceria
   // "continuar" uma sessão que não é a sessão real — a real já foi salva e
   // encerrada antes da prática começar (ver reverViloes()).
   useEffect(() => {
-    if (mostrarPrompt || concluido || fila.length === 0 || modoPraticaViloes) return;
+    if (mostrarPrompt || concluido || fila.length === 0 || modoPratica) return;
     salvar({
       fila,
       totalUnicos,
@@ -313,7 +319,7 @@ export default function Aprender({ deck, aoVoltar, modoGlobal = false, folderId 
       resposta,
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fila, acertosNaPrimeira, concluido, mostrarPrompt, resposta, modoPraticaViloes]);
+  }, [fila, acertosNaPrimeira, concluido, mostrarPrompt, resposta, modoPratica]);
 
   // Sessão chegou ao fim (equivalente a SessaoConcluida) → limpa o snapshot
   // e comemora (só na primeira vez -- ver confetiSessaoDisparado acima).
@@ -442,6 +448,10 @@ export default function Aprender({ deck, aoVoltar, modoGlobal = false, folderId 
   // Incrementa a contagem de erros do card (usado tanto pelo clique quanto
   // pelo atalho de teclado, pra não duplicar a lógica em dois lugares).
   function _registrarErro(cardId) {
+    // No "praticar de novo" o resumo da sessão real já foi calculado e
+    // salvo -- contar erro aqui inventaria vilões numa sessão encerrada.
+    // No "rever vilões" continua contando: lá o erro é o assunto.
+    if (modoPratica === "tudo") return;
     errosPorCard.current.set(cardId, (errosPorCard.current.get(cardId) ?? 0) + 1);
   }
 
@@ -456,7 +466,7 @@ export default function Aprender({ deck, aoVoltar, modoGlobal = false, folderId 
           setResposta(opt.letter);
           if (opt.letter !== atual.correct_letter) {
             _registrarErro(atual.card_id);
-          } else if (modoPraticaViloes) {
+          } else if (modoPratica === "viloes") {
             // Mesma marcação de escolher() (clique do mouse) -- sem isso, um
             // vilão respondido certo só pelo teclado nunca some do resumo
             // (bug real reportado: "refiz os dois vilões umas 3 vezes e ele
@@ -473,7 +483,7 @@ export default function Aprender({ deck, aoVoltar, modoGlobal = false, folderId 
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [concluido, semQuiz, carregando, fila, respondeu, modoPraticaViloes]);
+  }, [concluido, semQuiz, carregando, fila, respondeu, modoPratica]);
   const acertouAtual = respondeu && questaoAtual
     ? resposta === questaoAtual.correct_letter
     : false;
@@ -483,7 +493,7 @@ export default function Aprender({ deck, aoVoltar, modoGlobal = false, folderId 
     setResposta(letter);
     if (letter !== fila[0].correct_letter) {
       _registrarErro(fila[0].card_id);
-    } else if (modoPraticaViloes) {
+    } else if (modoPratica === "viloes") {
       // Acertou um vilão durante a prática — marca resolvido sem tocar em
       // errosPorCard (que precisa manter a contagem original de erros).
       viloesResolvidos.current.add(fila[0].card_id);
@@ -499,7 +509,9 @@ export default function Aprender({ deck, aoVoltar, modoGlobal = false, folderId 
 
     if (acertou) {
       const novaFila = fila.slice(1);
-      if (!errosPorCard.current.has(atual.card_id)) {
+      // Numa rodada de treino o resumo da sessão real JÁ foi calculado e
+      // salvo -- somar acertos aqui inflaria o anel de % pra além de 100%.
+      if (!modoPratica && !errosPorCard.current.has(atual.card_id)) {
         setAcertosNaPrimeira(n => n + 1);
       }
       if (novaFila.length === 0) {
@@ -518,11 +530,11 @@ export default function Aprender({ deck, aoVoltar, modoGlobal = false, folderId 
         // Disparado em paralelo com o atraso visual, não bloqueia a
         // animação — a tela de resultado já mostra "Salvando…" enquanto
         // isso ainda estiver em voo (ver `salvando`).
-        if (!modoPraticaViloes) _salvarProgresso();
+        if (!modoPratica) _salvarProgresso();
         setTimeout(() => {
           setConcluido(true);
           setConcluindoAnimacao(false);
-          if (modoPraticaViloes) setModoPraticaViloes(false);
+          if (modoPratica) setModoPratica(null);
         }, 450);
       } else {
         setResposta(null);
@@ -603,20 +615,26 @@ export default function Aprender({ deck, aoVoltar, modoGlobal = false, folderId 
     setSalvando(false);
   }
 
-  function reiniciarSessao() {
-    errosPorCard.current = new Map();
-    viloesResolvidos.current.clear();
-    confetiSessaoDisparado.current = false;
-    startingReps.current = {};
-    setAcertosNaPrimeira(0);
+  /**
+   * Repete a sessão inteira, só pra treinar.
+   *
+   * Substitui o antigo `reiniciarSessao`, que refazia a sessão VALENDO:
+   * cada card era respondido de novo no servidor minutos depois de ter
+   * sido aprendido, e o SM-2 (com ignorar_elegibilidade ligado) tratava
+   * aquilo como uma revisão espaçada de verdade. Medido: card novo
+   * acertado ia pra "volta em 1 dia"; um clique no botão o levava pra
+   * "volta em 6 dias" com selo de Dominado. Ou seja, a tela chamava de
+   * "consolidar" o ato de PULAR a consolidação -- justamente o que a
+   * repetição espaçada existe pra evitar.
+   *
+   * Agora é como o "Rever vilões" sempre foi: segunda passada em memória,
+   * sem tocar no servidor e sem mexer no agendamento.
+   */
+  function praticarDeNovo() {
+    setModoPratica("tudo");
     setResposta(null);
+    setFila(questoesOriginais.current);
     setConcluido(false);
-    setCarregando(true);
-    _buscarCards()
-      .then(_repararSemQuiz)
-      .then(cards => { _iniciarComCards(cards); })
-      .catch(err => setErro(err.message))
-      .finally(() => setCarregando(false));
   }
 
   // Repopula a fila só com os cards que erraram >=2x na sessão que acabou
@@ -630,7 +648,7 @@ export default function Aprender({ deck, aoVoltar, modoGlobal = false, folderId 
     );
     if (viloes.length === 0) return;
     setTotalViloes(viloes.length);
-    setModoPraticaViloes(true);
+    setModoPratica("viloes");
     setResposta(null);
     setFila(viloes);
     setConcluido(false);
@@ -639,8 +657,8 @@ export default function Aprender({ deck, aoVoltar, modoGlobal = false, folderId 
   // Durante o "Rever Vilões", Voltar não sai da tela — volta pro resumo da
   // sessão real (que já foi salva). Fora desse modo, comportamento normal.
   function voltarOuSairDaPratica() {
-    if (modoPraticaViloes) {
-      setModoPraticaViloes(false);
+    if (modoPratica) {
+      setModoPratica(null);
       setResposta(null);
       setConcluido(true);
     } else {
@@ -653,7 +671,7 @@ export default function Aprender({ deck, aoVoltar, modoGlobal = false, folderId 
     <header className="topo">
       <div className="topo-esquerda">
         <button className="botao-texto" onClick={voltarOuSairDaPratica}>
-          {modoPraticaViloes ? "← Voltar ao resumo" : "← Voltar"}
+          {modoPratica ? "← Voltar ao resumo" : "← Voltar"}
         </button>
         <span className="estudo-deck-nome">
           {modoGlobal
@@ -662,7 +680,11 @@ export default function Aprender({ deck, aoVoltar, modoGlobal = false, folderId 
         </span>
       </div>
       <div className="topo-direita">
-        <span className="modo-label">{modoPraticaViloes ? "Revisão de vilões" : "Múltipla escolha"}</span>
+        <span className="modo-label">{
+          modoPratica === "viloes" ? "Revisão de vilões"
+          : modoPratica === "tudo" ? "Praticando — não conta"
+          : "Múltipla escolha"
+        }</span>
         <ToggleTema />
       </div>
     </header>
@@ -750,10 +772,7 @@ export default function Aprender({ deck, aoVoltar, modoGlobal = false, folderId 
     const pct = totalUnicos > 0
       ? Math.round((acertosNaPrimeira / totalUnicos) * 100) : 0;
 
-    const temCardsEmValidacao = questoesOriginais.current.some(
-      q => (startingReps.current[q.card_id] ?? 0) === 0
-    );
-    const novosDoминados = questoesOriginais.current.filter(
+    const novosDominados = questoesOriginais.current.filter(
       q => (startingReps.current[q.card_id] ?? 0) === 1
         && !errosPorCard.current.has(q.card_id)
     ).length;
@@ -794,9 +813,9 @@ export default function Aprender({ deck, aoVoltar, modoGlobal = false, folderId 
                   <span className="sessao-stat-label">Validando</span>
                 </div>
               )}
-              {novosDoминados > 0 && (
+              {novosDominados > 0 && (
                 <div className="sessao-stat verde">
-                  <span className="sessao-stat-valor">+{novosDoминados}</span>
+                  <span className="sessao-stat-valor">+{novosDominados}</span>
                   <span className="sessao-stat-label">Dominados</span>
                 </div>
               )}
@@ -823,35 +842,31 @@ export default function Aprender({ deck, aoVoltar, modoGlobal = false, folderId 
               </div>
             )}
 
-            {temCardsEmValidacao ? (
-              <div className="gamificado-aviso">
-                <p className="gamificado-aviso-titulo">
-                  Objetivo: Dominar est{avancadosParaValidacao !== 1 ? "es" : "e"}{" "}
-                  {avancadosParaValidacao} card{avancadosParaValidacao !== 1 ? "s" : ""}
-                </p>
-                <p className="gamificado-aviso-texto">
-                  Você validou {avancadosParaValidacao} conceito{avancadosParaValidacao !== 1 ? "s" : ""}.
-                  Agora, vamos consolidar? Fazer uma rodada final agora transformará esse
-                  conhecimento recente em <em>DOMÍNIO</em> permanente.
-                </p>
-                <p className="gamificado-progresso">
-                  Próximo passo: {avancadosParaValidacao}/{avancadosParaValidacao} Dominados
-                </p>
-                <div className="gamificado-botoes">
-                  <button className="botao-principal" onClick={reiniciarSessao} disabled={salvando}>
-                    {salvando ? "Salvando…" : "Consolidar Domínio"}
-                  </button>
-                  <button className="botao-texto gamificado-secundario" onClick={sair}>
-                    {modoGlobal ? "Voltar à Home" : "Voltar aos decks"}
-                  </button>
-                </div>
-              </div>
-            ) : (
+            {/* No lugar do bloco de persuasão ("vamos consolidar? …DOMÍNIO
+                permanente"): o fato. Dizer quando o card volta informa E
+                ensina o app a funcionar -- é o que traz a pessoa de volta
+                amanhã. Prometer domínio por uma rodada extra hoje era
+                promessa que o algoritmo não cumpre. */}
+            {avancadosParaValidacao > 0 && (
+              <p className="sessao-proximo">
+                {avancadosParaValidacao} card{avancadosParaValidacao !== 1 ? "s" : ""} novo
+                {avancadosParaValidacao !== 1 ? "s" : ""} aprendido
+                {avancadosParaValidacao !== 1 ? "s" : ""}.{" "}
+                {avancadosParaValidacao !== 1 ? "Eles voltam" : "Ele volta"} amanhã.
+              </p>
+            )}
+
+            {/* Terminar a sessão é o sucesso -- é a ação principal. */}
+            <div className="sessao-acoes">
               <button className="botao-principal estudo-concluido-botao"
                 onClick={sair} disabled={salvando}>
                 {salvando ? "Salvando…" : modoGlobal ? "Voltar à Home" : "Voltar ao deck"}
               </button>
-            )}
+              <button className="botao-texto" onClick={praticarDeNovo} disabled={salvando}
+                title="Repete os cards agora, sem mudar quando eles voltam">
+                Praticar de novo
+              </button>
+            </div>
           </div>
         </main>
       </div>
@@ -872,7 +887,7 @@ export default function Aprender({ deck, aoVoltar, modoGlobal = false, folderId 
   // Durante o "Rever vilões" a base é outra: a fila tem só os vilões, mas
   // totalUnicos continua sendo o total da sessão -- daí "5 de 6" numa
   // prática de 2 cards. Por isso totalDaEtapa.
-  const totalDaEtapa    = modoPraticaViloes ? totalViloes : totalUnicos;
+  const totalDaEtapa    = modoPratica === "viloes" ? totalViloes : totalUnicos;
   const cardIdsNaFila   = new Set(fila.map(q => q.card_id));
   const cardsConcluidos = Math.max(0, totalDaEtapa - cardIdsNaFila.size);
 
@@ -881,7 +896,7 @@ export default function Aprender({ deck, aoVoltar, modoGlobal = false, folderId 
   // dentro da fila, nunca duplica -- então esse aviso nunca apareceu na
   // vida. É justamente ele que explica por que o contador não anda.
   // Na prática de vilões não faz sentido: lá todo card é um erro.
-  const aguardandoReacerto = modoPraticaViloes
+  const aguardandoReacerto = modoPratica
     ? 0
     : fila.filter(q => (errosPorCard.current.get(q.card_id) ?? 0) > 0).length;
 
@@ -890,7 +905,7 @@ export default function Aprender({ deck, aoVoltar, modoGlobal = false, folderId 
       <main className="conteudo estudo-centro">
         <div className="quiz-progresso">
           <span className="quiz-progresso-contador">
-            {modoPraticaViloes
+            {modoPratica === "viloes"
               ? `Vilão ${Math.min(cardsConcluidos + 1, totalDaEtapa)} de ${totalDaEtapa}`
               : `${cardsConcluidos} de ${totalDaEtapa} concluídos`}
           </span>

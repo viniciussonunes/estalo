@@ -1074,6 +1074,26 @@ body {
 }
 .estudo-concluido-botao { max-width: 240px; margin: 0 auto; }
 
+/* ---------- Fim de sessão: o que acontece a seguir ----------
+   Substituiu o bloco de persuasão ("vamos consolidar? …DOMÍNIO
+   permanente"). É um fato, não um empurrão: dizer quando o card volta é o
+   que ensina o app a funcionar. */
+.sessao-proximo {
+  margin: 0.5rem 0 1.25rem;
+  font-size: 0.92rem;
+  line-height: 1.5;
+  color: var(--tinta-suave);
+}
+.sessao-acoes {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.35rem;
+  width: 100%;
+}
+.sessao-acoes .estudo-concluido-botao { width: 100%; }
+.sessao-acoes .botao-texto { font-size: 0.85rem; }
+
 /* ---------- Edição inline de card ---------- */
 .item-card-editando {
   border-color: var(--violeta);
