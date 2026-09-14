@@ -2709,7 +2709,29 @@ kbd {
 .barra-seg-vazia { background: var(--borda); }
 
 /* Pasta com críticos: destaque na borda esquerda */
+/* Selo de urgência da pasta (ver `urgencia` no Dashboard): o pior estado,
+   com número. Cabe onde a barra segmentada não cabe -- é o sinal que
+   sobrevive no celular. */
+.selo-urgencia {
+  display: inline-block;
+  align-self: flex-start; /* irmão do nome, não dentro dele: o ellipsis não alcança */
+  margin-top: 0.15rem;
+  padding: 0.1rem 0.45rem;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  line-height: 1.5;
+  vertical-align: 0.1em;
+  white-space: nowrap;
+}
+.selo-urgencia.critico { background: var(--perigo-suave); color: var(--perigo); }
+.selo-urgencia.hoje    { background: var(--ambar-suave); color: #92400e; }
+.tema-escuro .selo-urgencia.hoje { color: var(--ambar); }
+
 .pasta-card-alerta { border-left: 3px solid var(--erro, #dc2626); }
+/* A linha da lista ganha a mesma borda que o card já tinha: a lista não
+   tinha NENHUM sinal de criticidade além da barra. */
+.lista-pasta-alerta { border-left: 3px solid var(--erro, #dc2626); }
 .pasta-card-alerta .pasta-card-corpo { padding-left: calc(0.9rem - 3px); }
 
 /* Badge inline de críticos na meta do deck */

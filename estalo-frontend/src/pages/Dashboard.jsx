@@ -1137,6 +1137,25 @@ function PastaItem({
   ].filter(Boolean).join(" · ") || "Vazia";
   const statsAgregadas = agregarStats(pasta, todosDecks, statsMap);
   const temCriticos = statsAgregadas.criticos > 0;
+  // Selo de urgência da pasta: o PIOR estado dela, com número. Existe
+  // porque a barra segmentada era o único sinal de criticidade das pastas
+  // -- e no celular ela é escondida na lista pra o nome caber (ver o
+  // bloco mobile em styles.css). Com isso, três pastas com 7 críticos, 4
+  // pra hoje e nada ficavam idênticas no telefone. Decks nunca tiveram
+  // esse problema: o botão de estudar já mostra "🔴 7". Mesma linguagem.
+  const urgencia = statsAgregadas.criticos > 0
+    ? { classe: "critico", texto: `🔴 ${statsAgregadas.criticos}`,
+        titulo: `${statsAgregadas.criticos} card${statsAgregadas.criticos !== 1 ? "s" : ""} crítico${statsAgregadas.criticos !== 1 ? "s" : ""}` }
+    : statsAgregadas.hoje > 0
+      ? { classe: "hoje", texto: `⏳ ${statsAgregadas.hoje}`,
+          titulo: `${statsAgregadas.hoje} card${statsAgregadas.hoje !== 1 ? "s" : ""} pra revisar hoje` }
+      : null;
+  const selo = urgencia && (
+    <span className={`selo-urgencia ${urgencia.classe}`} title={urgencia.titulo}
+      aria-label={urgencia.titulo}>
+      {urgencia.texto}
+    </span>
+  );
   const editandoEsta = editando?.tipo === "pasta" && editando.id === pasta.id;
   const barra = (
     <BarraSegmentada
@@ -1161,7 +1180,7 @@ function PastaItem({
 
   if (viewMode === "list") {
     return (
-      <li className="lista-item lista-pasta">
+      <li className={`lista-item lista-pasta${temCriticos ? " lista-pasta-alerta" : ""}`}>
         <span className="lista-icone pasta"><IconePasta color={pasta.color} /></span>
         {editandoEsta ? (
           <div className="lista-info lista-info-editando">
@@ -1171,7 +1190,11 @@ function PastaItem({
           </div>
         ) : (
           <button className="lista-info" onClick={() => entrarPasta(pasta)}>
+            {/* O selo fica FORA do .lista-nome de propósito: dentro, o
+                ellipsis do nome longo engolia o selo -- justamente na
+                pasta crítica com nome comprido, que é o caso que importa. */}
             <span className="lista-nome">{pasta.name}</span>
+            {selo}
             <span className="lista-meta">{meta}</span>
           </button>
         )}
@@ -1206,6 +1229,7 @@ function PastaItem({
         <button className="pasta-card-corpo" onClick={() => entrarPasta(pasta)}>
           <span className="pasta-card-icone"><IconePasta color={pasta.color} /></span>
           <span className="pasta-card-nome">{pasta.name}</span>
+          {selo}
           <span className="pasta-card-meta">{meta}</span>
           {barra}
         </button>

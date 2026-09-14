@@ -307,6 +307,30 @@ test.describe("Layout no celular", () => {
     await conferirLayout(page, "conta");
   });
 
+  test("na lista, dá pra ver qual pasta está crítica", async ({ page }) => {
+    // Regressão que o usuário achou no telefone: ao esconder a barra
+    // segmentada das linhas (pra o nome caber), sumiu o ÚNICO sinal de
+    // criticidade das pastas -- decks têm o botão "🔴 N", pastas não
+    // tinham nada. Três pastas com 7 críticos, 4 pra hoje e em dia ficavam
+    // idênticas. O selo é o sinal que sobrevive no celular.
+    await abrirLogado(page, "/");
+    await page.evaluate(() => localStorage.setItem("dashboard_view_mode", "list"));
+    await page.goto("/");
+    const linha = page.locator(".lista-pasta").first();
+    await expect(linha).toBeVisible();
+
+    // A pasta de teste tem decks com criticos: 1 (ver STATS).
+    const selo = linha.locator(".selo-urgencia");
+    await expect(selo).toBeVisible();
+    await expect(selo).toHaveClass(/critico/);
+    // Visível de verdade: fora do nome, pra o ellipsis de um nome longo
+    // não engoli-lo (a primeira versão fazia isso, e o nome de teste é
+    // longo de propósito).
+    const caixa = await selo.boundingBox();
+    expect(caixa.width).toBeGreaterThan(20);
+    await conferirLayout(page, "lista com selo");
+  });
+
   test("criar deck", async ({ page }) => {
     await abrirLogado(page, "/criar-deck");
     await expect(page.getByText("Criar deck")).toBeVisible();
