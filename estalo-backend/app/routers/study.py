@@ -23,6 +23,7 @@ from app.schemas.study import (
     ReviewAnswer, ReviewResult, SessaoConcluida, StreakOut, StudyCard,
     StudySessionLog, StudySessionOut, StudyStats, TutorResponse,
 )
+from app.core.erros_ia import erro_http_de_ia
 from app.services.ai import IAError, QuotaExceededError, gerar_explicacoes, gerar_quiz
 from app.services.error_explanation_service import explicar_erro, refinar_explicacao
 from app.services.sm2 import SM2State, calcular_proxima_revisao
@@ -910,7 +911,7 @@ def enriquecer_cards(
     try:
         resultado = gerar_quiz(cards_data, user_id, db)
     except IAError as e:
-        raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(e))
+        raise erro_http_de_ia(e, "gerar_quiz")
 
     cards_por_id = {c.id: c for c in cards}
     enriquecidos = []
@@ -956,7 +957,7 @@ def gerar_quiz_deck(
     try:
         resultado = gerar_quiz(cards_data, user_id, db)
     except IAError as e:
-        raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(e))
+        raise erro_http_de_ia(e, "gerar_quiz")
 
     # Mapa card_id → repetitions para incluir a fase atual
     reps_map: dict[int, int] = {}
@@ -1011,7 +1012,7 @@ def gerar_reveal_deck(
     try:
         resultado = gerar_explicacoes(cards_data, user_id, db)
     except IAError as e:
-        raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(e))
+        raise erro_http_de_ia(e, "gerar_explicacoes")
 
     explicacao_map = {item["card_id"]: item["explanation"] for item in resultado}
     return [

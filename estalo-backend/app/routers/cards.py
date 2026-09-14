@@ -7,7 +7,8 @@ from app.models import Card, Deck, Review
 from app.models.card import calcular_content_hash
 from app.schemas.ai import GenerateRequest
 from app.schemas.card import CardCreate, CardOut, CardTutorRequest, CardTutorResponse, CardUpdate
-from app.services.ai import IAError, QuotaExceededError, gerar_cards_completos
+from app.core.erros_ia import erro_http_de_ia
+from app.services.ai import IAError, gerar_cards_completos
 from app.services.tutor_service import analisar_feedback, explicar_conceito_breve
 
 router = APIRouter(tags=["Cards"])
@@ -101,7 +102,7 @@ def gerar_cards_ia(
     try:
         gerados = gerar_cards_completos(dados.text, dados.quantity, user_id, db)
     except IAError as e:
-        raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(e))
+        raise erro_http_de_ia(e, "gerar_cards")
 
     novos = [
         Card(
@@ -186,10 +187,8 @@ def tutor_card(
             )
         try:
             resultado = analisar_feedback(dados.user_attempt, card.back, card.front, user_id, db)
-        except QuotaExceededError as e:
-            raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS, str(e))
         except IAError as e:
-            raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, str(e))
+            raise erro_http_de_ia(e, "tutor_analyze")
 
         # Telemetria leve: só o tipo de erro + o "tema" (a pergunta do
         # card, truncada) -- NUNCA a tentativa do usuário, que é texto
@@ -209,13 +208,10 @@ def tutor_card(
     # action == "explain"
     try:
         explicacao = explicar_conceito_breve(card.front, card.back, user_id, db)
-    except QuotaExceededError as e:
-        # Precisa vir ANTES de "except IAError" -- QuotaExceededError é
-        # subclasse dela (ver ai.py), e a mensagem certa aqui é "espere
-        # até amanhã", não a genérica abaixo.
-        raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS, str(e))
     except IAError as e:
-        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, str(e))
+        # Cota estourada (429, mensagem própria) ou IA fora (503, frase
+        # calma): ver app/core/erros_ia.py.
+        raise erro_http_de_ia(e, "tutor_explain")
 
     return CardTutorResponse(explanation=explicacao)
 
