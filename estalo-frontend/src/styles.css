@@ -2990,6 +2990,83 @@ kbd {
 .mover-opcao-pasta:hover { background: var(--papel); }
 .mover-opcao-pasta.ativa { background: var(--violeta-suave); color: var(--violeta); font-weight: 600; }
 
+/* ===== ALVOS DE TOQUE (qualquer tela de toque) =====
+   Mínimo recomendado é 44px (Apple HIG / WCAG 2.5.5). A auditoria de
+   layout achou o app inteiro entre 24px e 34px -- desenhado pro mouse,
+   que acerta um alvo de 24px sem esforço; o dedo, não.
+
+   Isto morava dentro de `max-width: 640px`, e a auditoria no TABLET
+   (layout-tablet.spec.js) mostrou o furo: um iPad tem 768px de largura e
+   dedo do mesmo tamanho, e recebia o layout de mouse inteiro -- chevron
+   da barra lateral com 18px, breadcrumb com 25px, ícones de ação com
+   28px. O critério certo nunca foi a largura da tela, é o que aponta pra
+   ela: `pointer: coarse` é o dedo, em qualquer tamanho de tela, e não
+   toca no desktop com mouse. */
+@media (pointer: coarse) {
+  .botao-ver-senha { width: 40px; height: 40px; }
+  /* No celular o email some e sobra só a inicial (~32px); no tablet o
+     email fica, mas a altura continua curta. */
+  .botao-conta { min-width: 40px; min-height: 40px; }
+
+  .icone-acao,
+  .toggle-tema,
+  .view-toggle-btn,
+  .botao-offline {
+    min-width: 40px;
+    min-height: 40px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+  /* Lista completa, extraída do JSX -- botão que fica de fora vira
+     alvo de 24-37px e só aparece quando alguém usa no telefone. */
+  .botao-texto,
+  .breadcrumb-item,
+  .btn-secao-acao,
+  .botao-add-linha,
+  .botao-adicionar-card,
+  .botao-estudar,
+  .botao-estudar-primary,
+  .botao-estudar-critico,
+  .botao-modo-critico,
+  .botao-modo-ghost,
+  .botao-modo-primary,
+  .botao-mostrar,
+  .estudo-concluido-botao,
+  .hero-revisao-botao,
+  .tutor-botao,
+  .undo-toast-botao,
+  .errei-mic-botao,
+  .aba,
+  .primeiro-uso-secundario { min-height: 40px; }
+  .botao-principal { min-height: 44px; }
+
+  .lista-info { min-height: 40px; }
+  .aba { min-height: 44px; } /* sobra largura na tela de login, dá pra dar o alvo cheio */
+
+  /* Barra lateral -- só existe a partir de 768px, então o celular nunca a
+     auditou. Chevron de 18px é o pior alvo do app inteiro. */
+  .sidebar-no-btn { min-height: 40px; }
+  .sidebar-chevron { min-width: 40px; min-height: 40px; }
+
+  /* Ações que o desktop revela no hover (lápis, lixeira, mover) não
+     existem pro dedo -- não há hover. No celular isto já era resolvido
+     pela largura; no tablet os botões estavam lá, com opacity 0, e só
+     apareciam se o toque calhasse de disparar o hover emulado do iOS.
+     Renomear/mover/excluir do deck vão pro "⋯", como no celular: três
+     alvos de 40px direto na linha comeriam o nome do deck, que num iPad
+     em pé (768px com a barra lateral) já não sobra. Ver AcoesDeck. */
+  .lista-acoes .acoes-secundaria { display: none; }
+  .lista-acoes .acoes-mais { display: inline-flex; }
+  /* As linhas de PASTA usam as mesmas classes, sem "⋯" (são só dois
+     botões): ficam visíveis direto. */
+  .lista-deck-editar   { opacity: 1; }
+  .lista-deck-excluir  { opacity: 1; }
+  .pasta-card-excluir  { opacity: 1; }
+  .pasta-card-editar   { opacity: 1; }
+  .item-card-acoes     { opacity: 1; }
+}
+
 /* ===== MOBILE (≤ 640px) ===== */
 @media (max-width: 640px) {
   .topo { padding: 0.75rem 1rem; flex-wrap: wrap; gap: 0.4rem; }
@@ -3056,53 +3133,6 @@ kbd {
   .lista-item .barra-seg { display: none; }
   .lista-info { min-width: 5.5rem; }
 
-  /* Ações secundárias (renomear/mover/excluir) vão pro "⋯"; ficam só
-     estudar e baixar, que são as que se usa no telefone. Ver AcoesDeck. */
-  .lista-acoes .acoes-secundaria { display: none; }
-  .lista-acoes .acoes-mais { display: inline-flex; }
-
-  /* ---- Alvos de toque ----
-     Mínimo recomendado é 44px (Apple HIG / WCAG 2.5.5). A auditoria de
-     layout achou o app inteiro entre 24px e 34px -- desenhado pro mouse,
-     que acerta um alvo de 24px sem esforço; o dedo, não. */
-  .botao-ver-senha { width: 40px; height: 40px; }
-  /* Com o email escondido, sobra só a inicial: sem isto o botão da conta
-     fica em ~32px e vira alvo pequeno demais (a suíte pegou). */
-  .botao-conta { min-width: 40px; min-height: 40px; justify-content: center; padding: 0; }
-
-  .icone-acao,
-  .toggle-tema,
-  .view-toggle-btn,
-  .botao-offline {
-    min-width: 40px;
-    min-height: 40px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-  }
-  /* Lista completa, extraída do JSX -- botão que fica de fora vira
-     alvo de 24-37px e só aparece quando alguém usa no telefone. */
-  .botao-texto,
-  .breadcrumb-item,
-  .btn-secao-acao,
-  .botao-add-linha,
-  .botao-adicionar-card,
-  .botao-estudar,
-  .botao-estudar-primary,
-  .botao-estudar-critico,
-  .botao-modo-critico,
-  .botao-modo-ghost,
-  .botao-modo-primary,
-  .botao-mostrar,
-  .estudo-concluido-botao,
-  .hero-revisao-botao,
-  .tutor-botao,
-  .undo-toast-botao,
-  .errei-mic-botao,
-  .aba,
-  .primeiro-uso-secundario { min-height: 40px; }
-  .botao-principal { min-height: 44px; }
-
   .primeiro-uso { padding: 2rem 1rem; }
   /* Empilhado no celular: lado a lado, "Estude uns minutos por dia" quebra
      no meio e os três passos deixam de se ler como uma sequência. */
@@ -3113,8 +3143,6 @@ kbd {
     margin-inline: auto;
     gap: 0.6rem;
   }
-  .lista-info { min-height: 40px; }
-  .aba { min-height: 44px; } /* na tela de login sobra largura, dá pra dar o alvo cheio */
 
   /* Numa linha de 380px, nome de deck/pasta de verdade ("Endpoint Manager -
      Políticas de Conformidade") não cabe em uma linha nem com folga -- no
@@ -3154,13 +3182,6 @@ kbd {
   .visao-card-valor { font-size: 1.25rem; }
 
   .pastas-grid { grid-template-columns: repeat(2, 1fr); }
-
-  /* Hover actions visíveis sempre no mobile (sem hover real) */
-  .lista-deck-excluir  { opacity: 1; }
-  .lista-deck-editar   { opacity: 1; }
-  .pasta-card-excluir  { opacity: 1; }
-  .pasta-card-editar   { opacity: 1; }
-  .item-card-acoes     { opacity: 1; }
 
   .sessao-stats { gap: 0.45rem; }
   .sessao-stat  { min-width: 68px; padding: 0.55rem 0.75rem; }
