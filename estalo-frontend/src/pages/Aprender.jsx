@@ -164,6 +164,16 @@ export default function Aprender({ deck, aoVoltar, modoGlobal = false, folderId 
   const proximoRef        = useRef(null);
   const [acertosNaPrimeira, setAcertosNaPrimeira] = useState(0);
   const [tempoSessao, setTempoSessao] = useState(0);
+  // Só na Fila Única. O backend entrega a revisão em lotes de 15, mas o
+  // herói da Home diz "15+ esperando" -- quem tinha 40 terminava o lote,
+  // via "Voltar à Home" como única saída, voltava e encontrava "25
+  // esperando" sem nada ter explicado que a sessão era um pedaço. Depois
+  // de salvar, o app pergunta ao servidor o que ainda falta (ver
+  // _salvarProgresso) e guarda aqui:
+  //   null  -> não sabe (sem rede, respostas ainda na fila, ou por-deck)
+  //   []    -> zerou por hoje
+  //   [...] -> o próximo lote, já carregado, pronto pro "Continuar"
+  const [proximoLote, setProximoLote] = useState(null);
 
   // Tutor Inteligente: explicação sob demanda pra questão atual (ver
   // botão "Perguntar ao Tutor" abaixo). tutorTexto fica em cache local por
@@ -585,7 +595,7 @@ export default function Aprender({ deck, aoVoltar, modoGlobal = false, folderId 
     // navegador não deixou gravar em disco (janela anônima, armazenamento
     // cheio), então a resposta só existe em memória e não sobrevive a
     // fechar o app.
-    await sincronizar();
+    const sync = await sincronizar();
     if (semDisco > 0 && contar() > 0) {
       mostrarToast(
         "Este navegador não está deixando guardar seu progresso. Se fechar o app " +
@@ -613,6 +623,17 @@ export default function Aprender({ deck, aoVoltar, modoGlobal = false, folderId 
     ).catch(err => console.error("[Aprender] falha ao logar sessão:", err.message));
 
     setSalvando(false);
+
+    // Fila Única: o que sobrou pra hoje? Só vale perguntar se TODAS as
+    // respostas já chegaram ao servidor -- com algo ainda na fila offline,
+    // ele devolveria os mesmos cards desta rodada. Reusa a própria busca
+    // do lote (e não uma contagem à parte) por dois motivos: o número que
+    // sai daqui é o mesmo "15+" que a Home mostra, e o lote já vem pronto
+    // pra começar na hora se a pessoa clicar em Continuar. Sem rede, fica
+    // em null e a tela não promete nada.
+    if (modoGlobal && sync.restantes === 0) {
+      _buscarCards().then(setProximoLote).catch(() => setProximoLote(null));
+    }
   }
 
   /**
@@ -635,6 +656,31 @@ export default function Aprender({ deck, aoVoltar, modoGlobal = false, folderId 
     setResposta(null);
     setFila(questoesOriginais.current);
     setConcluido(false);
+  }
+
+  /**
+   * Fila Única: começa a próxima rodada com o lote que _salvarProgresso já
+   * buscou. É uma sessão NOVA de verdade (grava no servidor, salva
+   * snapshot de F5), não uma prática -- por isso zera tudo o que o resumo
+   * anterior usava, inclusive o confete, que é por sessão.
+   */
+  function continuarProximoLote() {
+    const cards = proximoLote;
+    if (!cards || cards.length === 0) return;
+    setProximoLote(null);
+    errosPorCard.current = new Map();
+    viloesResolvidos.current = new Set();
+    confetiSessaoDisparado.current = false;
+    setAcertosNaPrimeira(0);
+    setTempoSessao(0);
+    setResposta(null);
+    setModoPratica(null);
+    setConcluido(false);
+    setCarregando(true);
+    _repararSemQuiz(cards)
+      .then(_iniciarComCards)
+      .catch(err => setErro(err.message))
+      .finally(() => setCarregando(false));
   }
 
   // Repopula a fila só com os cards que erraram >=2x na sessão que acabou
@@ -856,12 +902,37 @@ export default function Aprender({ deck, aoVoltar, modoGlobal = false, folderId 
               </p>
             )}
 
-            {/* Terminar a sessão é o sucesso -- é a ação principal. */}
+            {/* Fila Única: esta rodada era um lote. Diz o que sobrou (no
+                mesmo "15+" da Home) ou que zerou -- antes a tela calava e
+                a pessoa descobria de volta na Home. */}
+            {modoGlobal && proximoLote !== null && (
+              <p className="sessao-proximo sessao-restante">
+                {proximoLote.length === 0
+                  ? (folderName ? "Você zerou a revisão de hoje nesta pasta." : "Você zerou a revisão de hoje.")
+                  : `Ainda ${proximoLote.length === 1 ? "tem 1 card vencido" : `tem ${rotuloRestante(proximoLote.length)} cards vencidos`} esperando. Dá pra continuar agora ou deixar pra depois.`}
+              </p>
+            )}
+
+            {/* Terminar a sessão é o sucesso -- é a ação principal. Na
+                Fila Única com lote sobrando, continuar É o que a pessoa
+                pediu ao clicar em "Estudar Tudo", então assume o lugar. */}
             <div className="sessao-acoes">
-              <button className="botao-principal estudo-concluido-botao"
-                onClick={sair} disabled={salvando}>
-                {salvando ? "Salvando…" : modoGlobal ? "Voltar à Home" : "Voltar ao deck"}
-              </button>
+              {modoGlobal && proximoLote?.length > 0 ? (
+                <>
+                  <button className="botao-principal estudo-concluido-botao"
+                    onClick={continuarProximoLote} disabled={salvando}>
+                    Continuar · {rotuloRestante(proximoLote.length)} restante{proximoLote.length !== 1 ? "s" : ""}
+                  </button>
+                  <button className="botao-texto" onClick={sair} disabled={salvando}>
+                    Voltar à Home
+                  </button>
+                </>
+              ) : (
+                <button className="botao-principal estudo-concluido-botao"
+                  onClick={sair} disabled={salvando}>
+                  {salvando ? "Salvando…" : modoGlobal ? "Voltar à Home" : "Voltar ao deck"}
+                </button>
+              )}
               <button className="botao-texto" onClick={praticarDeNovo} disabled={salvando}
                 title="Repete os cards agora, sem mudar quando eles voltam">
                 Praticar de novo
@@ -1068,6 +1139,13 @@ export default function Aprender({ deck, aoVoltar, modoGlobal = false, folderId 
       <QuotaLimitModal aberto={isQuotaModalOpen} aoFechar={() => setIsQuotaModalOpen(false)} />
     </div>
   );
+}
+
+// O lote tem teto de 15: quando vêm 15, pode haver mais -- o mesmo "15+"
+// que a Home usa (rotuloPendentes em Dashboard.jsx), pra nunca mostrar
+// aqui um número que a Home contradiga.
+function rotuloRestante(n) {
+  return n >= 15 ? "15+" : String(n);
 }
 
 function formatarTempo(seg) {

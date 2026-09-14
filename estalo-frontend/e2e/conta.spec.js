@@ -240,10 +240,17 @@ test.describe("Área da conta", () => {
 
     test("a renovação aparece na meia-noite de quem lê", async ({ page }) => {
       // O backend passou a devolver a meia-noite LOCAL de quem pergunta,
-      // em naive-UTC. Pra São Paulo (UTC-3), 00:00 local = 03:00 UTC.
-      // Antes era a meia-noite do servidor e aparecia como 21:00 aqui.
+      // em naive-UTC. Pra São Paulo (UTC-3, sem horário de verão), 00:00
+      // local = 03:00 UTC. Antes era a meia-noite do servidor e aparecia
+      // como 21:00 aqui. A data é a de AMANHÃ em São Paulo, calculada na
+      // hora: um valor fixo aqui quebrou no dia em que o calendário o
+      // alcançou ("amanhã" virou "hoje").
+      const hojeEmSP = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" }).format(new Date());
+      const amanhaEmSP = new Date(`${hojeEmSP}T03:00:00Z`);
+      amanhaEmSP.setUTCDate(amanhaEmSP.getUTCDate() + 1);
       await abrirLogado(page, USUARIO, {
-        consumido: 0, limite: 50000, restante: 50000, renova_em: "2026-09-14T03:00:00",
+        consumido: 0, limite: 50000, restante: 50000,
+        renova_em: amanhaEmSP.toISOString().slice(0, 19),
       });
       await page.getByRole("button", { name: /Sua conta/ }).click();
       await expect(page.locator(".conta-cota-renova")).toHaveText("Renova amanhã às 00:00.");

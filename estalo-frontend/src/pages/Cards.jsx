@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { api } from "../api.js";
+import { api, QuotaExceededException } from "../api.js";
 import useUndoableDelete from "../hooks/useUndoableDelete.js";
 import useOnline from "../hooks/useOnline.js";
 import { baixarDeck, estaBaixado } from "../offlineDecks.js";
@@ -149,7 +149,13 @@ export default function Cards({ deck, aoVoltar, aoEstudar, aoAprender, aoRevelar
       setTextoIA(""); setQtdIA(5);
       await carregarCards();
       fecharModal();
-    } catch (err) { setErroIA(err.message); }
+    } catch (err) {
+      // O texto colado continua no campo (ver CriarDeck.jsx pro mesmo
+      // raciocínio) -- diz, em vez de deixar a pessoa achar que perdeu.
+      setErroIA(err instanceof QuotaExceededException
+        ? err.message
+        : `${err.message} Seu texto continua aqui.`);
+    }
     finally { setGerando(false); }
   }
 

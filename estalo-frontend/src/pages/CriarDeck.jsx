@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { api } from "../api.js";
+import { api, QuotaExceededException } from "../api.js";
 import useOnline from "../hooks/useOnline.js";
 import ToggleTema from "../components/ToggleTema.jsx";
 
@@ -86,7 +86,13 @@ export default function CriarDeck({ pastaId, aoVoltar, aoVerCards }) {
           // já é o que importa mostrar pro usuário.
         }
       }
-      setErro(err.message);
+      // Quando foi a IA que falhou, o que a pessoa colou está intacto
+      // (é estado desta tela) -- mas ela não tem como saber disso só de
+      // ver um erro, e é razoável imaginar que perdeu tudo. Diz. Cota
+      // estourada fica de fora: a mensagem dela já diz "amanhã", e o
+      // texto não sobrevive até lá.
+      const foiAIA = deck && modo === "ia" && !(err instanceof QuotaExceededException);
+      setErro(foiAIA ? `${err.message} O nome e o texto continuam aqui.` : err.message);
     } finally {
       setSalvando(false);
     }
