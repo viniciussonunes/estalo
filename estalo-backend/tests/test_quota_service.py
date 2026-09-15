@@ -7,6 +7,11 @@ quando a cota já estourou (sem sequer tentar a chamada HTTP -- ver assert
 de que httpx.post nunca é chamado nesse caso).
 """
 from datetime import date, timedelta
+
+# O relógio que o quota_service usa (UTC sem header de fuso) -- não o do
+# Mac. date.today() aqui quebrava entre 21h e 00h no Brasil, quando já é
+# amanhã em UTC: a cota "resetava" no meio do teste.
+from app.core.fuso import hoje_local
 from unittest.mock import patch
 
 from app.core.config import settings
@@ -27,7 +32,7 @@ def test_primeira_chamada_cria_a_cota_com_os_defaults(db_session):
     assert quota is not None
     assert quota.daily_limit == 50_000
     assert quota.daily_tokens_consumed == 100
-    assert quota.last_reset_date == date.today()
+    assert quota.last_reset_date == hoje_local()
 
 
 def test_consumo_acumula_entre_chamadas(db_session):
@@ -41,7 +46,7 @@ def test_consumo_acumula_entre_chamadas(db_session):
 
 def test_bloqueia_quando_estouraria_o_limite(db_session):
     user = UserFactory()
-    db_session.add(UserQuota(user_id=user.id, daily_tokens_consumed=49_950, daily_limit=50_000))
+    db_session.add(UserQuota(user_id=user.id, daily_tokens_consumed=49_950, daily_limit=50_000, last_reset_date=hoje_local()))
     db_session.commit()
 
     ok = check_and_consume_tokens(user.id, 100, db_session)
@@ -55,7 +60,7 @@ def test_bloqueia_quando_estouraria_o_limite(db_session):
 
 def test_permite_exatamente_no_limite(db_session):
     user = UserFactory()
-    db_session.add(UserQuota(user_id=user.id, daily_tokens_consumed=49_900, daily_limit=50_000))
+    db_session.add(UserQuota(user_id=user.id, daily_tokens_consumed=49_900, daily_limit=50_000, last_reset_date=hoje_local()))
     db_session.commit()
 
     assert check_and_consume_tokens(user.id, 100, db_session) is True
@@ -64,19 +69,19 @@ def test_permite_exatamente_no_limite(db_session):
 
 def test_reset_quotas_if_needed_zera_em_novo_dia(db_session):
     user = UserFactory()
-    ontem = date.today() - timedelta(days=1)
+    ontem = hoje_local() - timedelta(days=1)
     db_session.add(UserQuota(user_id=user.id, daily_tokens_consumed=49_999, daily_limit=50_000, last_reset_date=ontem))
     db_session.commit()
 
     quota = reset_quotas_if_needed(user.id, db_session)
 
     assert quota.daily_tokens_consumed == 0
-    assert quota.last_reset_date == date.today()
+    assert quota.last_reset_date == hoje_local()
 
 
 def test_reset_quotas_if_needed_nao_mexe_no_mesmo_dia(db_session):
     user = UserFactory()
-    db_session.add(UserQuota(user_id=user.id, daily_tokens_consumed=123, daily_limit=50_000, last_reset_date=date.today()))
+    db_session.add(UserQuota(user_id=user.id, daily_tokens_consumed=123, daily_limit=50_000, last_reset_date=hoje_local()))
     db_session.commit()
 
     quota = reset_quotas_if_needed(user.id, db_session)
@@ -88,7 +93,7 @@ def test_cota_estourada_e_reset_permite_consumir_de_novo(db_session):
     """Reproduz o cenário completo: estourou ontem, vira o dia, hoje já
     pode consumir de novo com o contador zerado."""
     user = UserFactory()
-    ontem = date.today() - timedelta(days=1)
+    ontem = hoje_local() - timedelta(days=1)
     db_session.add(UserQuota(user_id=user.id, daily_tokens_consumed=50_000, daily_limit=50_000, last_reset_date=ontem))
     db_session.commit()
 
@@ -103,7 +108,7 @@ def test_chamar_ia_lanca_quota_exceeded_sem_ir_pra_rede(db_session):
     Adaptador, independente do provedor ativo) nem tenta a chamada HTTP --
     confirma via mock nunca chamado."""
     user = UserFactory()
-    db_session.add(UserQuota(user_id=user.id, daily_tokens_consumed=50_000, daily_limit=50_000, last_reset_date=date.today()))
+    db_session.add(UserQuota(user_id=user.id, daily_tokens_consumed=50_000, daily_limit=50_000, last_reset_date=hoje_local()))
     db_session.commit()
 
     with patch.object(settings, "GEMINI_API_KEY", "chave-fake-de-teste"), \
@@ -139,7 +144,7 @@ def test_isolamento_entre_usuarios(db_session):
     """A cota de um usuário nunca afeta a de outro."""
     user_a = UserFactory()
     user_b = UserFactory()
-    db_session.add(UserQuota(user_id=user_a.id, daily_tokens_consumed=50_000, daily_limit=50_000, last_reset_date=date.today()))
+    db_session.add(UserQuota(user_id=user_a.id, daily_tokens_consumed=50_000, daily_limit=50_000, last_reset_date=hoje_local()))
     db_session.commit()
 
     assert check_and_consume_tokens(user_a.id, 1, db_session) is False

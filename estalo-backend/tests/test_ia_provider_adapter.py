@@ -110,8 +110,12 @@ def test_adapter_respeita_override_de_model_so_no_gemini(db_session):
 
 def test_openai_sem_chave_configurada_da_erro_claro(db_session):
     user = UserFactory()
+    # Sem chave do Gemini também: senão a comutação (test_ia_failover.py)
+    # tentaria a reserva de verdade, e o teste iria pra rede.
     with patch.object(settings, "IA_PROVIDER", "openai"), \
-         patch.object(settings, "OPENAI_API_KEY", ""):
+         patch.object(settings, "OPENAI_API_KEY", ""), \
+         patch.object(settings, "GEMINI_API_KEY", ""), \
+         patch.dict("os.environ", {"OPENAI_API_KEY": ""}):
         with pytest.raises(IAError, match="OpenAI"):
             _chamar_ia("prompt", user.id, db_session)
 
@@ -140,11 +144,11 @@ def test_quota_bloqueia_independente_do_provedor(db_session):
     """O Quota Manager não pode virar um "furo" só porque o provedor
     mudou -- o quota-check acontece ANTES de escolher pra qual API
     despachar, então bloqueia os dois igual."""
-    from datetime import date
+    from app.core.fuso import hoje_local  # o relógio do quota_service, não o do Mac
     from app.models.user_quota import UserQuota
 
     user = UserFactory()
-    db_session.add(UserQuota(user_id=user.id, daily_tokens_consumed=50_000, daily_limit=50_000, last_reset_date=date.today()))
+    db_session.add(UserQuota(user_id=user.id, daily_tokens_consumed=50_000, daily_limit=50_000, last_reset_date=hoje_local()))
     db_session.commit()
 
     with patch.object(settings, "IA_PROVIDER", "openai"), \
@@ -226,8 +230,11 @@ def test_erro_nao_retryable_da_openai_e_capturado_pelo_sentry(db_session):
     cliente_mock = Mock()
     cliente_mock.chat.completions.create.side_effect = erro
 
+    # GEMINI_API_KEY vazia: sem isso a comutação de provedor (ver
+    # test_ia_failover.py) tentaria o Gemini de verdade, pela rede.
     with patch.object(settings, "IA_PROVIDER", "openai"), \
          patch.object(settings, "OPENAI_API_KEY", "sk-fake"), \
+         patch.object(settings, "GEMINI_API_KEY", ""), \
          patch("app.services.ai.OpenAI", return_value=cliente_mock), \
          patch("app.services.ai.sentry_sdk.capture_exception") as mock_capture:
         with pytest.raises(IAError):
@@ -249,10 +256,11 @@ def test_erro_retryable_da_openai_tenta_de_novo_e_captura_no_sentry(db_session):
 
     with patch.object(settings, "IA_PROVIDER", "openai"), \
          patch.object(settings, "OPENAI_API_KEY", "sk-fake"), \
+         patch.object(settings, "GEMINI_API_KEY", ""), \
          patch("app.services.ai.OpenAI", return_value=cliente_mock), \
          patch("app.services.ai.sentry_sdk.capture_exception") as mock_capture, \
          patch("app.services.ai.time.sleep"):
-        with pytest.raises(IAError, match="2 tentativas"):
+        with pytest.raises(IAError, match="2 tentativa"):
             _chamar_ia("prompt", user.id, db_session)
 
     assert cliente_mock.chat.completions.create.call_count == 2

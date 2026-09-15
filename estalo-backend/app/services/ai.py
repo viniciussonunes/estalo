@@ -92,6 +92,7 @@ def _chamar_gemini_raw(
     instrucao_sistema: str | None = None,
     model: str | None = None,
     desabilitar_thinking: bool = False,
+    tentativas: int = 2,
 ) -> str:
     """Só a chamada HTTP ao Gemini, SEM quota-check -- usada por _chamar_ia()
     (abaixo), o Adaptador de provedor de IA, que faz o quota-check UMA
@@ -136,7 +137,7 @@ def _chamar_gemini_raw(
     }
 
     ultimo_erro: Exception | None = None
-    for tentativa in range(2):
+    for tentativa in range(tentativas):
         if tentativa > 0:
             time.sleep(2)
         try:
@@ -146,7 +147,7 @@ def _chamar_gemini_raw(
 
         if resp.status_code in _RETRY_STATUS:
             ultimo_erro = Exception(f"status {resp.status_code}")
-            if tentativa < 1:
+            if tentativa < tentativas - 1:
                 continue
             break  # também falhou na última tentativa -> cai no raise genérico abaixo
 
@@ -161,7 +162,7 @@ def _chamar_gemini_raw(
         except (KeyError, IndexError) as e:
             raise IAError("Resposta do Gemini veio em formato inesperado") from e
 
-    raise IAError(f"Gemini indisponível após 2 tentativas ({ultimo_erro})")
+    raise IAError(f"Gemini indisponível após {tentativas} tentativa(s) ({ultimo_erro})")
 
 
 # Erros transitórios (rate limit, timeout, falha de conexão, 5xx do lado da
@@ -177,6 +178,7 @@ def _chamar_openai_raw(
     timeout: int = 25,
     instrucao_sistema: str | None = None,
     model: str = OPENAI_MODEL,
+    tentativas: int = 2,
 ) -> str:
     """Equivalente a _chamar_gemini_raw acima, mas pra OpenAI via
     biblioteca oficial `openai` -- MESMA entrada (prompt/instrucao_sistema)
@@ -206,7 +208,7 @@ def _chamar_openai_raw(
     cliente = OpenAI(api_key=api_key, timeout=timeout)
 
     ultimo_erro: Exception | None = None
-    for tentativa in range(2):
+    for tentativa in range(tentativas):
         if tentativa > 0:
             time.sleep(2)
         try:
@@ -219,7 +221,7 @@ def _chamar_openai_raw(
             # exceção nunca escapa não-tratada.
             sentry_sdk.capture_exception(e)
             ultimo_erro = e
-            if tentativa < 1:
+            if tentativa < tentativas - 1:
                 continue
             break
         except OpenAIError as e:
@@ -233,7 +235,7 @@ def _chamar_openai_raw(
         except (IndexError, AttributeError) as e:
             raise IAError("Resposta da OpenAI veio em formato inesperado") from e
 
-    raise IAError(f"OpenAI indisponível após 2 tentativas ({ultimo_erro})")
+    raise IAError(f"OpenAI indisponível após {tentativas} tentativa(s) ({ultimo_erro})")
 
 
 def _chamar_ia(
@@ -270,14 +272,68 @@ def _chamar_ia(
         )
 
     provider = settings.IA_PROVIDER.strip().lower()
-    if provider == "openai":
-        return _chamar_openai_raw(prompt, timeout=timeout, instrucao_sistema=instrucao_sistema)
+    if provider not in _PROVEDORES:
+        raise IAError(f"IA_PROVIDER '{provider}' desconhecido -- use 'gemini' ou 'openai'.")
+
+    kwargs = dict(instrucao_sistema=instrucao_sistema, model=model, desabilitar_thinking=desabilitar_thinking)
+    inicio = time.monotonic()
+    try:
+        return _despachar(provider, prompt, timeout=timeout, **kwargs)
+    except IAError as erro_primario:
+        reserva = _reserva(provider)
+        gasto = time.monotonic() - inicio
+        restante = ORCAMENTO_S - gasto
+        if not _provedor_configurado(reserva):
+            print(f"[ia_failover] de={provider} para={reserva} pulado=sem_chave erro={erro_primario!r}")
+            raise
+        if restante < MINIMO_PARA_RESERVA_S:
+            print(f"[ia_failover] de={provider} para={reserva} pulado=sem_tempo gasto={gasto:.0f}s erro={erro_primario!r}")
+            raise
+        print(f"[ia_failover] de={provider} para={reserva} gasto={gasto:.0f}s erro={erro_primario!r}")
+        sentry_sdk.capture_message(f"IA failover {provider} -> {reserva}: {erro_primario}", level="warning")
+        try:
+            return _despachar(reserva, prompt, timeout=min(timeout, int(restante)), tentativas=1, **kwargs)
+        except IAError as erro_reserva:
+            raise IAError(
+                f"Os dois provedores falharam -- {provider}: {erro_primario}; {reserva}: {erro_reserva}"
+            ) from erro_reserva
+
+
+# ---- Comutação de provedor ----
+# Quando o provedor configurado falha, o outro assume NA MESMA chamada,
+# sem redeploy nem variável nova: a OpenAI ficou sem créditos numa
+# sexta à noite e a IA do app inteiro parou, com a chave do Gemini ali
+# parada. O primário ainda é IA_PROVIDER (2 tentativas, como sempre);
+# a reserva entra com 1 tentativa e só se (a) tiver chave configurada e
+# (b) ainda sobrar tempo de função -- maxDuration é 60s (vercel.json), e
+# o pior caso do primário sozinho já chega a ~52s (2 x 25s + 2s).
+_PROVEDORES = ("gemini", "openai")
+ORCAMENTO_S = 55            # abaixo do maxDuration, com folga pra serializar a resposta
+MINIMO_PARA_RESERVA_S = 5   # menos que isso, nem vale começar a chamada de reserva
+
+
+def _reserva(provider: str) -> str:
+    return "openai" if provider == "gemini" else "gemini"
+
+
+def _provedor_configurado(provider: str) -> bool:
     if provider == "gemini":
-        return _chamar_gemini_raw(
-            prompt, timeout=timeout, instrucao_sistema=instrucao_sistema, model=model,
-            desabilitar_thinking=desabilitar_thinking,
-        )
-    raise IAError(f"IA_PROVIDER '{provider}' desconhecido -- use 'gemini' ou 'openai'.")
+        return bool(settings.GEMINI_API_KEY)
+    return bool(os.getenv("OPENAI_API_KEY") or settings.OPENAI_API_KEY)
+
+
+def _despachar(
+    provider: str, prompt: str, *, timeout: int, instrucao_sistema: str | None,
+    model: str | None, desabilitar_thinking: bool, tentativas: int = 2,
+) -> str:
+    if provider == "openai":
+        # `model`/`desabilitar_thinking` são conceitos do Gemini (ver
+        # docstring de _chamar_ia) -- na OpenAI ficam de fora.
+        return _chamar_openai_raw(prompt, timeout=timeout, instrucao_sistema=instrucao_sistema, tentativas=tentativas)
+    return _chamar_gemini_raw(
+        prompt, timeout=timeout, instrucao_sistema=instrucao_sistema, model=model,
+        desabilitar_thinking=desabilitar_thinking, tentativas=tentativas,
+    )
 
 
 def _montar_prompt(texto: str, quantidade: int) -> str:

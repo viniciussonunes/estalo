@@ -33,8 +33,10 @@ class Settings(BaseSettings):
     # dos dois está por trás.
     IA_PROVIDER: str = "gemini"
 
-    # Só é lida/validada de verdade quando IA_PROVIDER=openai -- com
-    # Gemini ativo (padrão), pode ficar vazia sem travar nada.
+    # Pode ficar vazia sem travar nada. Quando preenchida, a OpenAI também
+    # serve de RESERVA com IA_PROVIDER=gemini: se o Gemini falhar numa
+    # chamada, ela assume na hora (e vice-versa) -- ver _chamar_ia em
+    # app/services/ai.py.
     OPENAI_API_KEY: str = ""
 
     # CORS — URL do frontend em produção (Vercel).

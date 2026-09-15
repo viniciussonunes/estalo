@@ -376,14 +376,13 @@ def test_analisar_feedback_prompt_pede_tom_ajustado_por_assunto(db_session):
 
 
 def test_analisar_feedback_quota_bloqueia_sem_chamar_rede(db_session):
-    from datetime import date
-
+    from app.core.fuso import hoje_local  # o relógio do quota_service (UTC), não o do Mac
     from app.models.user_quota import UserQuota
     from app.services.ai import QuotaExceededError
     from tests.factories import UserFactory
 
     user = UserFactory()
-    db_session.add(UserQuota(user_id=user.id, daily_tokens_consumed=50_000, daily_limit=50_000, last_reset_date=date.today()))
+    db_session.add(UserQuota(user_id=user.id, daily_tokens_consumed=50_000, daily_limit=50_000, last_reset_date=hoje_local()))
     db_session.commit()
 
     with patch.object(settings, "GEMINI_API_KEY", "chave-fake"), \

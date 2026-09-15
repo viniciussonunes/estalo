@@ -8,6 +8,11 @@ aparecendo no meio de um Tutor.
 """
 from datetime import date, timedelta
 
+# O relógio que o quota_service usa (UTC sem header de fuso) -- não o do
+# Mac. date.today() aqui quebrava entre 21h e 00h no Brasil, quando já é
+# amanhã em UTC: a cota "resetava" no meio do teste.
+from app.core.fuso import hoje_local
+
 from app.models.user_quota import DEFAULT_DAILY_LIMIT, UserQuota
 from app.services import quota_service
 
@@ -58,7 +63,7 @@ def test_virou_o_dia_zera_antes_de_responder(client, db_session):
     h = _entrar(client)
     quota_service.check_and_consume_tokens(1, 900, db_session)
     quota = db_session.get(UserQuota, 1)
-    quota.last_reset_date = date.today() - timedelta(days=1)
+    quota.last_reset_date = hoje_local() - timedelta(days=1)
     db_session.commit()
 
     corpo = client.get("/auth/me/quota", headers=h).json()
@@ -70,7 +75,7 @@ def test_diz_quando_renova(client):
     corpo = client.get("/auth/me/quota", headers=h).json()
     # Meia-noite seguinte no relógio do servidor, que é o mesmo que o
     # quota_service usa pra decidir se virou o dia.
-    assert corpo["renova_em"].startswith(str(date.today() + timedelta(days=1)))
+    assert corpo["renova_em"].startswith(str(hoje_local() + timedelta(days=1)))
     assert corpo["renova_em"].endswith("00:00:00")
 
 
