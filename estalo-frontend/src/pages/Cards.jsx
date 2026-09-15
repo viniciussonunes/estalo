@@ -48,6 +48,7 @@ export default function Cards({ deck, aoVoltar, aoEstudar, aoAprender, aoRevelar
   const [qtdIA, setQtdIA]     = useState(5);
   const [gerando, setGerando] = useState(false);
   const [erroIA, setErroIA]   = useState("");
+  const [modosAberto, setModosAberto] = useState(false);
   const [msgIA, setMsgIA]     = useState(MSGS_IA[0]);
   const msgIAIdx              = useRef(0);
 
@@ -212,8 +213,13 @@ export default function Cards({ deck, aoVoltar, aoEstudar, aoAprender, aoRevelar
         </div>
         <div className="topo-direita">
         <div className="modos-estudo-topo">
-          <button className="botao-modo-ghost" onClick={aoRevelar}>Revelar</button>
-          <button className="botao-modo-ghost" onClick={aoEstudar}>Estudo clássico</button>
+          {/* Um botão principal + "Outros modos". Antes eram três botões
+              lado a lado ("Revelar", "Estudo clássico" e o CTA) sem nada
+              dizer o que cada um fazia -- quem chegava escolhia por
+              tentativa. O modal nomeia os três pelo que fazem. */}
+          <button className="botao-modo-ghost" onClick={() => setModosAberto(true)}>
+            Outros modos
+          </button>
           {stats?.criticos > 0 ? (
             <button className="botao-modo-critico" onClick={aoAprender}>
               🔴 Estudar críticos ({stats.criticos})
@@ -367,6 +373,30 @@ export default function Cards({ deck, aoVoltar, aoEstudar, aoAprender, aoRevelar
           </ul>
         )}
       </main>
+
+      <Modal aberto={modosAberto} aoFechar={() => setModosAberto(false)}
+        titulo="Como você quer estudar?" className="modal-modos">
+        <div className="modos-lista">
+          <button className="modo-opcao" onClick={aoAprender}>
+            <span className="modo-opcao-nome">Aprender</span>
+            <span className="modo-opcao-desc">
+              Quiz de múltipla escolha, com explicação a cada resposta. O jeito principal — conta pro seu ritmo de revisão.
+            </span>
+          </button>
+          <button className="modo-opcao" onClick={aoEstudar}>
+            <span className="modo-opcao-nome">Frente e verso</span>
+            <span className="modo-opcao-desc">
+              Você lê a pergunta, tenta lembrar, vira o card e diz se acertou. Também conta pro ritmo.
+            </span>
+          </button>
+          <button className="modo-opcao" onClick={aoRevelar}>
+            <span className="modo-opcao-nome">Só ler</span>
+            <span className="modo-opcao-desc">
+              Passa pelos cards com uma explicação da IA, sem responder nada. Não mexe no seu ritmo — bom pra uma primeira leitura.
+            </span>
+          </button>
+        </div>
+      </Modal>
 
       {/* Modal de criação */}
       <Modal aberto={modalAberto} aoFechar={fecharModal} titulo="Adicionar cards">

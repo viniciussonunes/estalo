@@ -83,12 +83,16 @@ async function irPara(page, tela) {
     await expect(page.locator(".quiz-opcao").first()).toBeVisible();
     return;
   }
+  // Os dois modos secundários moram atrás de "Outros modos" (ver
+  // modos-de-estudo.spec.js pelo motivo).
   if (tela === "estudo clássico") {
-    await page.getByRole("button", { name: "Estudo clássico" }).click();
+    await page.getByRole("button", { name: "Outros modos" }).click();
+    await page.getByRole("button", { name: /Frente e verso/ }).click();
     return;
   }
   if (tela === "revelar") {
-    await page.getByRole("button", { name: "Revelar" }).click();
+    await page.getByRole("button", { name: "Outros modos" }).click();
+    await page.getByRole("button", { name: /Só ler/ }).click();
     return;
   }
   throw new Error(`tela desconhecida: ${tela}`);

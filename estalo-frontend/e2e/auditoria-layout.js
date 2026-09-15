@@ -89,6 +89,8 @@ export async function simularApi(page) {
     if (p === "/study/global-reviews") return json([]);
     if (/^\/decks\/\d+\/cards$/.test(p)) return json(CARDS);
     if (/^\/study\/decks\/\d+\/stats$/.test(p)) return json(STATS);
+    // O Revelar espera uma LISTA -- com o catch-all ({}) ele cai no ErrorBoundary.
+    if (/^\/study\/decks\/\d+\/reveal$/.test(p)) return json([{ card_id: 100, front: CARDS[0].front, back: CARDS[0].back, explanation: "Uma explicação." }]);
     if (/^\/study\/decks\/\d+\/next$/.test(p)) return json({ card_id: 100, front: CARDS[0].front, back: CARDS[0].back, due_date: "2026-01-01T00:00:00", repetitions: 0, revisoes_hoje: 0 });
     if (/^\/study\/cards\/\d+\/answer$/.test(p)) return json({ card_id: 100, interval: 1, ease_factor: 2.5, repetitions: 1, next_due: "2026-01-02T00:00:00", status: "validando" });
     return json({});

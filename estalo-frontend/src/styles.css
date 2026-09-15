@@ -906,6 +906,28 @@ body {
 .erro-feedback-motivo-botoes { display: flex; gap: 0.5rem; align-items: center; margin-top: 0.6rem; }
 
 /* ---------- Modal de limite de cota (QuotaLimitModal) ---------- */
+/* ---------- Modos de estudo (Cards.jsx, "Outros modos") ---------- */
+.modal-modos { max-width: 440px; }
+.modos-lista { display: flex; flex-direction: column; gap: 0.5rem; }
+.modo-opcao {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  width: 100%;
+  padding: 0.8rem 0.95rem;
+  border: 1.5px solid var(--borda);
+  border-radius: var(--raio);
+  background: transparent;
+  font: inherit;
+  text-align: left;
+  color: var(--tinta);
+  cursor: pointer;
+  transition: border-color var(--transicao), background var(--transicao);
+}
+.modo-opcao:hover, .modo-opcao:focus-visible { border-color: var(--violeta); background: var(--violeta-suave); }
+.modo-opcao-nome { font-weight: 600; font-size: 0.95rem; }
+.modo-opcao-desc { font-size: 0.84rem; line-height: 1.45; color: var(--tinta-suave); }
+
 .modal-cota { max-width: 420px; }
 .modal-cota-texto { font-size: 0.92rem; line-height: 1.55; color: var(--tinta); margin-bottom: 1.2rem; }
 .modal-cota-botoes { display: flex; gap: 0.6rem; align-items: center; flex-wrap: wrap; }
