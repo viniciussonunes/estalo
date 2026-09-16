@@ -107,8 +107,10 @@ async function request(path, { method = "GET", body, form, headers: extra, prazo
   } catch (falhaDeRede) {
     if (controle?.signal.aborted) {
       // Passou do prazo. Não é queda: o servidor pode até responder daqui
-      // a 20s, mas quem estuda não vai esperar pra descobrir.
-      marcarLenta();
+      // a 20s, mas quem estuda não vai esperar pra descobrir. Só leituras
+      // mudam o estado da conexão -- uma IA demorada numa rede boa não é
+      // rede lenta (ver conexao.js).
+      if (method === "GET") marcarLenta();
       throw new ConexaoLentaException();
     }
     // fetch só lança aqui por falha de REDE de verdade (servidor
@@ -328,8 +330,13 @@ export const api = {
   // Auto-cura: pede pro backend gerar quiz (options/explanation) pra cards
   // que já existem mas nasceram sem alternativas. Ver Aprender.jsx (chamado
   // quando a fila recém-carregada tem cards sem quiz pronto).
-  enriquecerCards: (cardIds) =>
-    request("/study/cards/enrich", { method: "POST", body: { card_ids: cardIds } }),
+  // prazoMs: a auto-cura do quiz roda ANTES de a sessão começar (ver
+  // _repararSemQuiz em Aprender.jsx), e o backend pode levar até ~55s
+  // (2 tentativas + reserva de provedor). Quem estuda não espera isso:
+  // passou o prazo, a sessão começa com os cards que já têm quiz -- e o
+  // servidor termina o trabalho mesmo assim, pra próxima vez.
+  enriquecerCards: (cardIds, { prazoMs } = {}) =>
+    request("/study/cards/enrich", { method: "POST", body: { card_ids: cardIds }, prazoMs }),
 
   // Carrega stats de vários decks numa única chamada; retorna Map<id, stats>.
   // Antes disparava 1 request HTTP por deck (statsMultiplos em paralelo) —

@@ -3,6 +3,7 @@ import ReactMarkdown from "react-markdown";
 import confetti from "canvas-confetti";
 import { api, QuotaExceededException } from "../api.js";
 import { contar, enfileirar, sincronizar } from "../outbox.js";
+import { estaOnline } from "../conexao.js";
 import useStudySession from "../hooks/useStudySession.js";
 import useOnline from "../hooks/useOnline.js";
 import { useToast } from "../hooks/ToastContext.jsx";
@@ -227,6 +228,10 @@ export default function Aprender({ deck, aoVoltar, modoGlobal = false, folderId 
   async function _repararSemQuiz(cards) {
     const semQuizIds = cards.filter(c => !_temQuizPronto(c)).map(c => c.id);
     if (semQuizIds.length === 0) return cards;
+    // Rede lenta ou fora: nem tenta. A chamada de IA é a mais demorada do
+    // app, e o estado já diz que o servidor não vai responder a tempo --
+    // os cards sem quiz ficam de fora desta sessão, como no offline.
+    if (!estaOnline()) return cards;
 
     setReparando(true);
     try {
@@ -237,7 +242,7 @@ export default function Aprender({ deck, aoVoltar, modoGlobal = false, folderId 
 
       const corrigidos = new Map();
       for (const lote of lotes) {
-        const { enriched } = await api.enriquecerCards(lote);
+        const { enriched } = await api.enriquecerCards(lote, { prazoMs: PRAZO_AUTOCURA_MS });
         enriched.forEach(e => corrigidos.set(e.card_id, e));
       }
 
@@ -1160,6 +1165,10 @@ export default function Aprender({ deck, aoVoltar, modoGlobal = false, folderId 
 // "Continuar" da Fila Única depende delas terem chegado, então vale
 // esperar esse tanto. Acima disso é rede ruim, e aí a fila cuida.
 const ESPERA_MAXIMA_SALVANDO_MS = 3000;
+// Quanto "Preparando seu material…" pode durar antes de a sessão começar
+// com o que já tem quiz. Uma IA saudável responde um lote de 20 em ~10-15s;
+// o backend, no pior caso (2 tentativas + reserva), leva ~55s.
+const PRAZO_AUTOCURA_MS = 20000;
 const _esperar = (ms) => new Promise(r => setTimeout(r, ms));
 
 // O lote tem teto de 15: quando vêm 15, pode haver mais -- o mesmo "15+"

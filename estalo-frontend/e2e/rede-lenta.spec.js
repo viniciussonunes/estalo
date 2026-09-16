@@ -190,3 +190,90 @@ test.describe("Rede lenta — leituras", () => {
     await expect(faixa(page)).toHaveCount(0);
   });
 });
+
+/**
+ * Deck em que só um card tem quiz pronto: o outro dispararia a auto-cura
+ * (POST /study/cards/enrich, a chamada de IA mais demorada do app) antes
+ * de a sessão começar.
+ */
+async function abrirDeckComCardSemQuiz(page, { atrasoRedeMs = 0, atrasoIaMs = 0 } = {}) {
+  const chamadas = { enrich: 0 };
+  const CARDS = [
+    { id: 100, front: "Com quiz", back: "CERTA 1", source: "ai", repetitions: 0, options: ["a", "b", "c"], explanation: "e" },
+    { id: 101, front: "Sem quiz", back: "CERTA 2", source: "manual", repetitions: 0, options: null, explanation: null },
+  ];
+  const DECK10 = { id: 10, title: "Intune", description: null, folder_id: 2, created_at: "2026-01-01T00:00:00", total_cards: 2, memorization_pct: 0 };
+  const STATS2 = { total_cards: 2, criticos: 0, hoje: 0, novos: 2, validando: 0, dominados: 0, new_cards: 2, validating: 0, dominated: 0, due_now: 2 };
+  await page.route("**/*", async (route) => {
+    const req = route.request();
+    const p = new URL(req.url()).pathname;
+    if (!["xhr", "fetch"].includes(req.resourceType()) || !CAMINHOS_API.test(p)) return route.continue();
+    const json = (c) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(c) });
+    if (p === "/study/cards/enrich") {
+      chamadas.enrich += 1;
+      await new Promise(r => setTimeout(r, atrasoIaMs));
+      return json({ enriched: [{ card_id: 101, options: ["x", "y", "z"], explanation: "gerada" }], falhas: [] });
+    }
+    if (atrasoRedeMs > 0) await new Promise(r => setTimeout(r, atrasoRedeMs));
+    if (p === "/auth/me") return json({ id: 1, email: "estudante@estalo.dev" });
+    if (p === "/folders") return json([{ ...PASTA, children: [] }]);
+    if (p === "/decks") return json([DECK10]);
+    if (p === "/study/decks/stats") return json({ 10: STATS2 });
+    if (p === "/study/heatmap-stats") return json({});
+    if (p === "/study/streak") return json({ current_streak: 0, longest_streak: 0 });
+    if (/^\/decks\/\d+\/cards$/.test(p)) return json(CARDS);
+    if (/^\/study\/decks\/\d+\/stats$/.test(p)) return json(STATS2);
+    return json({});
+  });
+  await page.goto("/login");
+  await page.evaluate((t) => {
+    localStorage.setItem("estalo_token", t);
+    localStorage.setItem("estalo_ultimo_usuario", JSON.stringify({ id: 1, email: "estudante@estalo.dev" }));
+  }, tokenFalso());
+  return chamadas;
+}
+
+test.describe("Rede lenta — IA antes do estudo", () => {
+  test("com a rede lenta, a auto-cura do quiz nem é tentada", async ({ page }) => {
+    const chamadas = await abrirDeckComCardSemQuiz(page);
+    await page.goto("/?folder=2");
+    const linha = page.locator(".lista-deck").first();
+    await expect(linha).toBeVisible({ timeout: 15000 });
+    await linha.getByTitle(/Baixar deck/).click();
+    await expect(linha.getByTitle(/Disponível offline/)).toBeVisible();
+    await linha.locator(".lista-info").click();
+    await expect(page.locator(".item-card").first()).toBeVisible({ timeout: 15000 });
+
+    // A rede fica lenta AQUI: a leitura dos cards vai estourar o prazo e
+    // ser servida da cópia; a IA, que demoraria 25s, não pode nem entrar.
+    await ficarLenta(page, 25000);
+    const inicio = Date.now();
+    await page.getByRole("button", { name: /Aprender|Estudar hoje|Estudar críticos/ }).click();
+    await expect(page.locator(".quiz-opcao").first()).toBeVisible({ timeout: 8000 });
+    expect((Date.now() - inicio) / 1000).toBeLessThan(6);
+    expect(chamadas.enrich, "a IA não pode ser chamada com a rede lenta").toBe(0);
+    // A sessão começou só com o card que tinha quiz.
+    await expect(page.locator(".quiz-progresso-contador")).toContainText(/de 1\b/);
+  });
+
+  test("com a rede boa mas a IA demorando, a sessão começa mesmo assim", async ({ page }) => {
+    // 40s de IA: sem prazo, "Preparando seu material…" ficava lá até o
+    // servidor desistir. O prazo é 20s; a sessão começa com o que tem quiz.
+    test.setTimeout(60000);
+    const chamadas = await abrirDeckComCardSemQuiz(page, { atrasoIaMs: 40000 });
+    await page.goto("/?folder=2");
+    await expect(page.locator(".lista-deck .lista-info").first()).toBeVisible({ timeout: 15000 });
+    await page.locator(".lista-deck .lista-info").first().click();
+    await expect(page.locator(".item-card").first()).toBeVisible({ timeout: 15000 });
+
+    const inicio = Date.now();
+    await page.getByRole("button", { name: /Aprender|Estudar hoje|Estudar críticos/ }).click();
+    await expect(page.locator(".quiz-opcao").first()).toBeVisible({ timeout: 30000 });
+    const esperou = (Date.now() - inicio) / 1000;
+    expect(esperou).toBeGreaterThan(15); // tentou de verdade...
+    expect(esperou).toBeLessThan(26);    // ...mas não esperou os 40s
+    expect(chamadas.enrich, "tentou a IA de verdade").toBeGreaterThanOrEqual(1); // 2 em dev: StrictMode monta duas vezes
+    // E IA lenta não é rede lenta: nada de faixa.
+    await expect(faixa(page)).toHaveCount(0);
+  });
+});
