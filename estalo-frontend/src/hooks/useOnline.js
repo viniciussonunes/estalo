@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from "react";
-import { assinar, estaOnline } from "../conexao.js";
+import { assinar, estaOnline, estadoConexao } from "../conexao.js";
 
 /**
  * true enquanto dá pra falar com o servidor.
@@ -12,8 +12,14 @@ import { assinar, estaOnline } from "../conexao.js";
  * Isso muda pra melhor os ~14 botões que dependem deste hook (Tutor,
  * "Gerar com IA", renomear, excluir…): eles passam a ficar indisponíveis
  * também quando existe rede mas o servidor não responde -- que é
- * exatamente quando clicar neles daria erro.
+ * exatamente quando clicar neles daria erro. Rede LENTA demais conta como
+ * indisponível também (ver "lenta" em conexao.js).
  */
 export default function useOnline() {
   return useSyncExternalStore(assinar, estaOnline, () => true);
+}
+
+/** "ok" | "lenta" | "fora" -- só a faixa precisa da diferença. */
+export function useConexao() {
+  return useSyncExternalStore(assinar, estadoConexao, () => "ok");
 }

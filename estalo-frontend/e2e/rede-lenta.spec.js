@@ -11,9 +11,17 @@
  * mesmo assim -- com o "Continuar" da Fila Única aparecendo depois, quando
  * a sincronização terminar por trás.
  *
+ * E as LEITURAS: com a cópia baixada, abrir o deck e começar a estudar
+ * levava os mesmos 25s (a cópia só entrava quando o fetch REJEITAVA, e
+ * numa rede lenta ele não rejeita, fica pendurado). Agora leitura com
+ * cópia local tem prazo (3s): passou, serve a cópia e a faixa vira
+ * "Conexão lenta". Sem cópia, continua esperando -- um erro aos 3s seria
+ * pior do que os cards chegarem aos 25s.
+ *
  * Não depende do backend: a API é simulada aqui.
  */
 import { test, expect } from "@playwright/test";
+import { abrirLogado } from "./auditoria-layout.js";
 
 const CAMINHOS_API = /^\/(auth|folders|decks|cards|study)(\/|$)/;
 const PASTA = { id: 2, name: "MD-102", parent_id: null, depth: 1, color: null };
@@ -104,5 +112,81 @@ test.describe("Rede lenta", () => {
     // ...e, quando confirmou, o que sobrou aparece sem a pessoa fazer nada.
     await expect(page.locator(".sessao-restante")).toHaveText(/Ainda tem 1 card vencido/, { timeout: 10000 });
     await expect(page.locator(".sessao-acoes .botao-principal")).toHaveText("Continuar · 1 restante");
+  });
+});
+
+/**
+ * Rede que não cai, só demora: toda chamada de API leva `atrasoMs`.
+ * `ref.atraso` pode ser mudado no meio do teste (0 = rede boa de novo).
+ */
+async function ficarLenta(page, atrasoMs) {
+  const ref = { atraso: atrasoMs };
+  await page.route("**/*", async (route) => {
+    const req = route.request();
+    const p = new URL(req.url()).pathname;
+    if (!["xhr", "fetch"].includes(req.resourceType()) || !CAMINHOS_API.test(p)) return route.continue();
+    if (ref.atraso > 0) await new Promise(r => setTimeout(r, ref.atraso));
+    return route.fallback(); // cai no mock de auditoria-layout, registrado antes
+  });
+  return ref;
+}
+
+const faixa = (page) => page.locator(".offline-banner");
+
+test.describe("Rede lenta — leituras", () => {
+  test("deck baixado abre da cópia local em segundos, e a faixa diz por quê", async ({ page }) => {
+    await abrirLogado(page, "/?folder=2");
+    const linha = page.locator(".lista-deck").filter({ hasText: "Autopilot" });
+    await expect(linha).toBeVisible({ timeout: 15000 });
+    await linha.getByTitle(/Baixar deck/).click();
+    await expect(linha.getByTitle(/Disponível offline/)).toBeVisible();
+
+    await ficarLenta(page, 20000);
+    const inicio = Date.now();
+    await linha.locator(".lista-info").click();
+    await expect(page.locator(".item-card").first()).toBeVisible({ timeout: 8000 });
+    const abriu = (Date.now() - inicio) / 1000;
+    expect(abriu, `abrir o deck baixado levou ${abriu.toFixed(1)}s`).toBeLessThan(6);
+
+    await expect(faixa(page)).toHaveText(/Conexão lenta/);
+    // Rede lenta conta como indisponível pro que precisa dela: mesmo
+    // tratamento do offline, em vez de clicar e esperar 20s.
+    await expect(page.getByRole("button", { name: "Outros modos" })).toBeVisible();
+
+    // E começar a estudar também não espera o servidor.
+    const t2 = Date.now();
+    await page.getByRole("button", { name: /Aprender|Estudar hoje|Estudar críticos/ }).click();
+    await expect(page.locator(".quiz-opcao").first()).toBeVisible({ timeout: 8000 });
+    expect((Date.now() - t2) / 1000).toBeLessThan(6);
+  });
+
+  test("sem cópia baixada, continua esperando em vez de dar erro", async ({ page }) => {
+    // Um erro aos 3s seria pior que os cards chegarem aos 5s.
+    await abrirLogado(page, "/?folder=2");
+    const linha = page.locator(".lista-deck").filter({ hasText: "Autopilot" });
+    await expect(linha).toBeVisible({ timeout: 15000 });
+
+    await ficarLenta(page, 5000);
+    await linha.locator(".lista-info").click();
+    await expect(page.locator(".item-card").first()).toBeVisible({ timeout: 15000 });
+    await expect(page.locator(".erro")).toHaveCount(0);
+  });
+
+  test("quando a rede volta a responder rápido, a faixa some sozinha", async ({ page }) => {
+    await abrirLogado(page, "/?folder=2");
+    const linha = page.locator(".lista-deck").filter({ hasText: "Autopilot" });
+    await expect(linha).toBeVisible({ timeout: 15000 });
+    await linha.getByTitle(/Baixar deck/).click();
+    await expect(linha.getByTitle(/Disponível offline/)).toBeVisible();
+
+    const rede = await ficarLenta(page, 20000);
+    await linha.locator(".lista-info").click();
+    await expect(faixa(page)).toHaveText(/Conexão lenta/, { timeout: 8000 });
+
+    rede.atraso = 0;
+    await page.getByRole("button", { name: "← Voltar" }).click();
+    await expect(page.locator(".lista-deck").first()).toBeVisible({ timeout: 15000 });
+    // Nenhum evento do navegador: a leitura que respondeu no prazo é a prova.
+    await expect(faixa(page)).toHaveCount(0);
   });
 });

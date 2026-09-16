@@ -1,5 +1,5 @@
 import { createPortal } from "react-dom";
-import useOnline from "../hooks/useOnline.js";
+import { useConexao } from "../hooks/useOnline.js";
 
 // Faixa fixa que aparece só enquanto não dá pra falar com o servidor.
 //
@@ -15,13 +15,13 @@ import useOnline from "../hooks/useOnline.js";
 // (ver useOnline nas telas de estudo/criação). O selo de "offline" dentro
 // da sessão (SeloOffline.jsx) cobre o "estou respondendo sem conexão".
 export default function OfflineBanner() {
-  const online = useOnline();
-  if (online) return null;
+  const conexao = useConexao();
+  if (conexao === "ok") return null;
 
   return createPortal(
     <div className="offline-banner" role="status" aria-live="polite">
       <span className="offline-banner-ponto" aria-hidden="true" />
-      Sem conexão · Modo offline
+      {conexao === "lenta" ? "Conexão lenta · Usando sua cópia baixada" : "Sem conexão · Modo offline"}
     </div>,
     document.body,
   );

@@ -3,7 +3,7 @@
 // Toda conversa com a API passa por aqui. Isso centraliza duas coisas chatas
 // que senão você repetiria em toda tela: o endereço base e o crachá (token).
 
-import { marcarOk, marcarQueda } from "./conexao.js";
+import { marcarLenta, marcarQueda, registrarResposta } from "./conexao.js";
 
 const BASE = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
@@ -31,9 +31,20 @@ export class QuotaExceededException extends Error {
 // própria pra quem chama poder decidir re-tentar (ver comRetry em
 // Aprender.jsx): erro de rede é transitório, erro de negócio (4xx) não.
 export class NetworkException extends Error {
-  constructor() {
-    super("Sem conexão com o servidor.");
+  constructor(message = "Sem conexão com o servidor.") {
+    super(message);
     this.name = "NetworkException";
+  }
+}
+
+// Uma leitura passou do prazo e foi abortada (só acontece quando existe
+// cópia local pra servir no lugar -- ver _comQuedaParaOffline). Subclasse
+// de NetworkException de propósito: pra quem trata "caiu", rede lenta
+// demais é a mesma coisa.
+export class ConexaoLentaException extends NetworkException {
+  constructor() {
+    super("Conexão lenta demais com o servidor.");
+    this.name = "ConexaoLentaException";
   }
 }
 
@@ -66,7 +77,7 @@ export const token = {
 };
 
 // Função base: monta a requisição, anexa o crachá e trata erro.
-async function request(path, { method = "GET", body, form, headers: extra } = {}) {
+async function request(path, { method = "GET", body, form, headers: extra, prazoMs } = {}) {
   const headers = { "X-User-Timezone": FUSO_HORARIO, ...extra };
   const t = token.get();
   if (t) headers["Authorization"] = `Bearer ${t}`;
@@ -81,13 +92,25 @@ async function request(path, { method = "GET", body, form, headers: extra } = {}
     payload = JSON.stringify(body);
   }
 
+  // prazoMs: quem chama só o usa quando tem uma alternativa pra servir no
+  // lugar (a cópia local) -- sem alternativa, esperar é a resposta honesta.
+  const controle = prazoMs ? new AbortController() : null;
+  const cronometro = controle ? setTimeout(() => controle.abort(), prazoMs) : null;
+  const inicio = Date.now();
   let resp;
   try {
-    resp = await fetch(`${BASE}${path}`, { method, headers, body: payload });
+    resp = await fetch(`${BASE}${path}`, { method, headers, body: payload, signal: controle?.signal });
     // Respondeu: existe servidor do outro lado. Tira a faixa de offline
-    // se ela estiver na tela.
-    marcarOk();
+    // se ela estiver na tela -- ou põe a de "lenta", se demorou demais.
+    // Só leituras julgam a demora (ver conexao.js).
+    registrarResposta(Date.now() - inicio, method === "GET");
   } catch (falhaDeRede) {
+    if (controle?.signal.aborted) {
+      // Passou do prazo. Não é queda: o servidor pode até responder daqui
+      // a 20s, mas quem estuda não vai esperar pra descobrir.
+      marcarLenta();
+      throw new ConexaoLentaException();
+    }
     // fetch só lança aqui por falha de REDE de verdade (servidor
     // inalcançável, sem internet) -- nunca por causa de um status de erro
     // HTTP normal (isso vira resp.ok=false abaixo, sempre tratado por quem
@@ -106,6 +129,8 @@ async function request(path, { method = "GET", body, form, headers: extra } = {}
     // de Cards.jsx/CriarDeck.jsx no lugar do "Failed to fetch" do navegador)
     // e tipo identificável pra quem quiser tratar diferente.
     throw new NetworkException();
+  } finally {
+    if (cronometro) clearTimeout(cronometro);
   }
 
   if (!resp.ok) {
@@ -130,19 +155,29 @@ async function request(path, { method = "GET", body, form, headers: extra } = {}
  * Tenta a rede; se cair por falta de conexão, usa a cópia offline (só
  * existe pros decks que o usuário baixou de propósito, ver offlineDecks.js).
  *
+ * E se a rede só DEMORAR: com cópia local disponível, a leitura tem prazo
+ * (PRAZO_COM_COPIA_MS) -- passou, aborta e serve a cópia, silencioso. Sem
+ * cópia, não há prazo: esperar é a única resposta honesta, e um erro aos
+ * 3s seria pior que os cards chegarem aos 25s. A rede continua sendo
+ * tentada primeiro em toda leitura, então a volta ao normal é automática:
+ * a primeira que responde no prazo já desliga a faixa de "lenta".
+ *
  * Fica AQUI, e não em cada tela, pra Aprender/Cards não precisarem saber
  * que existe modo offline -- elas continuam só pedindo os cards.
  *
  * O import é dinâmico de propósito: offlineDecks.js importa `api` deste
  * mesmo arquivo, e um import estático nos dois sentidos criaria um ciclo.
  */
-async function _comQuedaParaOffline(promessa, lerLocal) {
+const PRAZO_COM_COPIA_MS = 3000;
+
+async function _comQuedaParaOffline(caminho, lerLocal) {
+  const local = await lerLocal();
+  const temCopia = local !== null && local !== undefined;
   try {
-    return await promessa;
+    return await request(caminho, temCopia ? { prazoMs: PRAZO_COM_COPIA_MS } : {});
   } catch (e) {
     if (!(e instanceof NetworkException)) throw e;
-    const local = await lerLocal();
-    if (local !== null && local !== undefined) return local;
+    if (temCopia) return local;
     throw e; // não baixado: o erro de rede segue sendo a resposta honesta
   }
 }
@@ -181,7 +216,7 @@ export const api = {
   // (mesma hierarquia, mesma trilha, decks nas pastas certas), em vez de
   // virar uma lista chapada. Ver "Retrato da conta" em offlineDecks.js.
   listarPastas: () => _comQuedaParaOffline(
-    request("/folders"),
+    "/folders",
     async () => (await import("./offlineDecks.js")).pastasOffline(),
   ),
 
@@ -194,7 +229,7 @@ export const api = {
   excluirPasta: (id) => request(`/folders/${id}`, { method: "DELETE" }),
 
   listarDecks: () => _comQuedaParaOffline(
-    request("/decks"),
+    "/decks",
     async () => (await import("./offlineDecks.js")).decksOffline(),
   ),
 
@@ -243,17 +278,17 @@ export const api = {
     }),
 
   statsEstudo: (deckId) => _comQuedaParaOffline(
-    request(`/study/decks/${deckId}/stats`),
+    `/study/decks/${deckId}/stats`,
     async () => (await import("./offlineDecks.js")).statsOffline(deckId),
   ),
 
   heatmapStats: () => _comQuedaParaOffline(
-    request("/study/heatmap-stats"),
+    "/study/heatmap-stats",
     async () => (await import("./offlineDecks.js")).heatmapOffline(),
   ),
 
   streak: () => _comQuedaParaOffline(
-    request("/study/streak"),
+    "/study/streak",
     async () => (await import("./offlineDecks.js")).streakOffline(),
   ),
 
@@ -303,13 +338,13 @@ export const api = {
   statsMultiplos: (deckIds) => {
     if (deckIds.length === 0) return Promise.resolve({});
     return _comQuedaParaOffline(
-      request(`/study/decks/stats?ids=${deckIds.join(",")}`),
+      `/study/decks/stats?ids=${deckIds.join(",")}`,
       async () => (await import("./offlineDecks.js")).statsOfflineTodos(),
     );
   },
 
   listarCards: (deckId) => _comQuedaParaOffline(
-    request(`/decks/${deckId}/cards`),
+    `/decks/${deckId}/cards`,
     async () => (await import("./offlineDecks.js")).cardsOffline(deckId),
   ),
 
