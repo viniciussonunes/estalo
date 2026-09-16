@@ -595,7 +595,15 @@ export default function Aprender({ deck, aoVoltar, modoGlobal = false, folderId 
     // navegador não deixou gravar em disco (janela anônima, armazenamento
     // cheio), então a resposta só existe em memória e não sobrevive a
     // fechar o app.
-    const sync = await sincronizar();
+    //
+    // A espera aqui é LIMITADA (ver ESPERA_MAXIMA_SALVANDO_MS): a fila já
+    // garante a entrega, então segurar a tela de resultado até o servidor
+    // responder não protege nada -- só trava quem estuda. Medido numa rede
+    // de 25s por chamada: "Salvando…" por 50s, com o progresso já a salvo
+    // no aparelho. Passou o limite, libera a tela e a sincronização segue
+    // em segundo plano (useOutboxSync retenta sozinho se ela nem terminar).
+    const promessaSync = sincronizar();
+    await Promise.race([promessaSync, _esperar(ESPERA_MAXIMA_SALVANDO_MS)]);
     if (semDisco > 0 && contar() > 0) {
       mostrarToast(
         "Este navegador não está deixando guardar seu progresso. Se fechar o app " +
@@ -631,8 +639,14 @@ export default function Aprender({ deck, aoVoltar, modoGlobal = false, folderId 
     // sai daqui é o mesmo "15+" que a Home mostra, e o lote já vem pronto
     // pra começar na hora se a pessoa clicar em Continuar. Sem rede, fica
     // em null e a tela não promete nada.
-    if (modoGlobal && sync.restantes === 0) {
-      _buscarCards().then(setProximoLote).catch(() => setProximoLote(null));
+    //
+    // Pendurado na promessa, não no `sync` da corrida acima: se a
+    // sincronização passou do limite de espera, o "Continuar" aparece
+    // quando ela terminar -- a tela de resultado ainda está lá.
+    if (modoGlobal) {
+      promessaSync.then(s => {
+        if (s.restantes === 0) _buscarCards().then(setProximoLote).catch(() => setProximoLote(null));
+      });
     }
   }
 
@@ -1140,6 +1154,13 @@ export default function Aprender({ deck, aoVoltar, modoGlobal = false, folderId 
     </div>
   );
 }
+
+// Quanto a tela de resultado espera pela sincronização antes de liberar
+// os botões. Numa rede normal, 15 respostas em série levam ~2-3s -- e o
+// "Continuar" da Fila Única depende delas terem chegado, então vale
+// esperar esse tanto. Acima disso é rede ruim, e aí a fila cuida.
+const ESPERA_MAXIMA_SALVANDO_MS = 3000;
+const _esperar = (ms) => new Promise(r => setTimeout(r, ms));
 
 // O lote tem teto de 15: quando vêm 15, pode haver mais -- o mesmo "15+"
 // que a Home usa (rotuloPendentes em Dashboard.jsx), pra nunca mostrar
