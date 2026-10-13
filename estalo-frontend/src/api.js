@@ -144,8 +144,13 @@ async function request(path, { method = "GET", body, form, headers: extra, prazo
     } catch {
       /* resposta sem corpo JSON */
     }
-    if (resp.status === 429) throw new QuotaExceededException(detalhe);
-    throw new Error(detalhe);
+    // O status viaja junto do erro: sem ele, quem trata não consegue
+    // separar "o servidor nunca vai aceitar isto" (404, 422) de "tente de
+    // novo mais tarde" (401, 5xx) -- e a fila de respostas jogava fora as
+    // duas coisas igual (ver outbox.js).
+    const erro = resp.status === 429 ? new QuotaExceededException(detalhe) : new Error(detalhe);
+    erro.status = resp.status;
+    throw erro;
   }
 
   // 204 = sucesso sem conteúdo (ex: exclusão). Não tenta ler JSON.

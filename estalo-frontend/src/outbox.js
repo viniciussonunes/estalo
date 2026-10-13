@@ -96,6 +96,28 @@ export function enfileirar({ cardId, quality, ignorarElegibilidade = false }) {
  *
  * Devolve { enviadas, descartadas, restantes }.
  */
+/**
+ * O servidor recusou agora, mas aceitaria depois?
+ *
+ * Esta distinção é o que separa "adiar" de "perder o estudo da pessoa". A
+ * fila descartava QUALQUER resposta não-rede, e isso incluía:
+ *
+ *   401/403 -- o token expirou, ou a senha foi trocada em outro aparelho
+ *              (token_version). A resposta continua válida; falta crachá.
+ *              Era o caso mais cruel: estudou offline, voltou, perdeu.
+ *   5xx     -- o servidor tropeçou. Tentar de novo resolve.
+ *   429     -- excesso de chamadas: é literalmente "tente mais tarde".
+ *
+ * O resto (404 card apagado, 422 payload inválido) nunca vai passar --
+ * mantê-lo travaria a fila pra sempre, então é descartado mesmo.
+ *
+ * Sem `status` (erro que não veio de uma resposta HTTP) é tratado como
+ * definitivo, igual a antes.
+ */
+function _vaiPassarDepois(status) {
+  return status === 401 || status === 403 || status === 429 || (status >= 500 && status <= 599);
+}
+
 export async function sincronizar() {
   if (sincronizando) return { enviadas: 0, descartadas: 0, restantes: contar() };
   const uid = token.usuarioId();
@@ -123,6 +145,14 @@ export async function sincronizar() {
         enviadas++;
       } catch (e) {
         if (e instanceof NetworkException) break; // conexão caiu: para e guarda o resto
+        if (_vaiPassarDepois(e.status)) {
+          // A resposta é válida; o que falta é outra coisa (crachá novo,
+          // servidor de pé). Guarda e para -- as próximas da fila baterão
+          // no mesmo muro, e reenviar é seguro: o X-Request-ID torna o
+          // reenvio idempotente no backend.
+          console.warn(`[outbox] adiando ${minhas.length - enviadas} resposta(s): servidor respondeu ${e.status}`);
+          break;
+        }
         console.error("[outbox] descartando resposta que o servidor recusou:", e.message);
         concluidas.add(entrada.id);
         descartadas++;
