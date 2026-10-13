@@ -16,6 +16,10 @@
  * a chamada idempotente no backend); 404/422 continuam sendo descartados,
  * porque nunca vão passar e travariam a fila pra sempre.
  *
+ * O 401 tem um segundo efeito, de outra camada: ele encerra a sessão (ver
+ * sessao-expirada.spec.js). Então a fila fica guardada esperando o próximo
+ * login -- quem destrava o 401 é logar de novo, não tentar de novo.
+ *
  * Não depende do backend: a API é simulada aqui.
  */
 import { test, expect } from "@playwright/test";
@@ -75,15 +79,21 @@ test.describe("Fila de respostas de estudo", () => {
     await page.waitForTimeout(1200);
 
     expect(await tamanhoDaFila(page), "as respostas precisam continuar guardadas").toBe(2);
-    await expect(page.locator(".toast-global")).toHaveCount(0); // nada se perdeu: nada a anunciar
     // Para na primeira recusa em vez de martelar a fila inteira.
     expect(servidor.tentativas).toBe(1);
+    // O 401 também encerra a sessão (ver sessao-expirada.spec.js): a fila
+    // fica esperando o próximo login, e é o login que a destrava.
+    await expect(page).toHaveURL(/\/login/, { timeout: 10000 });
+    expect(await tamanhoDaFila(page), "deslogar não pode levar o estudo junto").toBe(2);
   });
 
-  test("e sobem sozinhas quando o crachá volta a valer", async ({ page }) => {
-    const servidor = await abrirComFilaPendente(page, 401);
+  test("servidor fora do ar (500): adia e sobe sozinha quando ele volta", async ({ page }) => {
+    // Diferente do 401, aqui a sessão continua válida -- é o servidor que
+    // tropeçou. Nada se perde e nada precisa de login novo.
+    const servidor = await abrirComFilaPendente(page, 500);
     await page.waitForTimeout(1200);
     expect(await tamanhoDaFila(page)).toBe(2);
+    await expect(page.locator(".toast-global")).toHaveCount(0); // nada se perdeu: nada a anunciar
 
     servidor.statusDoAnswer = 200;
     // Mesmo gatilho que o app usa quando a aba volta ao foco.
@@ -94,13 +104,6 @@ test.describe("Fila de respostas de estudo", () => {
     expect(servidor.recebidas.map(r => r.respondido_em)).toEqual([
       "2026-10-13T10:00:00.000Z", "2026-10-13T10:01:00.000Z",
     ]);
-  });
-
-  test("servidor fora do ar (500) também adia, não descarta", async ({ page }) => {
-    await abrirComFilaPendente(page, 500);
-    await page.waitForTimeout(1200);
-    expect(await tamanhoDaFila(page)).toBe(2);
-    await expect(page.locator(".toast-global")).toHaveCount(0);
   });
 
   test("card apagado (404) é descartado, senão travaria a fila pra sempre", async ({ page }) => {

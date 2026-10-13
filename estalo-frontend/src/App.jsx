@@ -1,6 +1,8 @@
 import { useState, useEffect } from "react";
 import { Routes, Route, Navigate, useNavigate, useLocation, useParams } from "react-router-dom";
 import { api, token, NetworkException } from "./api.js";
+import { assinarFimDeSessao } from "./sessao.js";
+import { useToast } from "./hooks/ToastContext.jsx";
 import Auth from "./pages/Auth.jsx";
 import Dashboard from "./pages/Dashboard.jsx";
 import Cards from "./pages/Cards.jsx";
@@ -27,6 +29,7 @@ function _usuarioLembrado() {
 }
 
 function useAuth() {
+  const mostrarToast = useToast();
   const [usuario, setUsuario] = useState(null);
   const [carregando, setCarregando] = useState(true);
 
@@ -35,7 +38,13 @@ function useAuth() {
     // Com identidade lembrada, esta chamada tem prazo: o app não fica
     // parado atrás dela quando a rede está lenta (ver api.eu).
     api.eu({ temCopiaLocal: !!_usuarioLembrado() })
-      .then(u => setUsuario(_lembrarUsuario(u)))
+      .then(u => {
+        // Se a sessão foi encerrada enquanto esta chamada voava (um 401 de
+        // outra request -- a fila de respostas sincroniza junto com o boot),
+        // não ressuscite: sem esta guarda o app voltava a mostrar o usuário
+        // logado com o token já apagado, e toda ação falhava em silêncio.
+        if (token.get()) setUsuario(_lembrarUsuario(u));
+      })
       .catch(err => {
         // Distinguir os dois motivos importa MUITO pro modo offline:
         //
@@ -64,6 +73,17 @@ function useAuth() {
     try { localStorage.removeItem(CHAVE_USUARIO); } catch { /* ignora */ }
     setUsuario(null);
   }
+
+  // Sessão derrubada no meio do caminho (token expirado, ou senha trocada
+  // em outro aparelho). Sem isto o app seguia desenhando dados velhos e
+  // falhando em toda ação, sem dizer por quê. Avisa e manda pro login --
+  // as respostas de estudo que ainda não subiram continuam guardadas e
+  // sobem no próximo login (ver outbox.js).
+  useEffect(() => assinarFimDeSessao(() => {
+    if (!token.get()) return; // já tratado por outra request da mesma leva
+    sair();
+    mostrarToast("Sua sessão expirou. Entre de novo para continuar.", "erro");
+  }), [mostrarToast]);
 
   return { usuario, setUsuario, sair, carregando };
 }

@@ -4,6 +4,7 @@
 // que senão você repetiria em toda tela: o endereço base e o crachá (token).
 
 import { marcarLenta, marcarQueda, registrarResposta } from "./conexao.js";
+import { marcarSessaoExpirada } from "./sessao.js";
 
 const BASE = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
@@ -144,6 +145,13 @@ async function request(path, { method = "GET", body, form, headers: extra, prazo
     } catch {
       /* resposta sem corpo JSON */
     }
+    // 401 numa request que LEVOU crachá = o crachá não vale mais (expirou,
+    // ou a troca de senha em outro aparelho derrubou as sessões antigas).
+    // Não é erro daquela tela: é o fim da sessão, e quem desenha precisa
+    // saber (ver sessao.js). O login fica de fora porque o 401 dele quer
+    // dizer outra coisa -- "email ou senha incorretos".
+    if (resp.status === 401 && t && path !== "/auth/login") marcarSessaoExpirada();
+
     // O status viaja junto do erro: sem ele, quem trata não consegue
     // separar "o servidor nunca vai aceitar isto" (404, 422) de "tente de
     // novo mais tarde" (401, 5xx) -- e a fila de respostas jogava fora as
