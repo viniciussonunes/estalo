@@ -906,6 +906,19 @@ body {
 .erro-feedback-motivo-botoes { display: flex; gap: 0.5rem; align-items: center; margin-top: 0.6rem; }
 
 /* ---------- Modal de limite de cota (QuotaLimitModal) ---------- */
+/* Lista servida da cópia baixada (ver veioDaCopia em Cards.jsx). Tom de
+   informação, não de erro: não há nada errado acontecendo. */
+.aviso-copia-local {
+  margin: 0 0 0.75rem;
+  padding: 0.55rem 0.8rem;
+  border-radius: var(--raio);
+  background: var(--papel);
+  border: 1px solid var(--borda);
+  font-size: 0.84rem;
+  line-height: 1.45;
+  color: var(--tinta-suave);
+}
+
 /* ---------- Modos de estudo (Cards.jsx, "Outros modos") ---------- */
 .modal-modos { max-width: 440px; }
 .modos-lista { display: flex; flex-direction: column; gap: 0.5rem; }

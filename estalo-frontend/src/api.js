@@ -185,14 +185,26 @@ async function request(path, { method = "GET", body, form, headers: extra, prazo
  */
 const PRAZO_COM_COPIA_MS = 3000;
 
-async function _comQuedaParaOffline(caminho, lerLocal) {
+async function _comQuedaParaOffline(caminho, lerLocal, { exigirRede = false, aoServirCopia } = {}) {
+  // exigirRede: a cópia local não serve pra esta chamada. É o caso de
+  // BAIXAR/atualizar um deck -- cair na cópia ali significaria gravar o
+  // que já estava guardado e dizer que atualizou. Sem fallback e sem
+  // prazo: a espera é o preço honesto de uma ação que o usuário pediu.
+  if (exigirRede) return request(caminho);
+
   const local = await lerLocal();
   const temCopia = local !== null && local !== undefined;
   try {
     return await request(caminho, temCopia ? { prazoMs: PRAZO_COM_COPIA_MS } : {});
   } catch (e) {
     if (!(e instanceof NetworkException)) throw e;
-    if (temCopia) return local;
+    if (temCopia) {
+      // Quem pediu pode querer dizer na tela que o que está vendo é a
+      // cópia (ver Cards.jsx) -- em vez de o app afirmar isso por dedução,
+      // que erraria quando a lista tivesse chegado fresca antes da rede cair.
+      aoServirCopia?.();
+      return local;
+    }
     throw e; // não baixado: o erro de rede segue sendo a resposta honesta
   }
 }
@@ -299,9 +311,10 @@ export const api = {
       headers: requestId ? { "X-Request-ID": requestId } : undefined,
     }),
 
-  statsEstudo: (deckId) => _comQuedaParaOffline(
+  statsEstudo: (deckId, opcoes) => _comQuedaParaOffline(
     `/study/decks/${deckId}/stats`,
     async () => (await import("./offlineDecks.js")).statsOffline(deckId),
+    opcoes,
   ),
 
   heatmapStats: () => _comQuedaParaOffline(
@@ -370,9 +383,10 @@ export const api = {
     );
   },
 
-  listarCards: (deckId) => _comQuedaParaOffline(
+  listarCards: (deckId, opcoes) => _comQuedaParaOffline(
     `/decks/${deckId}/cards`,
     async () => (await import("./offlineDecks.js")).cardsOffline(deckId),
+    opcoes,
   ),
 
   criarCard: (deckId, front, back) =>

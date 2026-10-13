@@ -324,3 +324,38 @@ test.describe("Rede lenta — abrir o app", () => {
     expect(await page.evaluate(() => localStorage.getItem("estalo_token"))).toBeNull();
   });
 });
+
+test.describe("Rede lenta — a cópia se apresenta como cópia", () => {
+  test("a lista servida de dentro de casa diz que é cópia", async ({ page }) => {
+    // Achado da varredura: card criado em outro aparelho não aparecia e a
+    // única pista era a faixa de conexão, lá embaixo. Agora a própria
+    // lista diz o que está acontecendo com ELA.
+    test.setTimeout(90000);
+    await abrirLogado(page, "/?folder=2");
+    const linha = page.locator(".lista-deck").first();
+    await expect(linha).toBeVisible({ timeout: 15000 });
+    await linha.getByTitle(/Baixar deck/).click();
+    await expect(linha.getByTitle(/Disponível offline/)).toBeVisible();
+
+    await ficarLenta(page, 25000);
+    await linha.locator(".lista-info").click();
+    await expect(page.locator(".item-card").first()).toBeVisible({ timeout: 8000 });
+    await expect(page.locator(".aviso-copia-local")).toBeVisible();
+  });
+
+  test("lista que chegou fresca NÃO se diz cópia", async ({ page }) => {
+    // A marca vem de quem serviu os dados, não de dedução pelo estado da
+    // conexão: se a rede piorar depois, a lista na tela continua sendo a
+    // do servidor, e dizer "é cópia" seria mentira.
+    await abrirLogado(page, "/?folder=2");
+    const linha = page.locator(".lista-deck").first();
+    await expect(linha).toBeVisible({ timeout: 15000 });
+    await linha.getByTitle(/Baixar deck/).click();
+    await expect(linha.getByTitle(/Disponível offline/)).toBeVisible();
+
+    await linha.locator(".lista-info").click();
+    await expect(page.locator(".item-card").first()).toBeVisible({ timeout: 15000 });
+    await expect(page.locator(".aviso-copia-local")).toHaveCount(0);
+  });
+
+});

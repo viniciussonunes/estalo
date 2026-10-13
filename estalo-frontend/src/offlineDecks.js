@@ -78,9 +78,16 @@ export async function baixarDeck(deck) {
   const uid = token.usuarioId();
   if (!uid) throw new Error("Sem usuário logado.");
 
+  // exigirRede: baixar é a ação que EXISTE pra trazer da rede; cair na
+  // cópia local aqui significaria regravar o que já estava guardado e
+  // carimbar "baixado agora" numa cópia velha. Hoje a UI não deixa isso
+  // acontecer (os botões de baixar ficam desabilitados quando a conexão
+  // não está ok), mas a invariante é desta função, não da tela: basta a
+  // conexão degradar DEPOIS do clique pra leitura cair no prazo de 3s e
+  // servir a própria cópia (ver _comQuedaParaOffline).
   const [cards, stats] = await Promise.all([
-    api.listarCards(deck.id),
-    api.statsEstudo(deck.id).catch(() => null), // stats é enfeite: se falhar, o deck ainda serve pra estudar
+    api.listarCards(deck.id, { exigirRede: true }),
+    api.statsEstudo(deck.id, { exigirRede: true }).catch(() => null), // stats é enfeite: se falhar, o deck ainda serve pra estudar
   ]);
 
   const cache = await caches.open(CACHE_DADOS);

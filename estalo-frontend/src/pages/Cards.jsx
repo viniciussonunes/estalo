@@ -49,6 +49,11 @@ export default function Cards({ deck, aoVoltar, aoEstudar, aoAprender, aoRevelar
   const [gerando, setGerando] = useState(false);
   const [erroIA, setErroIA]   = useState("");
   const [modosAberto, setModosAberto] = useState(false);
+  // true quando ESTA lista veio da cópia baixada, não do servidor. Marcado
+  // pela própria api.js (ver aoServirCopia) em vez de deduzido do estado da
+  // conexão: a conexão pode cair depois de a lista ter chegado fresca, e aí
+  // dizer "é cópia" seria mentira.
+  const [veioDaCopia, setVeioDaCopia] = useState(false);
   const [msgIA, setMsgIA]     = useState(MSGS_IA[0]);
   const msgIAIdx              = useRef(0);
 
@@ -62,9 +67,10 @@ export default function Cards({ deck, aoVoltar, aoEstudar, aoAprender, aoRevelar
 
   const carregarCards = useCallback(async () => {
     setErro("");
+    setVeioDaCopia(false);
     try {
       const [listaCards, dadosStats] = await Promise.all([
-        api.listarCards(deck.id),
+        api.listarCards(deck.id, { aoServirCopia: () => setVeioDaCopia(true) }),
         api.statsEstudo(deck.id),
       ]);
       setCards(listaCards);
@@ -298,6 +304,15 @@ export default function Cards({ deck, aoVoltar, aoEstudar, aoAprender, aoRevelar
               </div>
             )}
           </div>
+        )}
+
+        {/* A lista é de dentro de casa: pode não ter o que foi criado em
+            outro aparelho. A faixa de conexão explica o contexto; esta
+            linha diz o que isso significa PARA ESTA LISTA. */}
+        {veioDaCopia && (
+          <p className="aviso-copia-local">
+            Lista da sua cópia baixada — o que você criou em outro aparelho pode não aparecer aqui.
+          </p>
         )}
 
         {/* Topo da lista */}
