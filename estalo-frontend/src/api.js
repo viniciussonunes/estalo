@@ -193,7 +193,14 @@ export const api = {
   login: (email, password) =>
     request("/auth/login", { method: "POST", form: { username: email, password } }),
 
-  eu: () => request("/auth/me"),
+  // `temCopiaLocal`: existe uma identidade lembrada no aparelho pra desenhar
+  // a tela se esta chamada demorar (ver useAuth em App.jsx). Só então ela
+  // ganha prazo -- mesma regra das leituras com cópia (ver
+  // _comQuedaParaOffline). É o que impede o app inteiro de ficar parado
+  // atrás do /auth/me numa rede lenta: medido em 25,8s até a Home aparecer,
+  // com tudo já baixado, enquanto o mesmo app OFFLINE abria em 0,4s.
+  eu: ({ temCopiaLocal = false } = {}) =>
+    request("/auth/me", temCopiaLocal ? { prazoMs: PRAZO_COM_COPIA_MS } : {}),
 
   // Quanto de IA esta conta já usou hoje. Antes disso o usuário só
   // descobria o limite batendo nele (ver QuotaLimitModal).

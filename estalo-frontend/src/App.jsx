@@ -32,17 +32,21 @@ function useAuth() {
 
   useEffect(() => {
     if (!token.get()) { setCarregando(false); return; }
-    api.eu()
+    // Com identidade lembrada, esta chamada tem prazo: o app não fica
+    // parado atrás dela quando a rede está lenta (ver api.eu).
+    api.eu({ temCopiaLocal: !!_usuarioLembrado() })
       .then(u => setUsuario(_lembrarUsuario(u)))
       .catch(err => {
         // Distinguir os dois motivos importa MUITO pro modo offline:
         //
-        //  - Falha de REDE: o token provavelmente continua válido, só não
-        //    dá pra confirmar agora. Limpar aqui (o que o código fazia
-        //    antes, pra qualquer erro) jogava o usuário na tela de login
-        //    justamente quando ele não tem como logar -- beco sem saída.
-        //    Então segue logado com a última identidade conhecida; a
-        //    primeira request de verdade que voltar 401 é que decide.
+        //  - Falha de REDE (queda, ou rede lenta demais -- a lenta chega
+        //    aqui como ConexaoLentaException, subclasse de NetworkException):
+        //    o token provavelmente continua válido, só não dá pra confirmar
+        //    agora. Limpar aqui (o que o código fazia antes, pra qualquer
+        //    erro) jogava o usuário na tela de login justamente quando ele
+        //    não tem como logar -- beco sem saída. Então segue logado com a
+        //    última identidade conhecida; a primeira request de verdade que
+        //    voltar 401 é que decide.
         //  - Qualquer outro erro (401/403 = token inválido ou expirado):
         //    aí sim é deslogar pra valer.
         if (err instanceof NetworkException) {

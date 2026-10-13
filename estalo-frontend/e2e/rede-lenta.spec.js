@@ -277,3 +277,50 @@ test.describe("Rede lenta — IA antes do estudo", () => {
     await expect(faixa(page)).toHaveCount(0);
   });
 });
+
+test.describe("Rede lenta — abrir o app", () => {
+  test("com a identidade já lembrada, a Home aparece em segundos", async ({ page }) => {
+    // O defeito que a varredura achou: /auth/me é a primeira chamada do
+    // app e não tinha prazo, então TUDO ficava parado atrás dela em
+    // "Carregando…". Medido antes: 25,8s até a Home, com retrato e deck já
+    // baixados -- enquanto o mesmo app totalmente OFFLINE abria em 0,4s.
+    test.setTimeout(90000);
+    await abrirLogado(page, "/");
+    await expect(page.locator(".pasta-card, .lista-pasta").first()).toBeVisible({ timeout: 15000 });
+
+    await ficarLenta(page, 25000);
+    const inicio = Date.now();
+    await page.goto("/");
+    await expect(page.locator(".pasta-card, .lista-pasta").first()).toBeVisible({ timeout: 30000 });
+    const abriu = (Date.now() - inicio) / 1000;
+    expect(abriu, `abrir o app levou ${abriu.toFixed(1)}s`).toBeLessThan(8);
+    await expect(faixa(page)).toHaveText(/Conexão lenta/);
+  });
+
+  test("sem identidade lembrada, continua esperando em vez de fingir que logou", async ({ page }) => {
+    // Primeiro acesso neste aparelho: não há nada local pra desenhar, e
+    // entrar "logado" sem saber quem é seria pior que esperar.
+    await abrirLogado(page, "/");
+    await expect(page.locator(".pasta-card, .lista-pasta").first()).toBeVisible({ timeout: 15000 });
+    await page.evaluate(() => localStorage.removeItem("estalo_ultimo_usuario"));
+
+    await ficarLenta(page, 4000);
+    await page.goto("/");
+    await expect(page.locator(".tela-centro")).toBeVisible();
+    await expect(page.locator(".pasta-card, .lista-pasta").first()).toBeVisible({ timeout: 20000 });
+  });
+
+  test("token recusado continua derrubando a sessão", async ({ page }) => {
+    // O prazo não pode virar desculpa pra ignorar um 401: token inválido
+    // ainda tem que cair no login.
+    await abrirLogado(page, "/");
+    await expect(page.locator(".pasta-card, .lista-pasta").first()).toBeVisible({ timeout: 15000 });
+
+    await page.route(/\/auth\/me$/, route => route.fulfill({
+      status: 401, contentType: "application/json", body: JSON.stringify({ detail: "Not authenticated" }),
+    }));
+    await page.goto("/");
+    await expect(page).toHaveURL(/\/login/);
+    expect(await page.evaluate(() => localStorage.getItem("estalo_token"))).toBeNull();
+  });
+});
