@@ -173,7 +173,7 @@ async function request(path, { method = "GET", body, form, headers: extra, prazo
  * E se a rede só DEMORAR: com cópia local disponível, a leitura tem prazo
  * (PRAZO_COM_COPIA_MS) -- passou, aborta e serve a cópia, silencioso. Sem
  * cópia, não há prazo: esperar é a única resposta honesta, e um erro aos
- * 3s seria pior que os cards chegarem aos 25s. A rede continua sendo
+ * 4s seria pior que os cards chegarem aos 25s. A rede continua sendo
  * tentada primeiro em toda leitura, então a volta ao normal é automática:
  * a primeira que responde no prazo já desliga a faixa de "lenta".
  *
@@ -183,7 +183,12 @@ async function request(path, { method = "GET", body, form, headers: extra, prazo
  * O import é dinâmico de propósito: offlineDecks.js importa `api` deste
  * mesmo arquivo, e um import estático nos dois sentidos criaria um ciclo.
  */
-const PRAZO_COM_COPIA_MS = 3000;
+// 4s, não 3: com 3s o cold start da função na Vercel (a primeira chamada
+// do dia, com a função dormindo) chegava a estourar o prazo numa rede
+// perfeitamente boa, e a faixa de "Conexão lenta" piscava à toa logo na
+// abertura. O teto do que se quer evitar continua intacto -- o problema
+// real eram 25s de tela parada, não 4.
+const PRAZO_COM_COPIA_MS = 4000;
 
 async function _comQuedaParaOffline(caminho, lerLocal, { exigirRede = false, aoServirCopia } = {}) {
   // exigirRede: a cópia local não serve pra esta chamada. É o caso de
