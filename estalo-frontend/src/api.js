@@ -209,6 +209,30 @@ async function _comQuedaParaOffline(caminho, lerLocal, { exigirRede = false, aoS
   }
 }
 
+/**
+ * Garante que o que chegou é uma LISTA.
+ *
+ * Por que existe: as telas fazem `.map`/`.length` direto no que a API
+ * devolve, e um corpo fora do formato (um `{}` de um proxy, uma página de
+ * erro de CDN, um endpoint que mudou) virava `undefined.map is not a
+ * function` NO RENDER -- fora de qualquer try/catch, direto no
+ * ErrorBoundary da raiz: o app inteiro sumia e dava "Algo deu errado".
+ * Reproduzido numa varredura, tanto no Revelar quanto no Dashboard.
+ *
+ * Virando erro AQUI, o estrago fica do tamanho certo: a tela que pediu
+ * mostra sua mensagem de erro, com o resto do app de pé -- e o Sentry
+ * continua vendo, porque é um erro de verdade.
+ */
+async function _lista(promessa, oQue) {
+  const dados = await promessa;
+  if (!Array.isArray(dados)) {
+    const erro = new Error(`O servidor respondeu ${oQue} num formato inesperado.`);
+    erro.formatoInesperado = true;
+    throw erro;
+  }
+  return dados;
+}
+
 // --- Funções específicas que as telas usam ---
 
 export const api = {
@@ -249,10 +273,10 @@ export const api = {
   // quando não há rede -- é o que faz a tela offline ser IGUAL à online
   // (mesma hierarquia, mesma trilha, decks nas pastas certas), em vez de
   // virar uma lista chapada. Ver "Retrato da conta" em offlineDecks.js.
-  listarPastas: () => _comQuedaParaOffline(
+  listarPastas: () => _lista(_comQuedaParaOffline(
     "/folders",
     async () => (await import("./offlineDecks.js")).pastasOffline(),
-  ),
+  ), "a lista de pastas"),
 
   criarPasta: (name, parent_id = null, color = null) =>
     request("/folders", { method: "POST", body: { name, parent_id, color } }),
@@ -262,10 +286,10 @@ export const api = {
 
   excluirPasta: (id) => request(`/folders/${id}`, { method: "DELETE" }),
 
-  listarDecks: () => _comQuedaParaOffline(
+  listarDecks: () => _lista(_comQuedaParaOffline(
     "/decks",
     async () => (await import("./offlineDecks.js")).decksOffline(),
-  ),
+  ), "a lista de decks"),
 
   criarDeck: (title, description = null, folder_id = null) =>
     request("/decks", { method: "POST", body: { title, description, folder_id } }),
@@ -289,7 +313,7 @@ export const api = {
   // folderId opcional escopa a mesma fila pra uma pasta + subpastas
   // ("Estudar Pasta") em vez de todos os decks do usuário.
   proximaRevisaoGlobal: (folderId) =>
-    request(folderId ? `/study/global-reviews?folder_id=${folderId}` : "/study/global-reviews"),
+    _lista(request(folderId ? `/study/global-reviews?folder_id=${folderId}` : "/study/global-reviews"), "a fila de revisão"),
 
   // requestId (UUID) opcional -> header X-Request-ID: o backend guarda em
   // ReviewHistory.request_id e, numa segunda chamada com o MESMO id,
@@ -383,11 +407,11 @@ export const api = {
     );
   },
 
-  listarCards: (deckId, opcoes) => _comQuedaParaOffline(
+  listarCards: (deckId, opcoes) => _lista(_comQuedaParaOffline(
     `/decks/${deckId}/cards`,
     async () => (await import("./offlineDecks.js")).cardsOffline(deckId),
     opcoes,
-  ),
+  ), "a lista de cards"),
 
   criarCard: (deckId, front, back) =>
     request(`/decks/${deckId}/cards`, { method: "POST", body: { front, back } }),
@@ -395,17 +419,17 @@ export const api = {
   excluirCard: (cardId) => request(`/cards/${cardId}`, { method: "DELETE" }),
 
   gerarCardsIA: (deckId, text, quantity) =>
-    request(`/decks/${deckId}/cards/generate`, { method: "POST", body: { text, quantity } }),
+    _lista(request(`/decks/${deckId}/cards/generate`, { method: "POST", body: { text, quantity } }), "os cards gerados"),
 
   gerarQuiz: (deckId) =>
-    request(`/study/decks/${deckId}/quiz`, { method: "POST" }),
+    _lista(request(`/study/decks/${deckId}/quiz`, { method: "POST" }), "o quiz"),
 
   gerarRevelar: (deckId) =>
-    request(`/study/decks/${deckId}/reveal`, { method: "POST" }),
+    _lista(request(`/study/decks/${deckId}/reveal`, { method: "POST" }), "as explicações"),
 
   // Painel /admin: gestão de cota de IA por usuário. Backend exige estar
   // em ADMIN_EMAILS (403 pra qualquer outro logado) -- ver AdminPage.jsx.
-  adminListarUsuarios: () => request("/admin/users"),
+  adminListarUsuarios: () => _lista(request("/admin/users"), "a lista de usuários"),
 
   adminAtualizarLimite: (userId, dailyLimit) =>
     request(`/admin/users/${userId}/limit`, {
