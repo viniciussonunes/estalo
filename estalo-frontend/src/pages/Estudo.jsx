@@ -66,6 +66,10 @@ export default function Estudo({ deck, aoVoltar }) {
   const [analisando, setAnalisando] = useState(false);
   const [erroAnalise, setErroAnalise] = useState("");
   const [feedback, setFeedback] = useState(null); // { explanation, tipo_erro, gap_cognitivo }
+  // SessaoConcluida do backend quando a fila acaba: { motivo, revisoes_hoje,
+  // limite_diario }. Guardado inteiro porque o texto da tela final depende
+  // dele (ver abaixo).
+  const [fimDeSessao, setFimDeSessao] = useState(null);
   const online = useOnline();
 
   const carregarProximo = useCallback(async () => {
@@ -82,7 +86,13 @@ export default function Estudo({ deck, aoVoltar }) {
       // O backend nunca devolve null de verdade — sempre um objeto truthy
       // (StudyCard ou SessaoConcluida). motivo só existe em SessaoConcluida,
       // por isso é o jeito certo de detectar "fila vazia".
+      //
+      // E o motivo IMPORTA: "sem_cards" é ter terminado, "limite_diario" é
+      // ter batido no teto de revisões do dia neste deck -- duas coisas
+      // diferentes que a tela mostrava igual, dizendo "tudo revisado" pra
+      // quem ainda tinha card vencido esperando.
       setCard(proximo?.motivo ? null : proximo);
+      setFimDeSessao(proximo?.motivo ? proximo : null);
       setStats(novasStats);
     } catch (err) {
       setErro(err.message);
@@ -150,15 +160,20 @@ export default function Estudo({ deck, aoVoltar }) {
 
   // Sessão concluída
   if (card === null) {
+    const bateuNoLimite = fimDeSessao?.motivo === "limite_diario";
     return (
       <div className="pagina">
         <CabecalhoEstudo deck={deck} stats={stats} aoVoltar={aoVoltar} />
         <main className="conteudo estudo-centro">
           <div className="estudo-concluido">
-            <div className="estudo-concluido-icone">✓</div>
-            <h2 className="estudo-concluido-titulo">Tudo revisado por hoje!</h2>
+            <div className="estudo-concluido-icone">{bateuNoLimite ? "⏸" : "✓"}</div>
+            <h2 className="estudo-concluido-titulo">
+              {bateuNoLimite ? "Limite de hoje atingido" : "Tudo revisado por hoje!"}
+            </h2>
             <p className="estudo-concluido-sub">
-              Volte amanhã para a próxima rodada.
+              {bateuNoLimite
+                ? `Você revisou ${fimDeSessao.revisoes_hoje} cards deste deck hoje, o máximo de uma vez. Ainda há cards esperando — eles continuam aí amanhã.`
+                : "Volte amanhã para a próxima rodada."}
             </p>
             <button className="botao-principal estudo-concluido-botao" onClick={aoVoltar}>
               Voltar ao painel

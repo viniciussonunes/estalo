@@ -342,6 +342,10 @@ export default function Dashboard({ usuario, aoVerCards, aoEstudar, aoCriarDeck,
     try { return localStorage.getItem("dashboard_view_mode") === "list" ? "list" : "grid"; }
     catch { return "grid"; }
   });
+  // Tamanho do lote da Revisão Geral, escolhido pela pessoa (ver "Cards
+  // por sessão" em /conta). O cartão herói mostra "N+" usando ESTE número:
+  // dizer "15+" pra quem configurou 30 seria mentir sobre a sessão.
+  const cardsPorSessao = usuario?.cards_por_sessao ?? 15;
   const [busca, setBusca] = useState("");
   const [ordenacao, setOrdenacao] = useState("A-Z"); // "A-Z" | "Z-A" | "recentes"
   const inputRef = useRef(null);
@@ -639,7 +643,7 @@ export default function Dashboard({ usuario, aoVerCards, aoEstudar, aoCriarDeck,
         <div className="hero-revisao-faixa">
           <div className="hero-revisao-container">
             <HeroRevisaoGlobal total={totalPendentes} aoEstudarTudo={aoEstudarTudo}
-              desconhecido={pendentesDesconhecidos} />
+              porSessao={cardsPorSessao} desconhecido={pendentesDesconhecidos} />
           </div>
         </div>
       )}
@@ -651,6 +655,7 @@ export default function Dashboard({ usuario, aoVerCards, aoEstudar, aoCriarDeck,
               total={totalPendentesPastaAtiva}
               aoEstudarTudo={() => aoEstudarPasta(pastaAtiva.id, pastaAtiva.name)}
               pasta={pastaAtiva}
+              porSessao={cardsPorSessao}
               desconhecido={pendentesDesconhecidos}
             />
           </div>
@@ -1384,13 +1389,16 @@ const HEATMAP_NIVEIS = [
   { bg: "var(--verde)",    title: "Muita atividade" },
 ];
 
-// Teto de 15 no que é exibido — o mesmo limite do lote que
-// /study/global-reviews entrega por vez. Sem isso, um usuário com um
+// Teto no que é exibido — o mesmo limite do lote que
+// /study/global-reviews entrega por vez, agora escolhido pelo usuário
+// (ver "Cards por sessão" em /conta). Sem isso, um usuário com um
 // backlog de centenas de cards veria um número gigante e ansiogênico
-// logo ao abrir a Home; "15+" comunica "tem bastante" sem seres um
-// contador de vergonha.
-function rotuloPendentes(total) {
-  return total > 15 ? "15+" : String(total);
+// logo ao abrir a Home; "15+" comunica "tem bastante" sem ser um
+// contador de vergonha. O número TEM que acompanhar a preferência:
+// mostrar "15+" pra quem configurou 30 seria mentir sobre o que a
+// sessão vai servir.
+function rotuloPendentes(total, porSessao) {
+  return total > porSessao ? `${porSessao}+` : String(total);
 }
 
 /** Card Herói — Fila Única de Revisão. Sem `pasta`, é a versão global da
@@ -1441,7 +1449,7 @@ function PrimeiroUso({ online, aoCriarDeck, aoCriarPasta }) {
   );
 }
 
-function HeroRevisaoGlobal({ total, aoEstudarTudo, pasta = null, desconhecido = false }) {
+function HeroRevisaoGlobal({ total, aoEstudarTudo, pasta = null, porSessao = 15, desconhecido = false }) {
   // Não sabemos: nem comemora, nem inventa número. Só nomeia o estado --
   // a faixa de "sem conexão" (quando é o caso) já explica o porquê.
   if (desconhecido) {
@@ -1472,7 +1480,7 @@ function HeroRevisaoGlobal({ total, aoEstudarTudo, pasta = null, desconhecido = 
       </div>
     );
   }
-  const rotulo = rotuloPendentes(total);
+  const rotulo = rotuloPendentes(total, porSessao);
   return (
     <div className="hero-revisao">
       <span className="hero-revisao-icone"><IconePilha /></span>

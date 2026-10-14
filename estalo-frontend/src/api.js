@@ -260,6 +260,11 @@ export const api = {
   // descobria o limite batendo nele (ver QuotaLimitModal).
   minhaCota: () => request("/auth/me/quota"),
 
+  // Devolve o UserOut inteiro (mesmo corpo do /auth/me), pra quem chamou
+  // atualizar a identidade de uma vez só.
+  salvarPreferencias: (cardsPorSessao) =>
+    request("/auth/me/preferencias", { method: "PATCH", body: { cards_por_sessao: cardsPorSessao } }),
+
   //
   // Guarda o crachá novo que o backend devolve, e isso NÃO é detalhe:
   // trocar a senha derruba todos os tokens da geração anterior -- o desta

@@ -18,7 +18,7 @@ import { listarBaixados, removerDeck } from "../offlineDecks.js";
  * como saber em qual conta você estava. Quem tem conta pessoal e de estudo
  * descobria pelo conteúdo -- ou não descobria.
  */
-export default function Conta({ usuario, aoVoltar, aoSair, aoAbrirAdmin }) {
+export default function Conta({ usuario, aoVoltar, aoSair, aoAbrirAdmin, aoAtualizarUsuario }) {
   const [trocandoSenha, setTrocandoSenha] = useState(false);
   const mostrarToast = useToast();
   const online = useOnline();
@@ -45,6 +45,8 @@ export default function Conta({ usuario, aoVoltar, aoSair, aoAbrirAdmin }) {
             )}
           </div>
         </section>
+
+        <CardsPorSessao usuario={usuario} aoAtualizarUsuario={aoAtualizarUsuario} />
 
         <CotaDeIA />
 
@@ -125,6 +127,77 @@ function textoDesde(criadoEm) {
   if (Number.isNaN(data.getTime())) return "";
   const quando = data.toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
   return `No Estalo desde ${quando}`;
+}
+
+/** Tamanho do lote da Revisão Geral.
+ *
+ * Era 15 fixo no código. Não é um teto de quanto dá pra estudar (desde o
+ * "Continuar · N restantes", o lote seguinte vem a um clique) -- é o
+ * tamanho de uma sentada, e isso varia por pessoa e por rotina.
+ *
+ * Mora na CONTA, não no aparelho: é preferência de estudo, não de tela.
+ * Quem ajusta no celular espera o mesmo número ao abrir no notebook.
+ */
+function CardsPorSessao({ usuario, aoAtualizarUsuario }) {
+  const MIN = 5;
+  const MAX = 50;
+  const atual = usuario?.cards_por_sessao ?? 15;
+  const [valor, setValor] = useState(String(atual));
+  const [salvando, setSalvando] = useState(false);
+  const online = useOnline();
+  const mostrarToast = useToast();
+
+  const numero = Number(valor);
+  const valido = Number.isInteger(numero) && numero >= MIN && numero <= MAX;
+  const mudou = valido && numero !== atual;
+
+  async function salvar() {
+    if (!mudou || salvando) return;
+    setSalvando(true);
+    try {
+      aoAtualizarUsuario?.(await api.salvarPreferencias(numero));
+      mostrarToast(`Revisão Geral agora serve ${numero} cards por vez.`, "sucesso");
+    } catch (err) {
+      mostrarToast(err.message);
+      setValor(String(atual)); // não deixa a tela afirmar um número que não foi salvo
+    } finally {
+      setSalvando(false);
+    }
+  }
+
+  return (
+    <section className="conta-bloco conta-estudo">
+      <div className="conta-acao-texto">
+        <span className="conta-acao-titulo">Cards por sessão</span>
+        <span className="conta-acao-sub">
+          Quantos cards a Revisão Geral serve de uma vez. Quando acabam, dá pra continuar com os próximos — isto é o tamanho de cada rodada, não um limite de estudo.
+        </span>
+      </div>
+      <div className="conta-estudo-campo">
+        <input
+          type="number" inputMode="numeric" min={MIN} max={MAX}
+          value={valor}
+          onChange={e => setValor(e.target.value)}
+          onKeyDown={e => { if (e.key === "Enter") salvar(); }}
+          disabled={!online || salvando}
+          aria-label="Cards por sessão"
+        />
+        <button className="botao-principal" onClick={salvar}
+          disabled={!mudou || !online || salvando}
+          title={online ? undefined : "Precisa de internet — disponível quando a conexão voltar"}>
+          {salvando ? "Salvando…" : "Salvar"}
+        </button>
+      </div>
+      {!valido && valor !== "" && (
+        <p className="conta-estudo-nota erro">Escolha um número de {MIN} a {MAX}.</p>
+      )}
+      {valido && numero >= 30 && (
+        <p className="conta-estudo-nota">
+          Sessões longas puxam mais da sua cota de IA quando os cards ainda não têm quiz pronto.
+        </p>
+      )}
+    </section>
+  );
 }
 
 /**

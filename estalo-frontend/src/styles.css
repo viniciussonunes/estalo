@@ -906,6 +906,23 @@ body {
 .erro-feedback-motivo-botoes { display: flex; gap: 0.5rem; align-items: center; margin-top: 0.6rem; }
 
 /* ---------- Modal de limite de cota (QuotaLimitModal) ---------- */
+/* ---------- Preferência de estudo (/conta) ---------- */
+.conta-estudo { display: flex; flex-direction: column; gap: 0.7rem; }
+.conta-estudo-campo { display: flex; gap: 0.5rem; align-items: center; }
+.conta-estudo-campo input {
+  width: 5.5rem;
+  padding: 0.5rem 0.6rem;
+  border: 1.5px solid var(--borda);
+  border-radius: var(--raio);
+  background: var(--superficie);
+  color: var(--tinta);
+  font: inherit;
+  font-size: 1rem;
+}
+.conta-estudo-campo input:focus-visible { outline: 2px solid var(--violeta); outline-offset: 1px; }
+.conta-estudo-nota { margin: 0; font-size: 0.82rem; line-height: 1.45; color: var(--tinta-suave); }
+.conta-estudo-nota.erro { color: var(--perigo); }
+
 /* Lista servida da cópia baixada (ver veioDaCopia em Cards.jsx). Tom de
    informação, não de erro: não há nada errado acontecendo. */
 .aviso-copia-local {

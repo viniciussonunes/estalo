@@ -155,7 +155,7 @@ function EstudoPage() {
   return <Estudo deck={deck} aoVoltar={() => navigate(`/deck/${deck.id}`, { state: { deck } })} />;
 }
 
-function RevisaoGlobalPage() {
+function RevisaoGlobalPage({ cardsPorSessao }) {
   const navigate = useNavigate();
   const location = useLocation();
   const folderId = location.state?.folderId ?? null;
@@ -163,6 +163,7 @@ function RevisaoGlobalPage() {
   return (
     <Aprender
       modoGlobal
+      cardsPorSessao={cardsPorSessao}
       folderId={folderId}
       folderName={folderName}
       // Volta pra dentro da mesma pasta (se veio de uma) em vez de sempre
@@ -201,9 +202,10 @@ function AdminPage() {
   return <Admin aoVoltar={() => navigate("/")} />;
 }
 
-function ContaPage({ usuario, sair }) {
+function ContaPage({ usuario, setUsuario, sair }) {
   const navigate = useNavigate();
   return <Conta usuario={usuario} aoVoltar={() => navigate("/")} aoSair={sair}
+    aoAtualizarUsuario={u => setUsuario(_lembrarUsuario(u))}
     aoAbrirAdmin={() => navigate("/admin")} />;
 }
 
@@ -239,7 +241,7 @@ export default function App() {
       } />
 
       <Route path="/revisao-global" element={
-        <RequireAuth usuario={usuario}><RevisaoGlobalPage /></RequireAuth>
+        <RequireAuth usuario={usuario}><RevisaoGlobalPage cardsPorSessao={usuario?.cards_por_sessao ?? 15} /></RequireAuth>
       } />
 
       <Route path="/deck/:id/aprender" element={
@@ -251,7 +253,7 @@ export default function App() {
       } />
 
       <Route path="/conta" element={
-        <RequireAuth usuario={usuario}><ContaPage usuario={usuario} sair={sair} /></RequireAuth>
+        <RequireAuth usuario={usuario}><ContaPage usuario={usuario} setUsuario={setUsuario} sair={sair} /></RequireAuth>
       } />
 
       <Route path="/admin" element={

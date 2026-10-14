@@ -80,7 +80,7 @@ function montarFila(cards) {
     });
 }
 
-export default function Aprender({ deck, aoVoltar, modoGlobal = false, folderId = null, folderName = null, aoEstudoClassico }) {
+export default function Aprender({ deck, aoVoltar, modoGlobal = false, folderId = null, folderName = null, aoEstudoClassico, cardsPorSessao = 15 }) {
   // Na Fila Única não existe "o" deck — usa uma chave fixa própria pro
   // snapshot de F5, isolada de qualquer sessão por-deck real (ids de deck
   // são sempre numéricos, nunca colidem com essa string). Escopada por
@@ -928,7 +928,7 @@ export default function Aprender({ deck, aoVoltar, modoGlobal = false, folderId 
               <p className="sessao-proximo sessao-restante">
                 {proximoLote.length === 0
                   ? (folderName ? "Você zerou a revisão de hoje nesta pasta." : "Você zerou a revisão de hoje.")
-                  : `Ainda ${proximoLote.length === 1 ? "tem 1 card vencido" : `tem ${rotuloRestante(proximoLote.length)} cards vencidos`} esperando. Dá pra continuar agora ou deixar pra depois.`}
+                  : `Ainda ${proximoLote.length === 1 ? "tem 1 card vencido" : `tem ${rotuloRestante(proximoLote.length, cardsPorSessao)} cards vencidos`} esperando. Dá pra continuar agora ou deixar pra depois.`}
               </p>
             )}
 
@@ -940,7 +940,7 @@ export default function Aprender({ deck, aoVoltar, modoGlobal = false, folderId 
                 <>
                   <button className="botao-principal estudo-concluido-botao"
                     onClick={continuarProximoLote} disabled={salvando}>
-                    Continuar · {rotuloRestante(proximoLote.length)} restante{proximoLote.length !== 1 ? "s" : ""}
+                    Continuar · {rotuloRestante(proximoLote.length, cardsPorSessao)} restante{proximoLote.length !== 1 ? "s" : ""}
                   </button>
                   <button className="botao-texto" onClick={sair} disabled={salvando}>
                     Voltar à Home
@@ -1171,11 +1171,12 @@ const ESPERA_MAXIMA_SALVANDO_MS = 3000;
 const PRAZO_AUTOCURA_MS = 20000;
 const _esperar = (ms) => new Promise(r => setTimeout(r, ms));
 
-// O lote tem teto de 15: quando vêm 15, pode haver mais -- o mesmo "15+"
-// que a Home usa (rotuloPendentes em Dashboard.jsx), pra nunca mostrar
-// aqui um número que a Home contradiga.
-function rotuloRestante(n) {
-  return n >= 15 ? "15+" : String(n);
+// O lote tem o teto que a pessoa escolheu (ver "Cards por sessão" em
+// /conta): quando vêm todos, pode haver mais -- o mesmo "N+" que a Home
+// usa (rotuloPendentes em Dashboard.jsx), pra nunca mostrar aqui um
+// número que a Home contradiga.
+function rotuloRestante(n, porSessao) {
+  return n >= porSessao ? `${porSessao}+` : String(n);
 }
 
 function formatarTempo(seg) {
