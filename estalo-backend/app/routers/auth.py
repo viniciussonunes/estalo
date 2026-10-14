@@ -16,7 +16,7 @@ from app.core.security import create_access_token, hash_password, verify_passwor
 from app.dependencies import eh_admin, get_current_user
 from app.models import User
 from app.schemas.token import Token
-from app.schemas.user import PasswordChange, QuotaOut, UserCreate, UserOut
+from app.schemas.user import PasswordChange, PreferenciasEstudo, QuotaOut, UserCreate, UserOut
 from app.services import email_policy, login_throttle, password_policy, quota_service
 
 router = APIRouter(prefix="/auth", tags=["Autenticação"])
@@ -121,6 +121,40 @@ def quem_sou_eu(user: User = Depends(get_current_user)):
         email=user.email,
         created_at=user.created_at,
         is_admin=eh_admin(user),
+        cards_por_sessao=user.cards_por_sessao,
+    )
+
+
+@router.patch("/me/preferencias", response_model=UserOut)
+def atualizar_preferencias(
+    dados: PreferenciasEstudo,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Preferências de estudo da conta.
+
+    Hoje só o tamanho do lote da Revisão Geral. Mora na CONTA e não no
+    aparelho de propósito: é preferência de estudo, não de tela -- quem
+    ajusta no celular espera o mesmo número ao abrir no notebook. (A
+    Revisão Geral é uma consulta ao servidor, então guardar isso local
+    também não daria nenhum ganho offline.)
+
+    A faixa aceita (5-50) é validada pelo schema; o teto existe porque a
+    Revisão Geral monta a resposta inteira numa request e a auto-cura do
+    quiz processa 20 cards por chamada de IA (ver models/user.py).
+
+    Devolve o UserOut inteiro, e não só o campo: é o mesmo corpo do
+    /auth/me, então a interface atualiza a identidade de uma vez só.
+    """
+    user.cards_por_sessao = dados.cards_por_sessao
+    db.commit()
+    db.refresh(user)
+    return UserOut(
+        id=user.id,
+        email=user.email,
+        created_at=user.created_at,
+        is_admin=eh_admin(user),
+        cards_por_sessao=user.cards_por_sessao,
     )
 
 

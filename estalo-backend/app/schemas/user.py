@@ -6,7 +6,13 @@ Isso é de propósito: a senha nunca volta pro mundo, nem embaralhada.
 """
 from datetime import datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+
+from app.models.user import (
+    CARDS_POR_SESSAO_MAX,
+    CARDS_POR_SESSAO_MIN,
+    CARDS_POR_SESSAO_PADRAO,
+)
 
 
 class UserCreate(BaseModel):
@@ -54,6 +60,18 @@ class UserOut(BaseModel):
     # Default False porque o /auth/register devolve este mesmo schema e
     # ninguém nasce admin.
     is_admin: bool = False
+    # Quantos cards a Revisão Geral serve por vez. Vem junto do /auth/me
+    # pra a interface já saber o número sem uma segunda chamada -- é ele
+    # que o cartão da Home usa pra dizer "15+" (ver rotuloPendentes).
+    cards_por_sessao: int = CARDS_POR_SESSAO_PADRAO
 
     # Permite o Pydantic ler direto de um objeto do banco (o model User).
     model_config = {"from_attributes": True}
+
+
+class PreferenciasEstudo(BaseModel):
+    """Corpo do PATCH /auth/me/preferencias."""
+    cards_por_sessao: int = Field(
+        ge=CARDS_POR_SESSAO_MIN, le=CARDS_POR_SESSAO_MAX,
+        description=f"Cards por sessão da Revisão Geral ({CARDS_POR_SESSAO_MIN}-{CARDS_POR_SESSAO_MAX})",
+    )

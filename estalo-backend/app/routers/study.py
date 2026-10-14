@@ -9,7 +9,8 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.dependencies import get_current_user_id, get_user_timezone
-from app.models import Card, Deck, Folder, Review
+from app.models import Card, Deck, Folder, Review, User
+from app.models.user import CARDS_POR_SESSAO_PADRAO
 from app.models.explanation_cache import ExplanationCache
 from app.models.review_history import ReviewHistory
 from app.models.study_session import StudySession
@@ -196,6 +197,18 @@ def proximo_card(
     )
 
 
+def _cards_por_sessao(user_id: int, db: Session) -> int:
+    """Tamanho do lote da Revisão Geral, escolhido pelo usuário.
+
+    Lê o escalar em vez de carregar o User inteiro -- esta consulta roda
+    junto da query pesada da fila, e o resto da linha não serve pra nada
+    aqui. Sem usuário (não deveria acontecer: a dependência de auth já
+    barrou), cai no padrão.
+    """
+    valor = db.query(User.cards_por_sessao).filter(User.id == user_id).scalar()
+    return valor or CARDS_POR_SESSAO_PADRAO
+
+
 @router.get("/global-reviews", response_model=list[GlobalReviewCard])
 def revisao_global(
     folder_id: int | None = Query(
@@ -227,8 +240,10 @@ def revisao_global(
     fuso do usuário, convertida pra UTC naive (mesmo padrão já usado em
     proximo_card() pro início do dia).
 
-    Devolve até 15 de uma vez (não é mais 1-por-chamada como o /next): o
-    Modo Aprender consome lote, não fila stateless. Cada item já inclui
+    Devolve um LOTE de uma vez (não é 1-por-chamada como o /next): o
+    Modo Aprender consome lote, não fila stateless. O tamanho é escolhido
+    pelo usuário (User.cards_por_sessao, padrão 15, faixa 5-50 -- ver
+    PATCH /auth/me/preferencias); era fixo em 15 no código. Cada item já inclui
     options/explanation crus do Card — o mesmo contrato de CardOut que
     montarFila() no frontend já sabe montar em pergunta de múltipla
     escolha; cards sem esses dois campos pré-gerados são descartados lá,
@@ -272,7 +287,7 @@ def revisao_global(
             Deck.title.asc(),
             Review.due_date.asc(),
         )
-        .limit(15)
+        .limit(_cards_por_sessao(user_id, db))
         .all()
     )
 

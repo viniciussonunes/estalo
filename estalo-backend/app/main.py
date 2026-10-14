@@ -92,6 +92,12 @@ def _migrar():
             conn.execute(text(
                 "ALTER TABLE users ADD COLUMN token_version INTEGER NOT NULL DEFAULT 1"
             ))
+        # DEFAULT 15 = o tamanho de lote que a Revisão Geral sempre teve
+        # fixo no código: quem já usava o app não percebe mudança nenhuma.
+        if "cards_por_sessao" not in colunas_usuarios:
+            conn.execute(text(
+                "ALTER TABLE users ADD COLUMN cards_por_sessao INTEGER NOT NULL DEFAULT 15"
+            ))
 
         # Backfill do content_hash pra cards que ainda não têm — SHA-256
         # não é nativo nem em SQLite nem em Postgres sem extensão, então

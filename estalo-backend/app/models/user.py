@@ -11,6 +11,14 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
 
+# Faixa aceita pra `cards_por_sessao`. O teto não é estético: a Revisão
+# Geral monta a resposta inteira numa request (tempo e tamanho crescem
+# junto) e a auto-cura do quiz no Modo Aprender processa 20 cards por
+# chamada de IA -- 50 cards sem quiz já são 3 chamadas da cota diária.
+CARDS_POR_SESSAO_MIN = 5
+CARDS_POR_SESSAO_MAX = 50
+CARDS_POR_SESSAO_PADRAO = 15
+
 
 class User(Base):
     __tablename__ = "users"
@@ -33,6 +41,12 @@ class User(Base):
     # Começa em 1 pra que token ANTIGO (sem o campo `ver`) continue
     # valendo: ausente é lido como 1. Ver security.py e dependencies.py.
     token_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
+    # Quantos cards a Revisão Geral serve por vez (ver CARDS_POR_SESSAO_*
+    # abaixo). Preferência de ESTUDO, não de aparelho: quem ajusta no
+    # celular espera o mesmo número no notebook, então mora na conta.
+    cards_por_sessao: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=15, server_default="15",
+    )
 
     # Um usuário tem várias pastas, decks e reviews.
     folders: Mapped[list["Folder"]] = relationship(back_populates="owner")
