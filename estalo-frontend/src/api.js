@@ -78,7 +78,7 @@ export const token = {
 };
 
 // Função base: monta a requisição, anexa o crachá e trata erro.
-async function request(path, { method = "GET", body, form, headers: extra, prazoMs } = {}) {
+async function request(path, { method = "GET", body, form, headers: extra, prazoMs, binario = false } = {}) {
   const headers = { "X-User-Timezone": FUSO_HORARIO, ...extra };
   const t = token.get();
   if (t) headers["Authorization"] = `Bearer ${t}`;
@@ -163,6 +163,13 @@ async function request(path, { method = "GET", body, form, headers: extra, prazo
 
   // 204 = sucesso sem conteúdo (ex: exclusão). Não tenta ler JSON.
   if (resp.status === 204) return null;
+
+  // binario: o áudio do podcast volta como PCM cru, não JSON -- base64
+  // dentro de um JSON inflaria em um terço e estouraria o limite de corpo
+  // de resposta da função serverless (ver app/routers/audio.py). Os
+  // cabeçalhos vêm junto porque a taxa de amostragem viaja num deles.
+  if (binario) return { bytes: await resp.arrayBuffer(), cabecalhos: resp.headers };
+
   return resp.json();
 }
 
@@ -262,6 +269,20 @@ export const api = {
 
   // Devolve o UserOut inteiro (mesmo corpo do /auth/me), pra quem chamou
   // atualizar a identidade de uma vez só.
+  // ---- Ouvir (áudio do deck) ----
+  // O roteiro é texto e sai numa chamada; o áudio sai bloco a bloco,
+  // conduzido pelo cliente, porque um episódio inteiro não cabe no
+  // maxDuration de uma função serverless (ver audioDecks.js).
+  audioDoDeck: (deckId) => request(`/decks/${deckId}/audio`),
+
+  criarRoteiroDeAudio: (deckId, { refazer = false } = {}) =>
+    request(`/decks/${deckId}/audio/roteiro${refazer ? "?refazer=true" : ""}`, { method: "POST" }),
+
+  gravarBlocoDeAudio: (deckId, indice) =>
+    request(`/decks/${deckId}/audio/bloco/${indice}`, { method: "POST", binario: true }),
+
+  apagarAudioDoDeck: (deckId) => request(`/decks/${deckId}/audio`, { method: "DELETE" }),
+
   salvarPreferencias: (cardsPorSessao) =>
     request("/auth/me/preferencias", { method: "PATCH", body: { cards_por_sessao: cardsPorSessao } }),
 

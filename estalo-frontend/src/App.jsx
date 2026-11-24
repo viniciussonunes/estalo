@@ -11,6 +11,7 @@ import Estudo from "./pages/Estudo.jsx";
 import Aprender from "./pages/Aprender.jsx";
 import Revelar from "./pages/Revelar.jsx";
 import Admin from "./pages/Admin.jsx";
+import Ouvir from "./pages/Ouvir.jsx";
 import Conta from "./pages/Conta.jsx";
 
 // Última identidade confirmada pelo servidor, guardada pra conseguir abrir
@@ -128,8 +129,19 @@ function CardsPage() {
       aoEstudar={() => navigate(`/deck/${deck.id}/estudo`, { state: { deck } })}
       aoAprender={() => navigate(`/deck/${deck.id}/aprender`, { state: { deck } })}
       aoRevelar={() => navigate(`/deck/${deck.id}/revelar`, { state: { deck } })}
+      aoOuvir={() => navigate(`/deck/${deck.id}/ouvir`, { state: { deck } })}
     />
   );
+}
+
+function OuvirPage() {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const deck = location.state?.deck;
+
+  if (!deck) return <Navigate to="/" replace />;
+
+  return <Ouvir deck={deck} aoVoltar={() => navigate(`/deck/${deck.id}`, { state: { deck } })} />;
 }
 
 function CriarDeckPage() {
@@ -250,6 +262,10 @@ export default function App() {
 
       <Route path="/deck/:id/revelar" element={
         <RequireAuth usuario={usuario}><RevelarPage /></RequireAuth>
+      } />
+
+      <Route path="/deck/:id/ouvir" element={
+        <RequireAuth usuario={usuario}><OuvirPage /></RequireAuth>
       } />
 
       <Route path="/conta" element={

@@ -23,7 +23,7 @@ const MSGS_IA = [
   "Finalizando a formatação dos cards...",
 ];
 
-export default function Cards({ deck, aoVoltar, aoEstudar, aoAprender, aoRevelar }) {
+export default function Cards({ deck, aoVoltar, aoEstudar, aoAprender, aoRevelar, aoOuvir }) {
   const [cards, setCards]         = useState([]);
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro]           = useState("");
@@ -408,6 +408,12 @@ export default function Cards({ deck, aoVoltar, aoEstudar, aoAprender, aoRevelar
             <span className="modo-opcao-nome">Só ler</span>
             <span className="modo-opcao-desc">
               Passa pelos cards com uma explicação da IA, sem responder nada. Não mexe no seu ritmo — bom pra uma primeira leitura.
+            </span>
+          </button>
+          <button className="modo-opcao" onClick={aoOuvir}>
+            <span className="modo-opcao-nome">Ouvir</span>
+            <span className="modo-opcao-desc">
+              Duas pessoas conversam sobre o deck num áudio de poucos minutos, pra revisar sem olhar a tela. Também não mexe no seu ritmo.
             </span>
           </button>
         </div>

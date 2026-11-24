@@ -8,8 +8,13 @@
  * nada. No celular os três ainda quebravam em duas linhas.
  *
  * Agora é um botão principal + "Outros modos", que abre um modal com os
- * três nomeados pelo que fazem, e dizendo se contam ou não pro ritmo de
- * revisão. Os dois secundários ficam a um clique a mais -- de propósito.
+ * modos nomeados pelo que fazem, e dizendo se contam ou não pro ritmo de
+ * revisão. Os secundários ficam a um clique a mais -- de propósito.
+ *
+ * Em 2026-11-05 entrou o quarto, "Ouvir". A contagem exata segue
+ * afirmada aqui de propósito: a lista é a resposta à pergunta "o que dá
+ * pra fazer com este deck?", e um modo entrar sem ninguém notar é
+ * exatamente o que este teste existe pra impedir.
  *
  * Não depende do backend: a API é simulada em auditoria-layout.js.
  */
@@ -34,7 +39,7 @@ test.describe("Modos de estudo", () => {
     await expect(topo.getByRole("button", { name: "Estudo clássico" })).toHaveCount(0);
   });
 
-  test("o modal nomeia os três pelo que fazem e diz o que conta pro ritmo", async ({ page }) => {
+  test("o modal nomeia cada modo pelo que faz e diz o que conta pro ritmo", async ({ page }) => {
     await abrirDeck(page);
     await page.getByRole("button", { name: "Outros modos" }).click();
     const modal = page.locator(".modal-modos");
@@ -42,13 +47,15 @@ test.describe("Modos de estudo", () => {
     await expect(modal.getByRole("heading")).toHaveText("Como você quer estudar?");
 
     const opcoes = modal.locator(".modo-opcao");
-    await expect(opcoes).toHaveCount(3);
+    await expect(opcoes).toHaveCount(4);
     await expect(opcoes.nth(0)).toContainText("Aprender");
     await expect(opcoes.nth(0)).toContainText("conta pro seu ritmo");
     await expect(opcoes.nth(1)).toContainText("Frente e verso");
     await expect(opcoes.nth(1)).toContainText("Também conta");
     await expect(opcoes.nth(2)).toContainText("Só ler");
     await expect(opcoes.nth(2)).toContainText("Não mexe no seu ritmo");
+    await expect(opcoes.nth(3)).toContainText("Ouvir");
+    await expect(opcoes.nth(3)).toContainText("Também não mexe no seu ritmo");
   });
 
   test("cada opção leva pra tela certa", async ({ page }) => {
@@ -68,6 +75,22 @@ test.describe("Modos de estudo", () => {
     await page.getByRole("button", { name: "Outros modos" }).click();
     await page.getByRole("button", { name: /^Aprender/ }).click();
     await expect(page).toHaveURL(/\/aprender$/);
+
+    // Esperar a TELA, não só a URL, antes de voltar pelo botão do
+    // navegador. A URL troca na hora (history.pushState), o React
+    // renderiza depois -- e um goBack nesse vão fazia a localização ir
+    // /deck → /aprender → /deck sem o React nunca ter saído da tela de
+    // cards: ela continuava montada, com o modal de modos aberto, e o
+    // clique seguinte batia no overlay. Reproduzido em 3 de 8 execuções
+    // com --repeat-each; o app está certo (ninguém clica "voltar" em 10ms),
+    // o teste estava medindo a coisa errada.
+    await expect(page.locator(".modal-modos")).toHaveCount(0);
+
+    await page.goBack();
+    await expect(page.locator(".cards-lista-topo")).toBeVisible({ timeout: 15000 });
+    await page.getByRole("button", { name: "Outros modos" }).click();
+    await page.getByRole("button", { name: /^Ouvir/ }).click();
+    await expect(page).toHaveURL(/\/ouvir$/);
   });
 
   test("Esc fecha o modal sem sair da tela", async ({ page }) => {

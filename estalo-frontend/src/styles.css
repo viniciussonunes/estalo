@@ -3506,3 +3506,273 @@ kbd {
   right: 4.2rem;
 }
 .pasta-card-offline .icone-acao.baixado { opacity: 1; }
+
+/* ======================================================================
+   Ouvir (Ouvir.jsx) — PROTÓTIPO, pendente de aprovação
+   ====================================================================== */
+
+.ouvir-main { max-width: 620px; }
+
+/* ---------- Estado vazio / gerando ---------- */
+.ouvir-vazio, .ouvir-gerando { text-align: center; padding: 1rem 0 0; }
+.ouvir-vazio-icone { font-size: 2.6rem; line-height: 1; margin-bottom: 0.9rem; }
+.ouvir-vazio-titulo {
+  font-family: "Fraunces", serif;
+  font-weight: 500;
+  font-size: 1.6rem;
+  letter-spacing: -0.01em;
+  margin-bottom: 0.6rem;
+  color: var(--tinta);
+}
+.ouvir-vazio-texto {
+  font-size: 0.95rem;
+  line-height: 1.6;
+  color: var(--tinta-suave);
+  max-width: 42ch;
+  margin: 0 auto 1.4rem;
+}
+.ouvir-vazio-fatos {
+  list-style: none;
+  display: inline-flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  margin: 0 auto 1.6rem;
+  padding: 0.9rem 1.2rem;
+  border: 1px solid var(--borda);
+  border-radius: var(--raio);
+  background: var(--superficie);
+  text-align: left;
+  font-size: 0.88rem;
+  color: var(--tinta-suave);
+}
+.ouvir-vazio-fatos strong { color: var(--tinta); font-weight: 600; }
+.ouvir-botao-gerar { max-width: 280px; margin: 0 auto; }
+.ouvir-nota-offline {
+  margin-top: 0.9rem;
+  font-size: 0.82rem;
+  line-height: 1.5;
+  color: var(--tinta-suave);
+  max-width: 40ch;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.ouvir-progresso-trilha {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--borda);
+  overflow: hidden;
+  max-width: 320px;
+  margin: 0.4rem auto 0.7rem;
+}
+.ouvir-progresso-preenchido {
+  height: 100%;
+  background: var(--violeta);
+  border-radius: 999px;
+  transition: width 0.3s ease;
+}
+.ouvir-progresso-texto {
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--tinta);
+  margin-bottom: 0.2rem;
+}
+
+/* ---------- Avisos ---------- */
+.ouvir-aviso-velho, .ouvir-aviso-offline {
+  padding: 0.8rem 1rem;
+  border-radius: var(--raio);
+  font-size: 0.86rem;
+  line-height: 1.55;
+  margin-bottom: 1.1rem;
+  color: var(--tinta);
+}
+.ouvir-aviso-velho { background: var(--ambar-suave); border: 1px solid var(--ambar); }
+.ouvir-aviso-offline { background: var(--violeta-suave); border: 1px solid var(--violeta-medio); }
+.ouvir-aviso-acao { display: block; margin-top: 0.4rem; font-size: 0.86rem; font-weight: 600; }
+
+/* ---------- Player ---------- */
+.ouvir-player {
+  padding: 1.5rem 1.4rem 1.3rem;
+  border: 1px solid var(--borda);
+  border-radius: 16px;
+  background: var(--superficie);
+  box-shadow: var(--sombra);
+  margin-bottom: 1.6rem;
+}
+.ouvir-player.bloqueado { opacity: 0.55; }
+.ouvir-player-cabecalho { text-align: center; margin-bottom: 1.3rem; }
+.ouvir-player-titulo {
+  font-family: "Fraunces", serif;
+  font-weight: 500;
+  font-size: 1.3rem;
+  letter-spacing: -0.01em;
+  margin-bottom: 0.25rem;
+  color: var(--tinta);
+}
+.ouvir-player-meta { font-size: 0.8rem; color: var(--tinta-suave); }
+
+.ouvir-trilha-area { margin-bottom: 1.2rem; }
+.ouvir-trilha {
+  position: relative;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--borda);
+  cursor: pointer;
+}
+.ouvir-trilha-preenchida {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--violeta);
+}
+/* Marca de capítulo: mostra, na própria barra, que o áudio tem partes.
+   Sem isso a narração de 5 min parece um bloco único e ninguém descobre
+   que dá pra pular pra um card específico. */
+.ouvir-trilha-marca {
+  position: absolute;
+  top: -2px;
+  width: 2px;
+  height: 12px;
+  background: var(--superficie);
+  opacity: 0.85;
+  pointer-events: none;
+}
+.ouvir-tempos {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 0.45rem;
+  font-size: 0.76rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--tinta-suave);
+}
+
+.ouvir-controles {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1.1rem;
+}
+.ouvir-botao-play {
+  width: 64px;
+  height: 64px;
+  border: none;
+  border-radius: 50%;
+  background: var(--violeta);
+  color: #fff;
+  font-size: 1.25rem;
+  cursor: pointer;
+  transition: background var(--transicao), transform var(--transicao);
+  flex-shrink: 0;
+}
+.ouvir-botao-play:hover:not(:disabled) { background: var(--violeta-escuro); }
+.ouvir-botao-play:active:not(:disabled) { transform: scale(0.94); }
+.ouvir-botao-play:disabled { opacity: 0.5; cursor: default; }
+
+.ouvir-botao-pular, .ouvir-botao-velocidade {
+  border: 1.5px solid var(--borda);
+  background: transparent;
+  border-radius: var(--raio);
+  padding: 0.4rem 0.6rem;
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--tinta-suave);
+  cursor: pointer;
+  transition: border-color var(--transicao), color var(--transicao), background var(--transicao);
+  white-space: nowrap;
+}
+.ouvir-botao-pular:hover:not(:disabled), .ouvir-botao-velocidade:hover:not(:disabled) {
+  border-color: var(--violeta);
+  color: var(--violeta);
+  background: var(--violeta-suave);
+}
+.ouvir-botao-pular:disabled, .ouvir-botao-velocidade:disabled { opacity: 0.5; cursor: default; }
+.ouvir-botao-velocidade { min-width: 52px; }
+
+/* ---------- Capítulos ---------- */
+.ouvir-capitulos { margin-bottom: 1.6rem; }
+.ouvir-capitulos-titulo {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--tinta-suave);
+  margin-bottom: 0.6rem;
+}
+.ouvir-capitulos-lista { list-style: none; display: flex; flex-direction: column; gap: 0.2rem; }
+.ouvir-capitulo {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  width: 100%;
+  padding: 0.55rem 0.7rem;
+  border: none;
+  border-radius: 9px;
+  background: transparent;
+  font: inherit;
+  text-align: left;
+  color: var(--tinta);
+  cursor: pointer;
+  transition: background var(--transicao);
+}
+.ouvir-capitulo:hover:not(:disabled), .ouvir-capitulo:focus-visible { background: var(--violeta-suave); }
+.ouvir-capitulo:disabled { cursor: default; }
+.ouvir-capitulo.atual { background: var(--violeta-suave); }
+.ouvir-capitulo.atual .ouvir-capitulo-nome { font-weight: 600; color: var(--violeta); }
+.ouvir-capitulo-tempo {
+  font-size: 0.76rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--tinta-suave);
+  flex-shrink: 0;
+  min-width: 2.6rem;
+}
+.ouvir-capitulo-nome {
+  font-size: 0.88rem;
+  line-height: 1.4;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ouvir-capitulo-agora {
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--violeta);
+  flex-shrink: 0;
+}
+
+/* ---------- Ações do rodapé ---------- */
+.ouvir-acoes {
+  border: 1px solid var(--borda);
+  border-radius: var(--raio);
+  background: var(--superficie);
+  overflow: hidden;
+}
+.ouvir-acao-linha {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.85rem 1rem;
+}
+.ouvir-acao-linha + .ouvir-acao-linha { border-top: 1px solid var(--borda); }
+.ouvir-acao-nome { display: block; font-size: 0.9rem; font-weight: 600; color: var(--tinta); }
+.ouvir-acao-desc { display: block; font-size: 0.8rem; line-height: 1.45; color: var(--tinta-suave); margin-top: 0.1rem; }
+
+/* ---------- Celular ---------- */
+@media (max-width: 560px) {
+  .ouvir-player { padding: 1.2rem 1rem 1.1rem; }
+  .ouvir-controles { gap: 0.7rem; }
+  .ouvir-acao-linha { flex-direction: column; align-items: stretch; gap: 0.6rem; }
+  .ouvir-acao-linha .botao-modo-ghost { width: 100%; justify-content: center; }
+}
+
+/* Alvos de toque maiores onde o dedo é o ponteiro (mesma regra do resto
+   do app: pointer: coarse, não largura de tela). */
+@media (pointer: coarse) {
+  .ouvir-botao-pular, .ouvir-botao-velocidade { padding: 0.65rem 0.85rem; }
+  .ouvir-capitulo { padding: 0.75rem 0.7rem; }
+}

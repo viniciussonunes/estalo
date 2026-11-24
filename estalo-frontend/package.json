@@ -10,6 +10,7 @@
     "test:e2e": "playwright test"
   },
   "dependencies": {
+    "@breezystack/lamejs": "^1.2.7",
     "@sentry/react": "^10.63.0",
     "canvas-confetti": "^1.9.4",
     "react": "^18.3.1",

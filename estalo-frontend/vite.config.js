@@ -49,6 +49,17 @@ export default defineConfig({
         // servindo o index.html -- mesmo papel do rewrite do vercel.json,
         // só que sem servidor no meio.
         navigateFallback: "/index.html",
+        // O encoder de MP3 (lamejs, 169 KB / 58 KB comprimido) fica FORA
+        // do precache de propósito. Ele já é carregado por import()
+        // tardio em audioDecks.js justamente pra quem nunca abre "Ouvir"
+        // não pagar o download -- mas o generateSW precacheia todos os
+        // assets do build, e isso anulava o import tardio: todo mundo
+        // baixava o encoder na instalação do app de qualquer jeito.
+        //
+        // Deixar de fora não quebra o offline: gravar um episódio precisa
+        // da rede nativamente (é o servidor que sintetiza a fala). Quem já
+        // tem o MP3 no aparelho só toca, e não toca no encoder.
+        globIgnores: ["**/lamejs-*.js"],
         // O backend é outra origem (estalo-api.vercel.app): as chamadas de
         // API NÃO são navegações e não passam por aqui. O cache de dados de
         // deck é assunto do Nível 3B, e só pros decks que o usuário baixar
