@@ -12,7 +12,7 @@ from app.core import fuso
 from app.core.database import Base, engine
 from app import models  # noqa: F401
 from app.models.card import calcular_content_hash
-from app.routers import admin, auth, folders, decks, cards, study, import_anki
+from app.routers import admin, audio, auth, folders, decks, cards, study, import_anki
 
 # Precisa vir ANTES de tudo (inclusive de _migrar()/create_all() logo
 # abaixo) -- assim uma falha na migração no cold start também é capturada,
@@ -191,12 +191,25 @@ _origens = ["http://localhost:5173", "http://localhost:3000"]
 if settings.FRONTEND_URL:
     _origens.append(settings.FRONTEND_URL.rstrip("/"))
 
+# expose_headers: sem isto o navegador LÊ a resposta mas esconde do
+# JavaScript qualquer cabeçalho que não esteja na lista segura do CORS --
+# `resp.headers.get("X-Taxa-Amostragem")` devolve null, calado. O áudio de
+# Ouvir vinha com a taxa de amostragem nesse cabeçalho e o cliente caía
+# sempre no padrão de 24 kHz; funcionava só porque o Gemini devolve 24 kHz
+# hoje. Um modelo de 48 kHz na lista de failover faria o MP3 ser codificado
+# como 24 kHz e tocar na metade da velocidade, sem erro nenhum.
+#
+# A suíte de e2e não pega isso: as respostas que o Playwright fabrica com
+# route.fulfill não passam pela checagem de CORS do navegador, então lá o
+# cabeçalho sempre chega. Quem pega é o teste de backend
+# (test_audio_endpoint.py) e um curl com -H "Origin:".
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_origens,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["X-Taxa-Amostragem"],
 )
 
 app.include_router(auth.router)
@@ -204,6 +217,7 @@ app.include_router(folders.router)
 app.include_router(decks.router)
 app.include_router(cards.router)
 app.include_router(study.router)
+app.include_router(audio.router)
 app.include_router(import_anki.router)
 app.include_router(admin.router)
 
