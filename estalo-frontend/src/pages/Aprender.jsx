@@ -56,8 +56,21 @@ function embaralhar(arr) {
   return a;
 }
 
+/** Hoje no relógio do aparelho, "AAAA-MM-DD" -- o mesmo fuso que o app
+ *  manda ao servidor (X-User-Timezone), então bate com o `vence_em`. */
+function hojeLocal() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+/** Venceu (hoje ou antes)? Card nunca estudado não tem vence_em: não é vencido. */
+function estaVencido(card, hoje) {
+  return !!card.vence_em && card.vence_em <= hoje;
+}
+
 /** Monta a fila de questões a partir dos cards que já têm quiz pré-gerado. */
 function montarFila(cards) {
+  const hoje = hojeLocal();
   return cards
     .filter(c => Array.isArray(c.options) && c.options.length >= 3 && c.explanation)
     .map(card => {
@@ -71,6 +84,12 @@ function montarFila(cards) {
         correct_letter,
         explanation:    card.explanation,
         repetitions:    card.repetitions ?? 0,
+        // Card com progresso que ainda não venceu: no Aprender do deck
+        // inteiro ele é TREINO -- aparece, explica, mas a resposta não vai
+        // pro servidor. Decidido AGORA, pela data, e não no download: o
+        // deck baixado pode estar no aparelho há dias. Sem vence_em (card
+        // novo, Fila Única, cópia antiga) = conta.
+        treino:         !!card.vence_em && card.vence_em > hoje,
         // Só vêm preenchidos na Fila Única (Revisão Geral) — ver
         // _buscarCards(). Em cards normais (api.listarCards) ficam
         // undefined, então a badge de origem simplesmente não renderiza.
@@ -80,13 +99,23 @@ function montarFila(cards) {
     });
 }
 
-export default function Aprender({ deck, aoVoltar, modoGlobal = false, folderId = null, folderName = null, aoEstudoClassico, cardsPorSessao = 15 }) {
+export default function Aprender({ deck: deckProp, aoVoltar, modoGlobal = false, folderId = null, folderName = null, revisaoDoDeck = null, aoEstudoClassico, cardsPorSessao = 15 }) {
+  // Na revisão do deck o deck vem por revisaoDoDeck; o resto do componente
+  // continua lendo `deck` (título, id da sessão salva).
+  const deck = deckProp ?? revisaoDoDeck;
+  // Revisão em lotes, com "Continuar": a Fila Única e a revisão do deck.
+  const emLotes = modoGlobal || !!revisaoDoDeck;
+  // Cards já respondidos nos lotes anteriores desta revisão do deck. A
+  // próxima busca vem da lista de cards, que pode ser a cópia offline e
+  // ainda não saber dessas respostas -- sem isto, eles voltariam.
+  const jaRespondidos = useRef(new Set());
   // Na Fila Única não existe "o" deck — usa uma chave fixa própria pro
   // snapshot de F5, isolada de qualquer sessão por-deck real (ids de deck
   // são sempre numéricos, nunca colidem com essa string). Escopada por
   // pasta quando "Estudar Pasta" (folderId) pra não colidir com a sessão
   // salva da Fila Única de verdade nem com a de outra pasta.
-  const chaveSessao = modoGlobal ? (folderId ? `folder-${folderId}` : "global") : deck.id;
+  const chaveSessao = revisaoDoDeck ? `revisao-deck-${revisaoDoDeck.id}`
+    : modoGlobal ? (folderId ? `folder-${folderId}` : "global") : deck.id;
   const { snapshotPendente, salvar, limpar, descartarPendente } = useStudySession(chaveSessao);
   const mostrarToast = useToast();
   const online = useOnline();
@@ -110,6 +139,18 @@ export default function Aprender({ deck, aoVoltar, modoGlobal = false, folderId 
         deck_color:  c.deck_color,
       })));
     }
+    if (revisaoDoDeck) {
+      // Montada aqui, a partir da lista de cards, e não pedida ao servidor:
+      // a lista tem cópia offline (deck baixado), e o botão de estudar não
+      // pode esperar a rede (e2e/rede-lenta.spec.js). Mesma regra da
+      // Revisão Geral: vencidos, os mais atrasados primeiro, no tamanho
+      // de sessão da conta.
+      const hoje = hojeLocal();
+      return api.listarCards(deck.id).then(cards => cards
+        .filter(c => estaVencido(c, hoje) && !jaRespondidos.current.has(c.id))
+        .sort((a, b) => a.vence_em.localeCompare(b.vence_em))
+        .slice(0, cardsPorSessao));
+    }
     return api.listarCards(deck.id);
   }
 
@@ -126,6 +167,10 @@ export default function Aprender({ deck, aoVoltar, modoGlobal = false, folderId 
   const [mostrarPrompt, setMostrarPrompt] = useState(!!snapshotPendente);
   const [erro, setErro]               = useState("");
   const [semQuiz, setSemQuiz]         = useState(false);
+  // Revisão do deck aberta sem nada vencido (contagem do botão vinda de
+  // uma cópia antiga, ou outra aba revisou antes). Não é falha de IA:
+  // sem isto cairia na tela de "Não foi possível preparar o quiz".
+  const [nadaVencido, setNadaVencido] = useState(false);
   const [concluido, setConcluido]     = useState(false);
   const [salvando, setSalvando]       = useState(false);
   const [resposta, setResposta]       = useState(null);
@@ -205,7 +250,11 @@ export default function Aprender({ deck, aoVoltar, modoGlobal = false, folderId 
   const [enviandoFeedback, setEnviandoFeedback] = useState(false);
 
   function _iniciarComCards(cards) {
-    const questoes = montarFila(cards);
+    // Os que contam pro ritmo (novos e vencidos) vêm antes do treino: são
+    // os que importam, e quem para no meio da sessão já fez o que valia.
+    // sort é estável, então dentro de cada grupo a ordem não muda.
+    if (revisaoDoDeck && cards.length === 0) { setNadaVencido(true); return; }
+    const questoes = montarFila(cards).sort((a, b) => Number(a.treino) - Number(b.treino));
     if (questoes.length === 0) { setSemQuiz(true); return; }
     setFila(questoes);
     setTotalUnicos(questoes.length);
@@ -287,7 +336,7 @@ export default function Aprender({ deck, aoVoltar, modoGlobal = false, folderId 
     if (mostrarPrompt) return; // aguarda decisão do usuário sobre a sessão salva
     _carregarDoServidor();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [deck?.id, modoGlobal, folderId]);
+  }, [deck?.id, modoGlobal, folderId, revisaoDoDeck?.id]);
 
   function continuarSessaoSalva() {
     _restaurarDeSnapshot(snapshotPendente);
@@ -578,6 +627,13 @@ export default function Aprender({ deck, aoVoltar, modoGlobal = false, folderId 
     // (volta da conexão, abertura do app, aba voltando a ficar visível).
     let semDisco = 0;
     questoesOriginais.current.forEach(q => {
+      // Treino não vai pro servidor: o card ainda não venceu, e o SM-2
+      // trataria a resposta como revisão espaçada de verdade (medido:
+      // card que venceria em 6 dias ia pra 16 com 1 dia passado; card
+      // novo aberto duas vezes no dia virava Dominado). Mesmo princípio
+      // do "Praticar de novo".
+      if (q.treino) return;
+      jaRespondidos.current.add(q.card_id);
       const fase = startingReps.current[q.card_id] ?? 0;
       const errou = (errosPorCard.current.get(q.card_id) ?? 0) > 0;
 
@@ -648,7 +704,7 @@ export default function Aprender({ deck, aoVoltar, modoGlobal = false, folderId 
     // Pendurado na promessa, não no `sync` da corrida acima: se a
     // sincronização passou do limite de espera, o "Continuar" aparece
     // quando ela terminar -- a tela de resultado ainda está lá.
-    if (modoGlobal) {
+    if (emLotes) {
       promessaSync.then(s => {
         if (s.restantes === 0) _buscarCards().then(setProximoLote).catch(() => setProximoLote(null));
       });
@@ -739,7 +795,8 @@ export default function Aprender({ deck, aoVoltar, modoGlobal = false, folderId 
           {modoPratica ? "← Voltar ao resumo" : "← Voltar"}
         </button>
         <span className="estudo-deck-nome">
-          {modoGlobal
+          {revisaoDoDeck ? `Revisão do Dia — ${revisaoDoDeck.title}`
+            : modoGlobal
             ? (folderName ? `Revisão do Dia — ${folderName}` : "Revisão Geral do Dia")
             : deck.title}
         </span>
@@ -801,6 +858,27 @@ export default function Aprender({ deck, aoVoltar, modoGlobal = false, folderId 
     );
   }
 
+  if (nadaVencido) {
+    return (
+      <div className="pagina">{cabecalho}
+        <main className="conteudo estudo-centro">
+          <div className="estudo-concluido">
+            <div className="estudo-concluido-icone">✓</div>
+            <h2 className="estudo-concluido-titulo">Nada para revisar agora</h2>
+            <p className="estudo-concluido-sub">
+              Nenhum card deste deck venceu. Os próximos voltam no dia certo — revisar antes não ajuda a memória.
+            </p>
+            <div className="gamificado-botoes">
+              <button className="botao-principal estudo-concluido-botao" onClick={sair}>
+                Voltar ao deck
+              </button>
+            </div>
+          </div>
+        </main>
+      </div>
+    );
+  }
+
   if (semQuiz) {
     // Chegou aqui depois de _repararSemQuiz() já ter tentado consertar
     // sozinho — se ainda assim não sobrou nenhuma questão, a IA falhou ou
@@ -837,13 +915,17 @@ export default function Aprender({ deck, aoVoltar, modoGlobal = false, folderId 
     const pct = totalUnicos > 0
       ? Math.round((acertosNaPrimeira / totalUnicos) * 100) : 0;
 
+    // Treino não mudou fase nenhuma (não foi gravado) -- fica fora das
+    // contagens de avanço, senão a tela anunciaria "+3 Dominados" que o
+    // servidor nunca registrou.
     const novosDominados = questoesOriginais.current.filter(
-      q => (startingReps.current[q.card_id] ?? 0) === 1
+      q => !q.treino && (startingReps.current[q.card_id] ?? 0) === 1
         && !errosPorCard.current.has(q.card_id)
     ).length;
     const avancadosParaValidacao = questoesOriginais.current.filter(
-      q => (startingReps.current[q.card_id] ?? 0) === 0
+      q => !q.treino && (startingReps.current[q.card_id] ?? 0) === 0
     ).length;
+    const emTreino = questoesOriginais.current.filter(q => q.treino).length;
     // Vilões: cards que custaram 2+ erros nesta sessão — candidatos a uma
     // segunda passada rápida, só em memória (ver reverViloes()). Exclui quem
     // já foi acertado numa rodada de "Rever Vilões" anterior nesta mesma
@@ -921,13 +1003,22 @@ export default function Aprender({ deck, aoVoltar, modoGlobal = false, folderId 
               </p>
             )}
 
+            {emTreino > 0 && (
+              <p className="sessao-proximo">
+                {emTreino === 1
+                  ? "1 card ainda não tinha vencido e entrou como treino: a resposta não mudou quando ele volta."
+                  : `${emTreino} cards ainda não tinham vencido e entraram como treino: as respostas não mudaram quando eles voltam.`}
+              </p>
+            )}
+
             {/* Fila Única: esta rodada era um lote. Diz o que sobrou (no
                 mesmo "15+" da Home) ou que zerou -- antes a tela calava e
                 a pessoa descobria de volta na Home. */}
-            {modoGlobal && proximoLote !== null && (
+            {emLotes && proximoLote !== null && (
               <p className="sessao-proximo sessao-restante">
                 {proximoLote.length === 0
-                  ? (folderName ? "Você zerou a revisão de hoje nesta pasta." : "Você zerou a revisão de hoje.")
+                  ? (revisaoDoDeck ? "Você zerou a revisão de hoje neste deck."
+                    : folderName ? "Você zerou a revisão de hoje nesta pasta." : "Você zerou a revisão de hoje.")
                   : `Ainda ${proximoLote.length === 1 ? "tem 1 card vencido" : `tem ${rotuloRestante(proximoLote.length, cardsPorSessao)} cards vencidos`} esperando. Dá pra continuar agora ou deixar pra depois.`}
               </p>
             )}
@@ -936,14 +1027,14 @@ export default function Aprender({ deck, aoVoltar, modoGlobal = false, folderId 
                 Fila Única com lote sobrando, continuar É o que a pessoa
                 pediu ao clicar em "Estudar Tudo", então assume o lugar. */}
             <div className="sessao-acoes">
-              {modoGlobal && proximoLote?.length > 0 ? (
+              {emLotes && proximoLote?.length > 0 ? (
                 <>
                   <button className="botao-principal estudo-concluido-botao"
                     onClick={continuarProximoLote} disabled={salvando}>
                     Continuar · {rotuloRestante(proximoLote.length, cardsPorSessao)} restante{proximoLote.length !== 1 ? "s" : ""}
                   </button>
                   <button className="botao-texto" onClick={sair} disabled={salvando}>
-                    Voltar à Home
+                    {revisaoDoDeck ? "Voltar ao deck" : "Voltar à Home"}
                   </button>
                 </>
               ) : (
@@ -1011,6 +1102,19 @@ export default function Aprender({ deck, aoVoltar, modoGlobal = false, folderId 
           )}
           <SeloOffline />
         </div>
+        {/* Um aviso só, no topo, e não um selo por card: neste modo o
+            treino costuma ser a MAIORIA (num deck em dia, todo card já
+            estudado é treino) e um selo em quase toda pergunta vira ruído.
+            Escolha do protótipo de 2026-11-26. */}
+        {!modoPratica && (() => {
+          const n = questoesOriginais.current.filter(q => q.treino).length;
+          return n > 0 && (
+            <p className="aviso-treino">
+              {n} de {questoesOriginais.current.length} cards ainda não venceram e entram como treino:
+              você responde, mas isso não muda quando eles voltam.
+            </p>
+          );
+        })()}
 
         <div className="cartao-estudo">
           <div className="cartao-frente">

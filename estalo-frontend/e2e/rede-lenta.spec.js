@@ -155,7 +155,7 @@ test.describe("Rede lenta — leituras", () => {
 
     // E começar a estudar também não espera o servidor.
     const t2 = Date.now();
-    await page.getByRole("button", { name: /Aprender|Estudar hoje|Estudar críticos/ }).click();
+    await page.getByRole("button", { name: /Aprender|Estudar hoje|Revisar/ }).click();
     await expect(page.locator(".quiz-opcao").first()).toBeVisible({ timeout: 8000 });
     expect((Date.now() - t2) / 1000).toBeLessThan(6);
   });
@@ -248,7 +248,7 @@ test.describe("Rede lenta — IA antes do estudo", () => {
     // ser servida da cópia; a IA, que demoraria 25s, não pode nem entrar.
     await ficarLenta(page, 25000);
     const inicio = Date.now();
-    await page.getByRole("button", { name: /Aprender|Estudar hoje|Estudar críticos/ }).click();
+    await page.getByRole("button", { name: /Aprender|Estudar hoje|Revisar/ }).click();
     await expect(page.locator(".quiz-opcao").first()).toBeVisible({ timeout: 8000 });
     expect((Date.now() - inicio) / 1000).toBeLessThan(6);
     expect(chamadas.enrich, "a IA não pode ser chamada com a rede lenta").toBe(0);
@@ -267,7 +267,7 @@ test.describe("Rede lenta — IA antes do estudo", () => {
     await expect(page.locator(".item-card").first()).toBeVisible({ timeout: 15000 });
 
     const inicio = Date.now();
-    await page.getByRole("button", { name: /Aprender|Estudar hoje|Estudar críticos/ }).click();
+    await page.getByRole("button", { name: /Aprender|Estudar hoje|Revisar/ }).click();
     await expect(page.locator(".quiz-opcao").first()).toBeVisible({ timeout: 30000 });
     const esperou = (Date.now() - inicio) / 1000;
     expect(esperou).toBeGreaterThan(15); // tentou de verdade...

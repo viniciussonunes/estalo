@@ -52,7 +52,9 @@ const CARDS = [
   },
   {
     id: 101, front: "O que é o Windows Autopilot?", back: "Provisionamento zero-touch de dispositivos novos.",
-    source: "manual", repetitions: 1,
+    // vence_em no passado: é o card vencido que as STATS contam -- a
+    // revisão do deck ("Revisar (N)") é montada a partir desta lista.
+    source: "manual", repetitions: 1, vence_em: "2026-01-01",
     options: ["Uma ferramenta de imagem de disco", "Um antivírus gerenciado", "Um servidor de atualizações"],
     explanation: "O Autopilot configura o dispositivo já na primeira inicialização, sem imagem.",
   },

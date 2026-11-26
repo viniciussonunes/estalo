@@ -23,7 +23,7 @@ const DECK = { id: 10, title: "Intune", description: null, folder_id: 2, created
 const STATS = { total_cards: 2, criticos: 1, hoje: 0, novos: 1, validando: 0, dominados: 0, new_cards: 1, validating: 0, dominated: 0, due_now: 1 };
 const CARDS = [
   { id: 100, front: "Pergunta 1", back: "Resposta 1", source: "manual", repetitions: 0, options: ["a", "b", "c"], explanation: "exp" },
-  { id: 101, front: "Pergunta 2", back: "Resposta 2", source: "manual", repetitions: 1, options: ["a", "b", "c"], explanation: "exp" },
+  { id: 101, front: "Pergunta 2", back: "Resposta 2", source: "manual", repetitions: 1, vence_em: "2026-01-01", options: ["a", "b", "c"], explanation: "exp" },
 ];
 
 function tokenFalso() {
@@ -79,7 +79,7 @@ async function irPara(page, tela) {
   if (tela === "cards do deck") return;
 
   if (tela === "aprender") {
-    await page.getByRole("button", { name: /Aprender|Estudar hoje|Estudar críticos/ }).click();
+    await page.getByRole("button", { name: /Aprender|Estudar hoje|Revisar/ }).click();
     await expect(page.locator(".quiz-opcao").first()).toBeVisible();
     return;
   }

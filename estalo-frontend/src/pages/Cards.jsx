@@ -23,7 +23,7 @@ const MSGS_IA = [
   "Finalizando a formatação dos cards...",
 ];
 
-export default function Cards({ deck, aoVoltar, aoEstudar, aoAprender, aoRevelar, aoOuvir }) {
+export default function Cards({ deck, aoVoltar, aoEstudar, aoAprender, aoRevisar, aoRevelar, aoOuvir }) {
   const [cards, setCards]         = useState([]);
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro]           = useState("");
@@ -227,11 +227,16 @@ export default function Cards({ deck, aoVoltar, aoEstudar, aoAprender, aoRevelar
             Outros modos
           </button>
           {stats?.criticos > 0 ? (
-            <button className="botao-modo-critico" onClick={aoAprender}>
-              🔴 Estudar críticos ({stats.criticos})
+            // Críticos e hoje abrem a REVISÃO do deck (só os vencidos). O
+            // número do botão é o que a sessão traz: com crítico, ela traz
+            // críticos E os de hoje, por isso "Revisar (total)" e não
+            // "Estudar críticos (N)", que abria mais cards do que dizia. O
+            // vermelho segue avisando o atraso; os quadros abaixo detalham.
+            <button className="botao-modo-critico" onClick={aoRevisar}>
+              🔴 Revisar ({stats.criticos + (stats.hoje ?? 0)})
             </button>
           ) : stats?.hoje > 0 ? (
-            <button className="botao-principal botao-modo-primary" onClick={aoAprender}>
+            <button className="botao-principal botao-modo-primary" onClick={aoRevisar}>
               Estudar hoje ({stats.hoje})
             </button>
           ) : stats && (stats.novos ?? stats.new_cards) === 0 && (stats.dominados ?? stats.dominated) === stats?.total_cards ? (

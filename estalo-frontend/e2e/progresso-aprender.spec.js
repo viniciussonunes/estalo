@@ -29,6 +29,7 @@ function baralho(n) {
     back: `CERTA ${i + 1}`,
     source: "manual",
     repetitions: 1,
+    vence_em: "2026-01-01", // todos críticos, como as stats abaixo dizem
     options: [`errada A${i + 1}`, `errada B${i + 1}`, `errada C${i + 1}`],
     explanation: "Explicação do card.",
   }));
@@ -70,7 +71,7 @@ async function comecarSessao(page, quantosCards) {
   }, tokenFalso());
   await page.goto("/?folder=2");
   await page.locator(".lista-deck .lista-info").first().click();
-  await page.getByRole("button", { name: /Aprender|Estudar hoje|Estudar críticos/ }).click();
+  await page.getByRole("button", { name: /Aprender|Estudar hoje|Revisar/ }).click();
   await expect(page.locator(".quiz-opcao").first()).toBeVisible();
 }
 

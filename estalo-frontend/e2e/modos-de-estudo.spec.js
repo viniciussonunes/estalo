@@ -33,7 +33,7 @@ test.describe("Modos de estudo", () => {
     await abrirDeck(page);
     const topo = page.locator(".modos-estudo-topo");
     await expect(topo.getByRole("button", { name: "Outros modos" })).toBeVisible();
-    await expect(topo.getByRole("button", { name: /Aprender|Estudar hoje|Estudar críticos/ })).toBeVisible();
+    await expect(topo.getByRole("button", { name: /Aprender|Estudar hoje|Revisar/ })).toBeVisible();
     // Os nomes antigos, sem explicação, saíram do topo.
     await expect(topo.getByRole("button", { name: "Revelar" })).toHaveCount(0);
     await expect(topo.getByRole("button", { name: "Estudo clássico" })).toHaveCount(0);

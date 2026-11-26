@@ -1213,6 +1213,18 @@ body {
   border: 1.5px solid;
   margin: -0.3rem 0 0.7rem;
 }
+/* Treino: cards que ainda não venceram, no Aprender do deck inteiro.
+   Neutro e tracejado de propósito -- âmbar e violeta já significam algo no
+   app (validando, ação principal), e treino é justamente o que NÃO conta. */
+.aviso-treino {
+  margin: -0.4rem 0 0.9rem;
+  padding: 0.55rem 0.8rem;
+  border: 1.5px dashed var(--borda-forte);
+  border-radius: var(--raio);
+  font-size: 0.82rem;
+  line-height: 1.45;
+  color: var(--tinta-suave);
+}
 .cartao-divisor {
   border: none;
   border-top: 1px solid var(--borda);

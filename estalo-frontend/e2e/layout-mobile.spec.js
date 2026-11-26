@@ -92,9 +92,9 @@ test.describe("Layout no celular", () => {
     await expect(page.locator(".lista-deck .lista-info").first()).toBeVisible();
     await page.locator(".lista-deck .lista-info").first().click();
     // O CTA de estudo troca de texto conforme o estado do deck
-    // ("Aprender" / "Estudar hoje (n)" / "🔴 Estudar críticos (n)") --
+    // ("Aprender" / "Estudar hoje (n)" / "🔴 Revisar (n)") --
     // casar por regex evita o teste quebrar por causa dos dados de mentira.
-    await page.getByRole("button", { name: /Aprender|Estudar hoje|Estudar críticos/ }).click();
+    await page.getByRole("button", { name: /Aprender|Estudar hoje|Revisar/ }).click();
     await expect(page.locator(".quiz-opcao").first()).toBeVisible();
     await conferirLayout(page, "aprender — pergunta");
 

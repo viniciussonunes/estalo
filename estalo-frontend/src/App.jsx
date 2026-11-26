@@ -128,6 +128,7 @@ function CardsPage() {
       aoVoltar={() => navigate(deck.folder_id ? `/?folder=${deck.folder_id}` : "/")}
       aoEstudar={() => navigate(`/deck/${deck.id}/estudo`, { state: { deck } })}
       aoAprender={() => navigate(`/deck/${deck.id}/aprender`, { state: { deck } })}
+      aoRevisar={() => navigate(`/deck/${deck.id}/revisar`, { state: { deck } })}
       aoRevelar={() => navigate(`/deck/${deck.id}/revelar`, { state: { deck } })}
       aoOuvir={() => navigate(`/deck/${deck.id}/ouvir`, { state: { deck } })}
     />
@@ -181,6 +182,24 @@ function RevisaoGlobalPage({ cardsPorSessao }) {
       // Volta pra dentro da mesma pasta (se veio de uma) em vez de sempre
       // pro Início — mais natural que "Estudar Pasta" te tirar dela.
       aoVoltar={() => navigate(folderId ? `/?folder=${folderId}` : "/")}
+    />
+  );
+}
+
+// Revisão do deck: só os cards vencidos dele, em lotes do tamanho de
+// sessão da conta. É o que o "Estudar hoje (N)" / "Revisar (N)" da página
+// do deck promete; antes abria o Aprender com o deck inteiro.
+function RevisaoDeckPage({ cardsPorSessao }) {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const deck = location.state?.deck;
+
+  if (!deck) return <Navigate to="/" replace />;
+  return (
+    <Aprender
+      revisaoDoDeck={deck}
+      cardsPorSessao={cardsPorSessao}
+      aoVoltar={() => navigate(`/deck/${deck.id}`, { state: { deck } })}
     />
   );
 }
@@ -258,6 +277,9 @@ export default function App() {
 
       <Route path="/deck/:id/aprender" element={
         <RequireAuth usuario={usuario}><AprenderPage /></RequireAuth>
+      } />
+      <Route path="/deck/:id/revisar" element={
+        <RequireAuth usuario={usuario}><RevisaoDeckPage cardsPorSessao={usuario?.cards_por_sessao ?? 15} /></RequireAuth>
       } />
 
       <Route path="/deck/:id/revelar" element={

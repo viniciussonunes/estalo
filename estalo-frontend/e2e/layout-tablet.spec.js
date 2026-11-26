@@ -66,7 +66,7 @@ for (const aparelho of APARELHOS) {
       // 15s, como no celular: com 27 testes em paralelo, os 5s padrão piscavam.
       await expect(page.locator(".lista-deck .lista-info").first()).toBeVisible({ timeout: 15000 });
       await page.locator(".lista-deck .lista-info").first().click();
-      await page.getByRole("button", { name: /Aprender|Estudar hoje|Estudar críticos/ }).click();
+      await page.getByRole("button", { name: /Aprender|Estudar hoje|Revisar/ }).click();
       await expect(page.locator(".quiz-opcao").first()).toBeVisible();
       await conferirLayout(page, "aprender — pergunta");
       await page.locator(".quiz-opcao").first().click();

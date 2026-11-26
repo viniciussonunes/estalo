@@ -78,7 +78,7 @@ async function comecarSessao(page, quantosCards) {
   }, tokenFalso());
   await page.goto("/?folder=2");
   await page.locator(".lista-deck .lista-info").first().click();
-  await page.getByRole("button", { name: /Aprender|Estudar hoje|Estudar críticos/ }).click();
+  await page.getByRole("button", { name: /Aprender|Estudar hoje|Revisar/ }).click();
   await expect(page.locator(".quiz-opcao").first()).toBeVisible();
   return gravadas;
 }
