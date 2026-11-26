@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import date, datetime
 from pydantic import BaseModel, Field
 
 
@@ -23,6 +23,13 @@ class CardOut(BaseModel):
     options: list[str] | None = None     # 3 distratores pré-gerados pela IA
     explanation: str | None = None        # explicação pré-gerada pela IA
     repetitions: int = 0                  # fase SM-2 atual do usuário (0=Novo,1=Validando,≥2=Dominado)
+    # Dia em que o card vence, no fuso de quem estuda (None = nunca
+    # estudado). Data, e não um "venceu?" pronto, porque o deck baixado vive
+    # no aparelho: um booleano calculado no dia do download estaria errado
+    # no dia seguinte, e a revisão do deck precisa funcionar offline. Com a
+    # data, o app decide na hora: vence_em <= hoje = vencido (entra na
+    # revisão do deck); > hoje = treino no Aprender do deck inteiro.
+    vence_em: date | None = None
 
     model_config = {"from_attributes": True}
 

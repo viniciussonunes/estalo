@@ -1,8 +1,10 @@
+from zoneinfo import ZoneInfo
+
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.dependencies import get_current_user_id
+from app.dependencies import get_current_user_id, get_user_timezone
 from app.models import Card, Deck, Review
 from app.models.card import calcular_content_hash
 from app.schemas.ai import GenerateRequest
@@ -10,6 +12,7 @@ from app.schemas.card import CardCreate, CardOut, CardTutorRequest, CardTutorRes
 from app.core.erros_ia import erro_http_de_ia
 from app.services.ai import IAError, gerar_cards_completos
 from app.services.tutor_service import analisar_feedback, explicar_conceito_breve
+from app.routers.study import _data_no_fuso
 
 router = APIRouter(tags=["Cards"])
 
@@ -37,8 +40,12 @@ def _card_do_usuario(card_id: int, user_id: int, db: Session) -> Card:
     return card
 
 
-def _card_out(card: Card, user_id: int, db: Session) -> CardOut:
-    """Constrói CardOut incluindo o estado SM-2 do usuário."""
+def _card_out(card: Card, user_id: int, db: Session, tz: ZoneInfo | None = None) -> CardOut:
+    """Constrói CardOut incluindo o estado SM-2 do usuário.
+
+    Com `tz`, inclui `vence_em` (só a listagem do deck precisa: é dela que
+    o Aprender e a revisão do deck montam a fila, inclusive offline).
+    """
     review = (
         db.query(Review)
         .filter(Review.user_id == user_id, Review.card_id == card.id)
@@ -54,6 +61,7 @@ def _card_out(card: Card, user_id: int, db: Session) -> CardOut:
         options=card.options,
         explanation=card.explanation,
         repetitions=review.repetitions if review else 0,
+        vence_em=_data_no_fuso(review.due_date, tz) if (tz is not None and review is not None) else None,
     )
 
 
@@ -128,10 +136,11 @@ def listar_cards(
     deck_id: int,
     db: Session = Depends(get_db),
     user_id: int = Depends(get_current_user_id),
+    tz: ZoneInfo = Depends(get_user_timezone),
 ):
     _deck_do_usuario(deck_id, user_id, db)
     cards = db.query(Card).filter(Card.deck_id == deck_id).all()
-    return [_card_out(c, user_id, db) for c in cards]
+    return [_card_out(c, user_id, db, tz) for c in cards]
 
 
 @router.get("/cards/{card_id}", response_model=CardOut)
