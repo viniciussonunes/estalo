@@ -30,8 +30,8 @@ from app.dependencies import get_current_user_id
 from app.models import Card, Deck, DeckAudio
 from app.models.deck_audio import calcular_hash_do_deck
 from app.services.ai import IAError
-from app.services.roteiro_audio import gerar_roteiro
-from app.services.tts import TAXA_PADRAO, sintetizar
+from app.services.roteiro_audio import VOZES, gerar_roteiro, tamanho_do_bloco
+from app.services.tts import TAXA_PADRAO, sintetizar_bloco
 
 router = APIRouter(prefix="/decks/{deck_id}/audio", tags=["Áudio"])
 
@@ -43,11 +43,19 @@ def _deck_do_usuario(deck_id: int, user_id: int, db: Session) -> Deck:
     return deck
 
 
+def _cards_do_deck(deck_id: int, db: Session) -> list[Card]:
+    return db.query(Card).filter(Card.deck_id == deck_id).order_by(Card.id).all()
+
+
 def _pares_do_deck(deck_id: int, db: Session) -> list[tuple[str, str]]:
-    return [
-        (c.front, c.back)
-        for c in db.query(Card).filter(Card.deck_id == deck_id).order_by(Card.id).all()
-    ]
+    """Frente e verso -- o que entra no retrato do deck (content_hash).
+
+    As alternativas e a explicação ficam de fora do retrato de propósito:
+    elas são regeradas pela auto-cura do quiz sem ninguém editar nada, e
+    isso não pode acender "este áudio está atrasado" num deck que, pra
+    quem estuda, não mudou.
+    """
+    return [(c.front, c.back) for c in _cards_do_deck(deck_id, db)]
 
 
 def _resumo(audio: DeckAudio, hash_atual: str) -> dict:
@@ -58,12 +66,38 @@ def _resumo(audio: DeckAudio, hash_atual: str) -> dict:
         "criado_em": audio.created_at.isoformat() if audio.created_at else None,
         "desatualizado": audio.content_hash != hash_atual,
         "total_blocos": len(blocos),
-        "capitulos": [
-            {"indice": i, "titulo": b["titulo"],
-             "caracteres": sum(len(f["texto"]) for f in b["falas"])}
-            for i, b in enumerate(blocos)
-        ],
+        "capitulos": _capitulos(blocos),
     }
+
+
+_SUFIXO_FASE_1 = " (continuação)"
+
+
+def _capitulos(blocos: list[dict]) -> list[dict]:
+    """Blocos de gravação agrupados em capítulos pra quem ouve.
+
+    Um bloco longo é cortado em pedaços pra caber numa gravação, mas o
+    pedaço não é assunto novo: vira parte do capítulo anterior, não uma
+    linha "(continuação)" na lista. A tela busca áudio por `total_blocos`
+    e usa esta lista só pra mostrar e posicionar, então agrupar aqui não
+    muda nada na gravação.
+
+    `indice` é o primeiro bloco do capítulo. Roteiros da fase 1 marcavam
+    o pedaço no título ("X (continuação)") em vez de `continua`; os dois
+    jeitos são entendidos.
+    """
+    capitulos: list[dict] = []
+    for i, b in enumerate(blocos):
+        # Com a pausa contada: a tela posiciona os capítulos na barra
+        # pela proporção de caracteres, e 3s de silêncio são tempo.
+        tamanho = tamanho_do_bloco(b["falas"])
+        continua = b.get("continua") or b["titulo"].endswith(_SUFIXO_FASE_1)
+        if continua and capitulos:
+            capitulos[-1]["caracteres"] += tamanho
+        else:
+            capitulos.append({"indice": i, "titulo": b["titulo"].removesuffix(_SUFIXO_FASE_1),
+                              "caracteres": tamanho})
+    return capitulos
 
 
 @router.get("")
@@ -91,7 +125,8 @@ def criar_roteiro(
     oferece o botão.
     """
     deck = _deck_do_usuario(deck_id, user_id, db)
-    pares = _pares_do_deck(deck_id, db)
+    cards_do_deck = _cards_do_deck(deck_id, db)
+    pares = [(c.front, c.back) for c in cards_do_deck]
     if not pares:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Este deck ainda não tem cards.")
 
@@ -100,7 +135,11 @@ def criar_roteiro(
     if audio is not None and not refazer:
         return _resumo(audio, hash_atual)
 
-    cards = [{"front": f, "back": v} for f, v in pares]
+    cards = [
+        {"front": c.front, "back": c.back,
+         "distractors": c.options or [], "explanation": c.explanation or ""}
+        for c in cards_do_deck
+    ]
     try:
         blocos = gerar_roteiro(deck.title, cards, user_id, db)
     except IAError as e:
@@ -138,9 +177,8 @@ def gravar_bloco(
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Bloco não existe neste roteiro.")
 
     bloco = audio.roteiro[indice]
-    falas = [(f["quem"], f["texto"]) for f in bloco["falas"]]
     try:
-        pcm, taxa = sintetizar(falas, user_id=user_id, db=db)
+        pcm, taxa = sintetizar_bloco(bloco["falas"], user_id=user_id, db=db, vozes=VOZES)
     except IAError as e:
         raise erro_http_de_ia(e, f"tts_bloco_{indice}")
 

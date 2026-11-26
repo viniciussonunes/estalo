@@ -93,6 +93,7 @@ def _chamar_gemini_raw(
     model: str | None = None,
     desabilitar_thinking: bool = False,
     tentativas: int = 2,
+    orcamento_thinking: int | None = None,
 ) -> str:
     """Só a chamada HTTP ao Gemini, SEM quota-check -- usada por _chamar_ia()
     (abaixo), o Adaptador de provedor de IA, que faz o quota-check UMA
@@ -121,13 +122,21 @@ def _chamar_gemini_raw(
     o "pensamento" consumia ~5x mais tokens que a resposta em si e
     quase dobrava o tempo (32s -> 13s sem), arriscando estourar o timeout
     do endpoint e até truncar o JSON no meio (finishReason MAX_TOKENS).
+
+    `orcamento_thinking` é o meio-termo: um teto de tokens de pensamento
+    em vez de zero. Usado pelo roteiro de áudio, que precisa planejar a
+    conversa (sem pensar, ele saiu 2-3x mais longo que o pedido) mas não
+    pode pensar à vontade (medido: 23-80s com pensamento livre, contra o
+    teto de 50s da função; 10-13s com 512).
     """
     if not settings.GEMINI_API_KEY:
         raise IAError("Chave do Gemini não configurada. Preencha GEMINI_API_KEY no arquivo .env")
 
     url = GEMINI_URL.format(model=model or settings.GEMINI_MODEL)
     payload = {"contents": [{"parts": [{"text": prompt}]}]}
-    if desabilitar_thinking:
+    if orcamento_thinking is not None:
+        payload["generationConfig"] = {"thinkingConfig": {"thinkingBudget": orcamento_thinking}}
+    elif desabilitar_thinking:
         payload["generationConfig"] = {"thinkingConfig": {"thinkingBudget": 0}}
     if instrucao_sistema:
         payload["systemInstruction"] = {"parts": [{"text": instrucao_sistema}]}
@@ -246,6 +255,7 @@ def _chamar_ia(
     instrucao_sistema: str | None = None,
     model: str | None = None,
     desabilitar_thinking: bool = False,
+    orcamento_thinking: int | None = None,
 ) -> str:
     """O Adaptador. Único ponto que decide pra qual provedor despachar --
     todo o resto do backend chama isto, nunca _chamar_gemini_raw/
@@ -275,7 +285,8 @@ def _chamar_ia(
     if provider not in _PROVEDORES:
         raise IAError(f"IA_PROVIDER '{provider}' desconhecido -- use 'gemini' ou 'openai'.")
 
-    kwargs = dict(instrucao_sistema=instrucao_sistema, model=model, desabilitar_thinking=desabilitar_thinking)
+    kwargs = dict(instrucao_sistema=instrucao_sistema, model=model, desabilitar_thinking=desabilitar_thinking,
+                  orcamento_thinking=orcamento_thinking)
     inicio = time.monotonic()
     try:
         return _despachar(provider, prompt, timeout=timeout, **kwargs)
@@ -325,6 +336,7 @@ def _provedor_configurado(provider: str) -> bool:
 def _despachar(
     provider: str, prompt: str, *, timeout: int, instrucao_sistema: str | None,
     model: str | None, desabilitar_thinking: bool, tentativas: int = 2,
+    orcamento_thinking: int | None = None,
 ) -> str:
     if provider == "openai":
         # `model`/`desabilitar_thinking` são conceitos do Gemini (ver
@@ -333,6 +345,7 @@ def _despachar(
     return _chamar_gemini_raw(
         prompt, timeout=timeout, instrucao_sistema=instrucao_sistema, model=model,
         desabilitar_thinking=desabilitar_thinking, tentativas=tentativas,
+        orcamento_thinking=orcamento_thinking,
     )
 
 

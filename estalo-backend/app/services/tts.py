@@ -84,6 +84,26 @@ TOKENS_AUDIO_POR_SEGUNDO = 25  # medido (1148 tokens / 45.9s)
 MAX_SEGUNDOS_POR_PEDACO = 60
 BYTES_MAX_RESPOSTA = 4_000_000
 
+# Silêncio depois da pergunta que Beatriz faz pra quem ouve. Vem da
+# pesquisa de Mary Budd Rowe sobre "tempo de espera": professores
+# esperavam ~1s depois de perguntar; quando a espera passava de 3s, as
+# respostas ficavam mais longas e mais certas e mais alunos tentavam. O
+# ganho vai até ~5s; depois disso o silêncio começa a parecer travamento.
+# Somado ao "Hmm, deixa eu pensar" do Rafael (~1,5s), dá ~4,5s pra tentar
+# lembrar -- dentro da faixa. O protótipo sem pausa real tinha <1s.
+PAUSA_PARA_PENSAR_S = 3.0
+
+# Teto de um BLOCO do roteiro (um capítulo, um POST). Maior que o de uma
+# chamada (MAX_SEGUNDOS_POR_PEDACO) porque sintetizar_bloco grava o bloco
+# em trechos -- cortados nas pausas e, se preciso, entre falas. O que
+# limita o bloco é só a resposta: 75s + uma pausa = ~3,7 MB de PCM, abaixo
+# de BYTES_MAX_RESPOSTA. E o tempo: a ~3x o tempo real, ~25s de geração.
+MAX_SEGUNDOS_POR_BLOCO = 75
+
+# Tempo total pra gravar um bloco, somando os trechos. Abaixo do
+# maxDuration de 60s, com folga pra serializar a resposta.
+ORCAMENTO_BLOCO_S = 52
+
 _RETRY_STATUS = {429, 500, 502, 503, 504}
 
 
@@ -106,6 +126,22 @@ def estimar_tokens_audio(falas: list[tuple[str, str]]) -> int:
 
 def _payload(falas: list[tuple[str, str]], vozes: dict[str, str], formato: str) -> dict:
     locutores = list(dict.fromkeys(q for q, _ in falas))  # ordem preservada, sem repetir
+
+    if len(locutores) == 1:
+        # Trecho de uma pessoa só -- aparece quando a pausa pra quem ouve
+        # corta o bloco (ex.: só a resposta da Beatriz depois do silêncio).
+        # O modo de duas vozes exige EXATAMENTE dois locutores e os três
+        # modelos respondem 400 com um (visto no teste real da fase 2);
+        # aqui vai o modo de uma voz, que vale pros dois formatos.
+        return {
+            "contents": [{"parts": [{"text": " ".join(t for _, t in falas)}]}],
+            "generationConfig": {
+                "responseModalities": ["AUDIO"],
+                "speechConfig": {"voiceConfig": {"prebuiltVoiceConfig": {
+                    "voiceName": vozes[locutores[0]]}}},
+            },
+        }
+
     config_vozes = [
         {"speaker": q, "voiceConfig": {"prebuiltVoiceConfig": {"voiceName": vozes[q]}}}
         for q in locutores
@@ -269,3 +305,80 @@ def sintetizar(
 
     sentry_sdk.capture_message(f"TTS: todos os modelos falharam -- {erros}", level="error")
     raise TTSError("Nenhum modelo de TTS respondeu. " + " | ".join(erros))
+
+
+def silencio(segundos: float, taxa: int) -> bytes:
+    """PCM 16-bit mono zerado. Número par de bytes, sempre: um byte a
+    mais desalinharia todas as amostras seguintes e viraria chiado."""
+    return b"\x00\x00" * int(round(segundos * taxa))
+
+
+def sintetizar_bloco(
+    falas: list[dict],
+    user_id: int,
+    db,
+    vozes: dict[str, str],
+    timeout: int = ORCAMENTO_BLOCO_S,
+) -> tuple[bytes, int]:
+    """Grava um bloco do roteiro, com o silêncio de cada pausa no lugar.
+
+    `falas` é [{"quem", "texto", "pausa"?}]. O modelo de voz não sabe
+    fazer silêncio sob encomenda (reticências viram ~0,7s, medido), então
+    o bloco é gravado em trechos -- um corte depois de cada fala com
+    "pausa" -- e os trechos são emendados com silêncio de verdade. Uma
+    pausa por bloco = duas chamadas de voz em vez de uma; o custo em cota
+    é o mesmo, porque a cota conta segundos de áudio, não chamadas.
+
+    `vozes` é obrigatório aqui: cada trecho é uma chamada separada, e a
+    regra padrão de sintetizar() ("quem fala primeiro leva a voz
+    masculina") daria vozes diferentes à mesma pessoa em trechos
+    diferentes.
+    """
+    trechos: list[list[tuple[str, str]]] = [[]]
+    pausa_depois: list[bool] = []
+    for f in falas:
+        trechos[-1].append((f["quem"], f["texto"]))
+        if f.get("pausa"):
+            pausa_depois.append(True)
+            trechos.append([])
+    pausa_depois.append(False)
+    pares = [(t, p) for t, p in zip(trechos, pausa_depois) if t]
+    if not pares:
+        raise TTSError("Roteiro vazio")
+
+    # Trecho acima do teto de UMA chamada é gravado em partes, cortadas
+    # entre falas e emendadas sem silêncio (a troca de fala já é a pausa
+    # natural). Só a última parte herda o silêncio do trecho.
+    chamadas: list[tuple[list[tuple[str, str]], bool]] = []
+    for trecho, pausa in pares:
+        partes: list[list[tuple[str, str]]] = [[]]
+        for fala in trecho:
+            if partes[-1] and estimar_segundos(partes[-1] + [fala]) > MAX_SEGUNDOS_POR_PEDACO:
+                partes.append([])
+            partes[-1].append(fala)
+        chamadas += [(p, pausa and i == len(partes) - 1) for i, p in enumerate(partes)]
+
+    inicio = time.monotonic()
+    pcm = b""
+    taxa_bloco: int | None = None
+    for trecho, pausa in chamadas:
+        restante = int(timeout - (time.monotonic() - inicio))
+        if restante < 8:
+            raise TTSError("Sem tempo pra gravar o resto do bloco")
+        parte, taxa = sintetizar(trecho, user_id=user_id, db=db, vozes=vozes, timeout=restante)
+        if taxa_bloco is None:
+            taxa_bloco = taxa
+        elif taxa != taxa_bloco:
+            # O failover pode ter caído noutro modelo no meio do bloco. Se
+            # a taxa mudou, emendar daria um trecho tocando na velocidade
+            # errada -- melhor falhar e o cliente tentar o bloco de novo.
+            raise TTSError(f"Trechos do mesmo bloco vieram com taxas diferentes ({taxa_bloco} e {taxa})")
+        pcm += parte
+        if pausa:
+            pcm += silencio(PAUSA_PARA_PENSAR_S, taxa_bloco)
+
+    if len(pcm) > BYTES_MAX_RESPOSTA:
+        raise TTSError(
+            f"Bloco gerou {len(pcm)/BYTES_POR_SEGUNDO:.0f}s de áudio, acima do que cabe numa resposta."
+        )
+    return pcm, taxa_bloco

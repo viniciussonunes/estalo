@@ -53,7 +53,7 @@ def _com_ia(roteiro=None):
 
 
 def _com_tts():
-    return patch("app.routers.audio.sintetizar", return_value=(PCM_FALSO, 24000))
+    return patch("app.routers.audio.sintetizar_bloco", return_value=(PCM_FALSO, 24000))
 
 
 # ----------------------------------------------------------------- ver
@@ -199,8 +199,8 @@ def test_bloco_volta_como_bytes_crus(client):
     assert r.headers["content-type"] == "application/octet-stream"
     assert r.headers["x-taxa-amostragem"] == "24000"
     # Gravou o bloco 1, não o 0
-    assert tts.call_args.args[0] == [("Rafael", "E no caso difícil?"),
-                                     ("Beatriz", "Aí muda, e o motivo é este.")]
+    assert tts.call_args.args[0] == [{"quem": "Rafael", "texto": "E no caso difícil?"},
+                                     {"quem": "Beatriz", "texto": "Aí muda, e o motivo é este."}]
 
 
 def test_taxa_de_amostragem_chega_ao_javascript_do_navegador(client):
@@ -266,3 +266,84 @@ def test_apagar_esquece_o_roteiro(client):
         client.post(f"/decks/{deck['id']}/audio/roteiro", headers=auth)
     assert client.delete(f"/decks/{deck['id']}/audio", headers=auth).status_code == 204
     assert client.get(f"/decks/{deck['id']}/audio", headers=auth).json() == {"existe": False}
+
+
+# ------------------------------------------------------- fase 2
+
+def test_roteiro_recebe_alternativas_e_explicacao_dos_cards(client, db_session):
+    """O erro do Rafael sai das alternativas erradas do card, e o porquê
+    da Beatriz sai da explicação -- então elas têm que chegar à IA."""
+    from app.models import Card
+
+    auth = _autenticar(client, "material@estalo.dev")
+    deck = _deck_com_cards(client, auth, quantos=2)
+    db = db_session
+    card = db.query(Card).filter(Card.deck_id == deck["id"]).order_by(Card.id).first()
+    card.options = ["errada 1", "errada 2", "errada 3"]
+    card.explanation = "o porquê"
+    db.commit()
+
+    with _com_ia() as ia:
+        client.post(f"/decks/{deck['id']}/audio/roteiro", headers=auth)
+
+    cards = ia.call_args.args[1]
+    assert cards[0]["distractors"] == ["errada 1", "errada 2", "errada 3"]
+    assert cards[0]["explanation"] == "o porquê"
+    # Card sem quiz ainda: listas vazias, não None
+    assert cards[1]["distractors"] == [] and cards[1]["explanation"] == ""
+
+
+def test_bloco_grava_com_as_vozes_fixas(client):
+    from app.services.roteiro_audio import VOZES
+    auth = _autenticar(client, "vozes@estalo.dev")
+    deck = _deck_com_cards(client, auth)
+    with _com_ia():
+        client.post(f"/decks/{deck['id']}/audio/roteiro", headers=auth)
+    with _com_tts() as tts:
+        client.post(f"/decks/{deck['id']}/audio/bloco/0", headers=auth)
+    assert tts.call_args.kwargs["vozes"] == VOZES
+
+
+def test_capitulo_conta_a_pausa_no_tamanho(client):
+    """A tela posiciona os capítulos na barra pela proporção de
+    caracteres; 3s de silêncio são tempo e precisam contar."""
+    from app.services.roteiro_audio import CHARS_DA_PAUSA
+    roteiro = [{"titulo": "Com pausa", "falas": [
+        {"quem": "Beatriz", "texto": "abc"},
+        {"quem": "Rafael", "texto": "de", "pausa": True},
+        {"quem": "Beatriz", "texto": "f"}]}]
+    auth = _autenticar(client, "capitulo@estalo.dev")
+    deck = _deck_com_cards(client, auth)
+    with _com_ia(roteiro):
+        r = client.post(f"/decks/{deck['id']}/audio/roteiro", headers=auth)
+    assert r.json()["capitulos"][0]["caracteres"] == 6 + CHARS_DA_PAUSA
+
+
+def test_pedaco_cortado_nao_vira_capitulo_novo(client):
+    """Um bloco longo cortado em dois é UM capítulo pra quem ouve. A tela
+    continua buscando os dois blocos de áudio (total_blocos)."""
+    roteiro = [
+        {"titulo": "Resolvedor", "falas": [{"quem": "Rafael", "texto": "aaaa"}]},
+        {"titulo": "Resolvedor", "continua": True, "falas": [{"quem": "Beatriz", "texto": "bb"}]},
+        {"titulo": "TTL", "falas": [{"quem": "Rafael", "texto": "c"}]},
+    ]
+    auth = _autenticar(client, "capitulos@estalo.dev")
+    deck = _deck_com_cards(client, auth)
+    with _com_ia(roteiro):
+        r = client.post(f"/decks/{deck['id']}/audio/roteiro", headers=auth).json()
+    assert r["total_blocos"] == 3
+    assert r["capitulos"] == [
+        {"indice": 0, "titulo": "Resolvedor", "caracteres": 6},
+        {"indice": 2, "titulo": "TTL", "caracteres": 1}]
+
+
+def test_roteiro_da_fase_1_com_sufixo_tambem_agrupa(client):
+    roteiro = [
+        {"titulo": "Penicilinas", "falas": [{"quem": "Rafael", "texto": "aa"}]},
+        {"titulo": "Penicilinas (continuação)", "falas": [{"quem": "Beatriz", "texto": "bbb"}]},
+    ]
+    auth = _autenticar(client, "fase1@estalo.dev")
+    deck = _deck_com_cards(client, auth)
+    with _com_ia(roteiro):
+        r = client.post(f"/decks/{deck['id']}/audio/roteiro", headers=auth).json()
+    assert r["capitulos"] == [{"indice": 0, "titulo": "Penicilinas", "caracteres": 5}]
