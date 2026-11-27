@@ -33,3 +33,11 @@ class Deck(Base):
     cards: Mapped[list["Card"]] = relationship(
         back_populates="deck", cascade="all, delete-orphan"
     )
+    # O áudio do Ouvir morre com o deck -- e com a pasta, que apaga os decks
+    # pela mesma cascata do ORM. Antes só a FK (ON DELETE CASCADE) cuidava
+    # disso, e ela não vale no SQLite (dev e testes): o roteiro ficava
+    # órfão. Pelo ORM, o DeckAudio passa pela sessão ao ser apagado, e é
+    # aí que os arquivos do Blob são apagados junto (ver audio_storage).
+    audio: Mapped["DeckAudio | None"] = relationship(
+        cascade="all, delete-orphan", uselist=False
+    )

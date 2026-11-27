@@ -99,6 +99,15 @@ def _migrar():
                 "ALTER TABLE users ADD COLUMN cards_por_sessao INTEGER NOT NULL DEFAULT 15"
             ))
 
+        # Ouvir, fase 3: onde cada bloco de áudio está no Vercel Blob.
+        # Nullable sem default: roteiro antigo = nenhum bloco no servidor,
+        # que é exatamente a verdade sobre eles (o áudio só existia no
+        # aparelho de quem gravou).
+        if inspector.has_table("deck_audio"):
+            colunas_audio = {c["name"] for c in inspector.get_columns("deck_audio")}
+            if "blocos_mp3" not in colunas_audio:
+                conn.execute(text("ALTER TABLE deck_audio ADD COLUMN blocos_mp3 JSON"))
+
         # Backfill do content_hash pra cards que ainda não têm — SHA-256
         # não é nativo nem em SQLite nem em Postgres sem extensão, então
         # roda em Python (calcular_content_hash), não em SQL puro.
@@ -209,7 +218,7 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
-    expose_headers=["X-Taxa-Amostragem"],
+    expose_headers=["X-Taxa-Amostragem", "X-Amostras", "X-Origem"],
 )
 
 app.include_router(auth.router)

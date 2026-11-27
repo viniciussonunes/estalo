@@ -36,3 +36,7 @@ nh3==0.3.6                    # sanitização de HTML (binding do Ammonia/html5e
 # isolada em banco de memória. Ver tests/conftest.py.
 pytest==9.1.1
 factory_boy==3.3.3
+
+# ── Ouvir: áudio guardado no servidor (fase 3) ─────────────────────────────
+lameenc==1.9.0                # PCM -> MP3 no servidor (wheel manylinux, sem compilar)
+vercel-blob==0.6.2            # Vercel Blob privado (>=0.5.0 pra access="private")

@@ -21,7 +21,9 @@ runtime Python da Vercel, e empacotar um binário de dezenas de MB na
 função pra economizar banda que o cliente já tem seria caro do lado
 errado.
 """
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from datetime import datetime
+
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -31,6 +33,7 @@ from app.models import Card, Deck, DeckAudio
 from app.models.deck_audio import calcular_hash_do_deck
 from app.services.ai import IAError
 from app.services.roteiro_audio import VOZES, gerar_roteiro, tamanho_do_bloco
+from app.services import audio_storage
 from app.services.tts import TAXA_PADRAO, sintetizar_bloco
 
 router = APIRouter(prefix="/decks/{deck_id}/audio", tags=["Áudio"])
@@ -66,6 +69,10 @@ def _resumo(audio: DeckAudio, hash_atual: str) -> dict:
         "criado_em": audio.created_at.isoformat() if audio.created_at else None,
         "desatualizado": audio.content_hash != hash_atual,
         "total_blocos": len(blocos),
+        # Fase 3: quantos blocos o servidor tem guardados. Igual ao total =
+        # o áudio inteiro está no servidor, e qualquer aparelho baixa sem
+        # gastar cota (a tela faz isso sozinha, sem perguntar).
+        "blocos_no_servidor": sum(1 for b in (audio.blocos_mp3 or []) if b),
         "capitulos": _capitulos(blocos),
     }
 
@@ -132,6 +139,7 @@ def criar_roteiro(
 
     hash_atual = calcular_hash_do_deck(pares)
     audio = db.query(DeckAudio).filter(DeckAudio.deck_id == deck_id).first()
+    urls_velhas: list[str] = []
     if audio is not None and not refazer:
         return _resumo(audio, hash_atual)
 
@@ -149,10 +157,19 @@ def criar_roteiro(
         audio = DeckAudio(deck_id=deck_id, roteiro=blocos, content_hash=hash_atual)
         db.add(audio)
     else:
+        # Os blocos do roteiro antigo não servem pro novo: saem do banco
+        # agora e do Blob depois do commit. created_at é a VERSÃO do
+        # roteiro (o app compara com o que guardou e o caminho no Blob
+        # inclui) -- antes o refazer não a mudava, e um aparelho podia
+        # reaproveitar blocos da conversa velha.
+        urls_velhas = audio_storage.urls_de(audio.blocos_mp3)
         audio.roteiro = blocos
         audio.content_hash = hash_atual
+        audio.blocos_mp3 = None
+        audio.created_at = datetime.utcnow()
     db.commit()
     db.refresh(audio)
+    audio_storage.apagar(urls_velhas)  # só depois do commit: se falhar, o banco não perdeu nada
     return _resumo(audio, hash_atual)
 
 
@@ -160,14 +177,25 @@ def criar_roteiro(
 def gravar_bloco(
     deck_id: int,
     indice: int,
+    formato: str = Query("pcm", pattern="^(pcm|mp3)$"),
     user_id: int = Depends(get_current_user_id),
     db: Session = Depends(get_db),
 ):
-    """Grava UM bloco e devolve o PCM cru (16-bit mono).
+    """Entrega UM bloco do áudio -- do Blob, se já está lá; senão, grava.
 
-    A taxa de amostragem vai no cabeçalho em vez de embutida num WAV: o
-    cliente concatena vários blocos antes de codificar, e cabeçalho de
-    WAV no meio de uma concatenação vira chiado audível.
+    Com `formato=mp3` (o app a partir da fase 3), devolve MP3 e guarda o
+    bloco no Blob. Se ele JÁ está guardado, devolve o guardado sem gravar
+    nada: é assim que o segundo aparelho baixa o áudio sem gastar cota, e
+    é o mesmo caminho da gravação -- o app não precisa saber a diferença.
+
+    Sem `formato` (o app da fase 1, ainda em cache em algum aparelho),
+    devolve PCM cru como sempre: esse app trata a resposta como PCM, e um
+    MP3 tocaria como chiado. Ele não reaproveita o Blob (não teria como
+    decodificar o MP3), mas o bloco gravado pra ele é guardado mesmo
+    assim, pro próximo aparelho.
+
+    Cabeçalhos: X-Taxa-Amostragem (taxa) e X-Amostras (duração em
+    amostras, que o MP3 não diz sem decodificar).
     """
     _deck_do_usuario(deck_id, user_id, db)
     audio = db.query(DeckAudio).filter(DeckAudio.deck_id == deck_id).first()
@@ -176,27 +204,63 @@ def gravar_bloco(
     if not 0 <= indice < len(audio.roteiro):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Bloco não existe neste roteiro.")
 
-    bloco = audio.roteiro[indice]
+    blocos = list(audio.blocos_mp3 or [])
+    blocos += [None] * (len(audio.roteiro) - len(blocos))
+    guardado = blocos[indice]
+
+    if formato == "mp3" and guardado:
+        mp3 = audio_storage.ler(guardado["url"])
+        if mp3 is not None:
+            return _resposta_mp3(mp3, guardado["taxa"], guardado["amostras"], origem="servidor")
+        # Não leu (Blob fora, arquivo sumido): grava de novo em vez de
+        # deixar a pessoa sem áudio. Custa cota, mas é o caso raro.
+
     try:
-        pcm, taxa = sintetizar_bloco(bloco["falas"], user_id=user_id, db=db, vozes=VOZES)
+        pcm, taxa = sintetizar_bloco(audio.roteiro[indice]["falas"], user_id=user_id, db=db, vozes=VOZES)
     except IAError as e:
         raise erro_http_de_ia(e, f"tts_bloco_{indice}")
+    taxa = taxa or TAXA_PADRAO
+    amostras = len(pcm) // 2
+    mp3 = audio_storage.codificar_mp3(pcm, taxa)
 
+    url = audio_storage.guardar(audio_storage.caminho_do_bloco(user_id, deck_id, audio, indice), mp3)
+    if url:
+        blocos[indice] = {"url": url, "amostras": amostras, "taxa": taxa, "bytes": len(mp3)}
+        # Lista NOVA, não a mesma mutada: o SQLAlchemy só percebe que uma
+        # coluna JSON mudou quando ela recebe outro objeto.
+        audio.blocos_mp3 = blocos
+        db.commit()
+
+    if formato == "mp3":
+        return _resposta_mp3(mp3, taxa, amostras, origem="gravado")
     return Response(
         content=pcm,
         media_type="application/octet-stream",
-        # Só a taxa. O título do bloco também viajava aqui, mutilado por um
-        # encode("ascii") que comia os acentos ("segurança" -> "seguranca"),
-        # e ninguém lia: os títulos dos capítulos vêm do JSON de _resumo().
-        # Cabeçalho que nenhum cliente lê é código morto que parece
-        # funcionalidade.
-        headers={"X-Taxa-Amostragem": str(taxa or TAXA_PADRAO)},
+        headers={"X-Taxa-Amostragem": str(taxa), "X-Amostras": str(amostras)},
+    )
+
+
+def _resposta_mp3(mp3: bytes, taxa: int, amostras: int, origem: str) -> Response:
+    return Response(
+        content=mp3,
+        media_type="audio/mpeg",
+        headers={
+            "X-Taxa-Amostragem": str(taxa),
+            "X-Amostras": str(amostras),
+            # "servidor" = veio do Blob, não gastou cota; "gravado" = nasceu agora
+            "X-Origem": origem,
+        },
     )
 
 
 @router.delete("", status_code=status.HTTP_204_NO_CONTENT)
 def apagar_audio(deck_id: int, user_id: int = Depends(get_current_user_id), db: Session = Depends(get_db)):
-    """Esquece o roteiro. O MP3 no aparelho é apagado pelo próprio cliente."""
+    """Esquece o roteiro e o áudio guardado no servidor.
+
+    Os arquivos do Blob saem depois do commit, pelo evento de sessão em
+    audio_storage -- o mesmo que cobre a exclusão do deck e da pasta. O
+    MP3 no aparelho é apagado pelo próprio app.
+    """
     _deck_do_usuario(deck_id, user_id, db)
     audio = db.query(DeckAudio).filter(DeckAudio.deck_id == deck_id).first()
     if audio is not None:

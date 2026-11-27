@@ -50,6 +50,17 @@ class DeckAudio(Base):
 
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
+    # Fase 3: um item por bloco do roteiro, na mesma ordem. None no lugar
+    # de um bloco = ainda não está no servidor (só no aparelho de quem
+    # gravou, ou em lugar nenhum). Item = {"url", "amostras", "taxa",
+    # "bytes"} -- o bastante pra servir o bloco e saber a duração sem
+    # gastar uma operação do Blob perguntando.
+    #
+    # Guardado aqui, e não descoberto listando o Blob, porque listar é
+    # operação "avançada" e o plano Hobby tem 2.000 por mês: abrir a tela
+    # Ouvir não pode custar uma.
+    blocos_mp3: Mapped[list | None] = mapped_column(JSON, nullable=True)
+
 
 def calcular_hash_do_deck(pares: list[tuple[str, str]]) -> str:
     """Retrato do conteúdo de um deck: SHA-256 de todos os cards.
