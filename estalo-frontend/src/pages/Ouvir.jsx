@@ -32,11 +32,13 @@ function quandoFoi(iso) {
  * gerar, custa dinheiro pra nascer e ocupa espaço no aparelho. Daí a
  * tela ter ciclo de vida, não só um player.
  *
- * O ROTEIRO (texto do diálogo) mora no servidor; o ÁUDIO mora só neste
- * aparelho, na Cache API. Por isso existe o estado do meio -- roteiro
- * pronto, áudio ainda não gravado aqui -- que é o que se vê ao abrir o
- * mesmo deck num segundo aparelho: nesse caso regravar custa só a
- * locução, não a escrita.
+ * O roteiro e (desde a fase 3) o áudio moram no servidor; a cópia que
+ * toca, inclusive offline, mora neste aparelho, na Cache API. Abrir o
+ * deck num segundo aparelho com o áudio inteiro no servidor BAIXA sozinho
+ * -- sem perguntar, sem gastar cota: escolha de 27/11/2026, porque são
+ * ~2 MB e quem abre esta tela veio ouvir. O estado do meio (roteiro pronto,
+ * áudio não gravado) sobra pros áudios gravados antes da fase 3, que só
+ * existem no aparelho de quem gravou.
  */
 export default function Ouvir({ deck, aoVoltar }) {
   const online = useOnline();
@@ -55,6 +57,10 @@ export default function Ouvir({ deck, aoVoltar }) {
 
   const audioRef = useRef(null);
   const abortRef = useRef(null);
+  // Uma tentativa automática por visita: se baixar falhar, a tela mostra
+  // o erro e o botão, em vez de tentar de novo em laço.
+  const tentouBaixar = useRef(false);
+  const [baixando, setBaixando] = useState(false);
 
   const carregar = useCallback(async () => {
     setErro("");
@@ -102,8 +108,21 @@ export default function Ouvir({ deck, aoVoltar }) {
     if (audioRef.current) audioRef.current.playbackRate = velocidade;
   }, [velocidade, url]);
 
-  async function gravar() {
+  // O áudio inteiro está no servidor e não neste aparelho: baixa sozinho.
+  // É o mesmo caminho da gravação (gerarAudio), e o servidor entrega os
+  // blocos guardados sem gravar nada -- por isso não custa cota.
+  const inteiroNoServidor = !!servidor?.existe && servidor.total_blocos > 0
+    && servidor.blocos_no_servidor === servidor.total_blocos;
+  useEffect(() => {
+    if (carregando || local || progresso || !inteiroNoServidor || !online || tentouBaixar.current) return;
+    tentouBaixar.current = true;
+    gravar({ soBaixar: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [carregando, local, progresso, inteiroNoServidor, online]);
+
+  async function gravar({ soBaixar = false } = {}) {
     setErro("");
+    setBaixando(soBaixar);
     setProgresso({ feitos: 0, total: servidor?.total_blocos ?? 0 });
     abortRef.current = new AbortController();
     try {
@@ -183,8 +202,8 @@ export default function Ouvir({ deck, aoVoltar }) {
         {/* ---------- Gravando ---------- */}
         {progresso && (
           <div className="ouvir-gerando">
-            <div className="ouvir-vazio-icone" aria-hidden="true">🎙️</div>
-            <h1 className="ouvir-vazio-titulo">Gravando a conversa…</h1>
+            <div className="ouvir-vazio-icone" aria-hidden="true">{baixando ? "⬇️" : "🎙️"}</div>
+            <h1 className="ouvir-vazio-titulo">{baixando ? "Baixando o áudio…" : "Gravando a conversa…"}</h1>
             <div className="ouvir-progresso-trilha">
               <div className="ouvir-progresso-preenchido"
                    style={{ width: `${progresso.total ? (progresso.feitos / progresso.total) * 100 : 5}%` }} />
@@ -195,14 +214,15 @@ export default function Ouvir({ deck, aoVoltar }) {
                 : "Escrevendo o roteiro…"}
             </p>
             <p className="ouvir-nota-offline">
-              Mantenha esta tela aberta até terminar. Se sair, os trechos já gravados
-              ficam salvos e você continua de onde parou.
+              {baixando
+                ? "A conversa já foi gravada. Baixando pra este aparelho — depois toca sem internet."
+                : "Mantenha esta tela aberta até terminar. Se sair, os trechos já gravados ficam salvos e você continua de onde parou."}
             </p>
           </div>
         )}
 
         {/* ---------- Nada ainda ---------- */}
-        {!carregando && !progresso && !local && (
+        {!carregando && !progresso && !local && !(inteiroNoServidor && online && !erro) && (
           <div className="ouvir-vazio">
             <div className="ouvir-vazio-icone" aria-hidden="true">🎧</div>
             <h1 className="ouvir-vazio-titulo">
@@ -217,10 +237,10 @@ export default function Ouvir({ deck, aoVoltar }) {
               <ul className="ouvir-vazio-fatos">
                 <li>Uma conversa entre <strong>Rafael e Beatriz</strong></li>
                 <li>Gravada <strong>uma vez</strong> — depois é só ouvir</li>
-                <li>Fica <strong>no aparelho</strong>, toca sem internet</li>
+                <li>Fica <strong>na sua conta</strong> e toca sem internet</li>
               </ul>
             )}
-            <button className="botao-principal ouvir-botao-gerar" onClick={gravar} disabled={!online}>
+            <button className="botao-principal ouvir-botao-gerar" onClick={() => gravar()} disabled={!online}>
               {servidor?.existe ? "Gravar áudio" : "Gerar conversa"}
             </button>
             {!online && (

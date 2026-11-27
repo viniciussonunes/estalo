@@ -39,9 +39,9 @@ function tokenFalso() {
   return `${b64({ alg: "HS256", typ: "JWT" })}.${b64({ sub: "1", exp: 9999999999 })}.assinatura-de-teste`;
 }
 
-/** PCM de meio segundo: silêncio basta, ninguém escuta num teste. */
-function pcmFalso() {
-  return Buffer.alloc(24000, 0);
+/** Bytes de "MP3": ninguém escuta num teste, só importa que cheguem. */
+function mp3Falso() {
+  return Buffer.alloc(4000, 0);
 }
 
 /**
@@ -49,11 +49,11 @@ function pcmFalso() {
  * aqui), "atrasado" (roteiro existe e os cards mudaram depois).
  * `semRede`: toda chamada à API falha, pra simular o avião.
  */
-async function abrirOuvir(page, { estado = "nada", semRede = false, semEspaco = false } = {}) {
+async function abrirOuvir(page, { estado = "nada", semRede = false, semEspaco = false, noServidor = 0, quebrar = null } = {}) {
   // `ref` é o servidor de mentira, e também o painel de controle do teste:
   // `ref.quebrar` passa a derrubar aquele bloco, `ref.versao` finge um
   // roteiro reescrito (inclusive por outro aparelho).
-  const ref = { blocosPedidos: [], roteirosPedidos: [], quebrar: null, versao: "2026-11-05T10:00:00" };
+  const ref = { blocosPedidos: [], formatos: [], roteirosPedidos: [], quebrar: null, versao: "2026-11-05T10:00:00", noServidor: 0 };
 
   await page.route("**/*", async (route) => {
     const req = route.request();
@@ -67,13 +67,14 @@ async function abrirOuvir(page, { estado = "nada", semRede = false, semEspaco = 
     if (bloco) {
       const i = Number(bloco[1]);
       ref.blocosPedidos.push(i);
+      ref.formatos.push(new URL(req.url()).searchParams.get("formato"));
       // Derruba só este bloco: é o 503 do provedor no meio da fila.
       if (i === ref.quebrar) return json({ detail: "Serviço de IA indisponível." }, 503);
       return route.fulfill({
         status: 200,
-        contentType: "application/octet-stream",
-        headers: { "X-Taxa-Amostragem": "24000" },
-        body: pcmFalso(),
+        contentType: "audio/mpeg",
+        headers: { "X-Taxa-Amostragem": "24000", "X-Amostras": "12000", "X-Origem": ref.noServidor ? "servidor" : "gravado" },
+        body: mp3Falso(),
       });
     }
     if (p === "/decks/10/audio/roteiro") {
@@ -90,6 +91,7 @@ async function abrirOuvir(page, { estado = "nada", semRede = false, semEspaco = 
         total_blocos: 3,
         capitulos: CAPITULOS,
         criado_em: ref.versao,
+        blocos_no_servidor: ref.noServidor,
       });
     }
 
@@ -101,6 +103,8 @@ async function abrirOuvir(page, { estado = "nada", semRede = false, semEspaco = 
   });
 
   ref.estado = estado === "nada" ? "nada" : estado;
+  ref.noServidor = noServidor;
+  ref.quebrar = quebrar;
 
   // addInitScript, não page.evaluate depois do goto: o token precisa
   // existir ANTES de qualquer script da página rodar, senão o App monta
@@ -293,5 +297,56 @@ test.describe("Ouvir", () => {
     await abrirOuvir(page, { estado: "nada", semRede: true });
     await expect(page.getByRole("button", { name: "Gerar conversa" })).toBeDisabled();
     await expect(page.locator(".ouvir-nota-offline")).toContainText("Precisa de internet");
+  });
+});
+
+
+/*
+ * Fase 3: o áudio guardado no servidor.
+ *
+ * O áudio inteiro no servidor e nada neste aparelho é o "segundo
+ * aparelho". A tela baixa sozinha, sem perguntar (escolha de 27/11/2026:
+ * são ~2 MB e quem abre esta tela veio ouvir), e o servidor entrega os
+ * blocos guardados sem gastar cota.
+ */
+test.describe("Ouvir — áudio no servidor", () => {
+  test("pede os blocos em MP3", async ({ page }) => {
+    const ref = await abrirOuvir(page, { estado: "roteiro" });
+    await page.getByRole("button", { name: "Gravar áudio" }).click();
+    await expect(page.locator(".ouvir-player")).toBeVisible();
+    expect(ref.formatos).toEqual(["mp3", "mp3", "mp3"]);
+  });
+
+  test("áudio inteiro no servidor: baixa sozinho e abre o player, sem botão", async ({ page }) => {
+    const ref = await abrirOuvir(page, { estado: "roteiro", noServidor: 3 });
+    await expect(page.locator(".ouvir-player")).toBeVisible();
+    expect(ref.blocosPedidos).toEqual([0, 1, 2]);
+    // nunca pediu pra reescrever a conversa (isso, sim, gastaria cota)
+    expect(ref.roteirosPedidos.every(q => !q.includes("refazer"))).toBe(true);
+  });
+
+  test("enquanto baixa, diz que está baixando (e não gravando)", async ({ page }) => {
+    let liberar;
+    const segura = new Promise(r => { liberar = r; });
+    await page.route(/\/decks\/10\/audio\/bloco\/2/, async (route) => { await segura; await route.fallback(); });
+    await abrirOuvir(page, { estado: "roteiro", noServidor: 3 });
+    await expect(page.getByRole("heading", { name: "Baixando o áudio…" })).toBeVisible();
+    await expect(page.getByText("Gravando a conversa…")).toHaveCount(0);
+    liberar();
+    await expect(page.locator(".ouvir-player")).toBeVisible();
+  });
+
+  test("só parte no servidor: não baixa sozinho, oferece gravar", async ({ page }) => {
+    const ref = await abrirOuvir(page, { estado: "roteiro", noServidor: 1 });
+    await expect(page.getByRole("button", { name: "Gravar áudio" })).toBeVisible();
+    expect(ref.blocosPedidos).toEqual([]);
+  });
+
+  test("se baixar falhar, mostra o erro e o botão, sem tentar em laço", async ({ page }) => {
+    const ref = await abrirOuvir(page, { estado: "roteiro", noServidor: 3, quebrar: 0 });
+    await expect(page.locator(".erro")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Gravar áudio" })).toBeVisible();
+    await page.waitForTimeout(800);
+    expect(ref.blocosPedidos.filter(i => i === 0).length).toBe(1);
   });
 });

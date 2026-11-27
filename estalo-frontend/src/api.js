@@ -164,7 +164,7 @@ async function request(path, { method = "GET", body, form, headers: extra, prazo
   // 204 = sucesso sem conteúdo (ex: exclusão). Não tenta ler JSON.
   if (resp.status === 204) return null;
 
-  // binario: o áudio do podcast volta como PCM cru, não JSON -- base64
+  // binario: o áudio do podcast volta como bytes (MP3), não JSON -- base64
   // dentro de um JSON inflaria em um terço e estouraria o limite de corpo
   // de resposta da função serverless (ver app/routers/audio.py). Os
   // cabeçalhos vêm junto porque a taxa de amostragem viaja num deles.
@@ -278,8 +278,11 @@ export const api = {
   criarRoteiroDeAudio: (deckId, { refazer = false } = {}) =>
     request(`/decks/${deckId}/audio/roteiro${refazer ? "?refazer=true" : ""}`, { method: "POST" }),
 
+  // formato=mp3: o servidor comprime e guarda o bloco (fase 3). Sem ele, o
+  // backend devolve PCM cru -- é o caminho do app antigo ainda em cache em
+  // algum aparelho, que não saberia tocar MP3 como PCM.
   gravarBlocoDeAudio: (deckId, indice) =>
-    request(`/decks/${deckId}/audio/bloco/${indice}`, { method: "POST", binario: true }),
+    request(`/decks/${deckId}/audio/bloco/${indice}?formato=mp3`, { method: "POST", binario: true }),
 
   apagarAudioDoDeck: (deckId) => request(`/decks/${deckId}/audio`, { method: "DELETE" }),
 

@@ -6,13 +6,14 @@
 // API, porque um episódio de cinco minutos são megabytes e o
 // localStorage tem teto de ~5MB pro domínio inteiro.
 //
-// --- Por que o navegador comprime, e não o servidor ---
-// O backend devolve PCM cru (48 KB por segundo). Guardar isso no aparelho
-// custaria ~14 MB por episódio de 5 min -- mais de cem vezes o que o app
-// guarda hoje de todos os cards somados. Comprimir pra MP3 derruba pra
-// ~2,3 MB. Quem comprime é esta camada porque não existe ffmpeg no
-// runtime Python da Vercel, e embarcar um binário de dezenas de MB na
-// função pra poupar banda que o cliente já tem seria caro do lado errado.
+// --- Fase 3: o servidor comprime e guarda ---
+// Até 27/11/2026 o backend devolvia PCM cru (~3,6 MB por bloco) e ESTA
+// camada comprimia pra MP3 com lamejs. O áudio só existia no aparelho de
+// quem gravou. Agora o servidor comprime (lameenc), guarda cada bloco no
+// Vercel Blob privado e devolve o MP3 (~0,6 MB por bloco). Pedir um bloco
+// que já está guardado devolve o guardado SEM gastar cota -- então baixar
+// o áudio num segundo aparelho é este mesmo laço, só que rápido e de
+// graça. O lamejs saiu do app.
 //
 // --- Por que o cliente conduz a fila ---
 // Um episódio não cabe no maxDuration de 60s de uma função serverless
@@ -50,11 +51,6 @@ const TAXA_PADRAO = 24000;
 const ERRO_SEM_ESPACO =
   "O áudio ficou pronto, mas não cabe neste aparelho. Libere espaço — " +
   "apagar um deck baixado ou um áudio de outro deck costuma bastar — e grave de novo.";
-
-// 64 kbps mono: medido, deixa 5 min em ~2,3 MB com a fala limpa. Abaixo
-// disso a voz começa a chiar nos sibilantes, e o que se economiza (uns
-// poucos MB) não paga o incômodo de ouvir por meia hora.
-const KBPS = 64;
 
 function _chaveCache(userId, deckId, parte = "completo") {
   return `/audio/u${userId}/deck/${deckId}/${parte}`;
@@ -181,37 +177,6 @@ export function audioGuardado(deckId) {
   return uid ? _lerRegistro()[_chaveRegistro(uid, deckId)] || null : null;
 }
 
-// O encoder de MP3 pesa ~150 KB e só esta tela precisa dele -- importar
-// no topo o enfiaria no bundle principal, fazendo quem nunca abre
-// "Ouvir" pagar o download. Carregado na primeira gravação e guardado
-// depois, porque a fila chama isto uma vez por bloco.
-let _Mp3Encoder = null;
-async function _encoder() {
-  if (!_Mp3Encoder) ({ Mp3Encoder: _Mp3Encoder } = await import("@breezystack/lamejs"));
-  return _Mp3Encoder;
-}
-
-/**
- * PCM 16-bit mono -> MP3.
- *
- * Em pedaços de 1152 amostras porque é o tamanho de um frame de MP3 --
- * entregar o bloco inteiro de uma vez faz o encoder alocar um buffer do
- * tamanho do áudio todo e trava a aba por segundos num celular.
- */
-async function _pcmParaMp3(pcm16, taxa) {
-  const Encoder = await _encoder();
-  const encoder = new Encoder(1, taxa, KBPS);
-  const pedacos = [];
-  const QUADRO = 1152;
-  for (let i = 0; i < pcm16.length; i += QUADRO) {
-    const buf = encoder.encodeBuffer(pcm16.subarray(i, i + QUADRO));
-    if (buf.length > 0) pedacos.push(buf);
-  }
-  const fim = encoder.flush();
-  if (fim.length > 0) pedacos.push(fim);
-  return pedacos;
-}
-
 /**
  * Gera o áudio do deck inteiro, bloco a bloco -- e retoma de onde parou.
  *
@@ -255,16 +220,19 @@ export async function gerarAudio(deckId, { aoAvancar, sinal } = {}) {
       continue;
     }
 
+    // Já vem em MP3. Se o servidor tinha o bloco guardado, veio de lá e
+    // não gastou cota; senão, nasceu agora (e ficou guardado lá também).
     const { bytes, cabecalhos } = await api.gravarBlocoDeAudio(deckId, i);
     taxa = Number(cabecalhos.get("X-Taxa-Amostragem")) || taxa;
+    // O MP3 não diz a duração sem decodificar; o servidor manda junto.
+    const amostrasDoBloco = Number(cabecalhos.get("X-Amostras")) || 0;
 
-    const pcm16 = new Int16Array(bytes);
-    const bloco = new Blob(await _pcmParaMp3(pcm16, taxa), { type: "audio/mpeg" });
-    amostras += pcm16.length;
+    const bloco = new Blob([bytes], { type: "audio/mpeg" });
+    amostras += amostrasDoBloco;
     partes.push(bloco);
     // Guarda ANTES de pedir o próximo: é a linha que faz a fila poder
-    // recomeçar em vez de pagar tudo outra vez.
-    await _guardarBloco(cache, uid, deckId, i, bloco, pcm16.length, taxa, versao);
+    // recomeçar sem nem perguntar ao servidor.
+    await _guardarBloco(cache, uid, deckId, i, bloco, amostrasDoBloco, taxa, versao);
 
     aoAvancar?.({ feitos: i + 1, total });
   }
