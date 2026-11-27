@@ -117,7 +117,8 @@ test.describe("Excluir pasta", () => {
   test("confirmar apaga — e o desfazer continua valendo depois", async ({ page }) => {
     const apagadas = await abrirDashboard(page);
     await botaoExcluir(page, "Certificações").click();
-    await page.getByRole("button", { name: "Excluir pasta" }).last().click();
+    await page.getByRole("dialog").getByRole("textbox").fill("apagar");
+    await page.getByRole("dialog").getByRole("button", { name: "Excluir pasta" }).click();
 
     await expect(page.getByRole("dialog")).toHaveCount(0);
     await expect(page.locator(".pasta-card, .lista-pasta").filter({ hasText: "Certificações" })).toHaveCount(0);
@@ -127,6 +128,50 @@ test.describe("Excluir pasta", () => {
     await expect(page.locator(".pasta-card, .lista-pasta").filter({ hasText: "Certificações" })).toBeVisible();
     await page.waitForTimeout(6500);
     expect(apagadas.total, "desfazer não impediu o DELETE").toBe(0);
+  });
+
+  test("só apaga depois de digitar apagar", async ({ page }) => {
+    // O clique sai no automático; digitar a palavra obriga a ler o que vai
+    // junto -- os decks e cards são apagados de verdade no servidor.
+    const apagadas = await abrirDashboard(page);
+    await botaoExcluir(page, "Certificações").click();
+    const dialogo = page.getByRole("dialog");
+    const campo = dialogo.getByRole("textbox");
+    const excluir = dialogo.getByRole("button", { name: "Excluir pasta" });
+
+    await expect(campo).toBeFocused();
+    await expect(excluir).toBeDisabled();
+    // Enter com o campo vazio não apaga.
+    await campo.press("Enter");
+    await expect(dialogo).toBeVisible();
+
+    for (const quase of ["apag", "apagar tudo", "excluir"]) {
+      await campo.fill(quase);
+      await expect(excluir, `"${quase}" liberou o botão`).toBeDisabled();
+    }
+    await campo.fill("apagar tudo");
+    await campo.press("Enter");
+    await expect(dialogo).toBeVisible();
+
+    // Teclado de celular costuma pôr maiúscula e espaço no fim.
+    await campo.fill("Apagar ");
+    await expect(excluir).toBeEnabled();
+    await campo.press("Enter");
+    await expect(dialogo).toHaveCount(0);
+    await expect(page.locator(".pasta-card, .lista-pasta").filter({ hasText: "Certificações" })).toHaveCount(0);
+    await page.waitForTimeout(6500); // a janela do desfazer passa e o DELETE sai
+    expect(apagadas.total).toBe(1);
+  });
+
+  test("reabrir o pop-up começa com o campo vazio", async ({ page }) => {
+    await abrirDashboard(page);
+    await botaoExcluir(page, "Certificações").click();
+    await page.getByRole("dialog").getByRole("textbox").fill("apagar");
+    await page.getByRole("button", { name: "Cancelar" }).click();
+
+    await botaoExcluir(page, "Certificações").click();
+    await expect(page.getByRole("dialog").getByRole("textbox")).toHaveValue("");
+    await expect(page.getByRole("dialog").getByRole("button", { name: "Excluir pasta" })).toBeDisabled();
   });
 
   test("pasta vazia não pergunta nada", async ({ page }) => {

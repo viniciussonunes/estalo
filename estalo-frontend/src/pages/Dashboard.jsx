@@ -56,6 +56,9 @@ function coletarIdsPastas(pasta) {
  * informa nada. E os cards entram porque são o que a pessoa realmente
  * perde -- pasta e deck se recriam em segundos, card estudado não.
  */
+// Aceita "Apagar", " apagar " (teclado do celular capitaliza e põe espaço).
+const PALAVRA_EXCLUIR_OK = (texto) => texto.trim().toLowerCase() === "apagar";
+
 function listarEstrago({ subpastas, decks, cards }) {
   const partes = [];
   if (subpastas > 0) partes.push(`${subpastas} subpasta${subpastas !== 1 ? "s" : ""}`);
@@ -338,6 +341,8 @@ export default function Dashboard({ usuario, aoVerCards, aoEstudar, aoCriarDeck,
   // Pasta aguardando confirmação de exclusão, com o estrago já contado:
   // { pasta, subpastas, decks, cards }. null = nenhum pop-up aberto.
   const [pastaParaExcluir, setPastaParaExcluir] = useState(null);
+  // O que a pessoa digitou no pop-up de excluir pasta (precisa ser "apagar").
+  const [palavraExcluir, setPalavraExcluir] = useState("");
   const [viewMode, setViewMode] = useState(() => {
     try { return localStorage.getItem("dashboard_view_mode") === "list" ? "list" : "grid"; }
     catch { return "grid"; }
@@ -483,6 +488,7 @@ export default function Dashboard({ usuario, aoVerCards, aoEstudar, aoCriarDeck,
       _apagarPasta(pasta);
       return;
     }
+    setPalavraExcluir("");
     setPastaParaExcluir({ pasta, subpastas, decks: decks.length, cards });
   }
 
@@ -993,17 +999,31 @@ export default function Dashboard({ usuario, aoVerCards, aoEstudar, aoCriarDeck,
             Isso apaga também {listarEstrago(pastaParaExcluir)}.
           </p>
           <p className="modal-excluir-aviso">Não dá pra recuperar depois.</p>
-          <div className="modal-excluir-botoes">
-            <button className="botao-principal perigo" onClick={() => {
-              _apagarPasta(pastaParaExcluir.pasta);
-              setPastaParaExcluir(null);
-            }}>
+          {/* Digitar "apagar" em vez de só clicar: o clique sai no
+              automático, a palavra obriga a ler o que vai junto. */}
+          <form className="modal-excluir-botoes" onSubmit={e => {
+            e.preventDefault();
+            if (!PALAVRA_EXCLUIR_OK(palavraExcluir)) return;
+            _apagarPasta(pastaParaExcluir.pasta);
+            setPastaParaExcluir(null);
+          }}>
+            <label className="campo modal-excluir-campo">
+              <span>Digite <strong>apagar</strong> para confirmar</span>
+              <input
+                data-autofocus
+                value={palavraExcluir}
+                onChange={e => setPalavraExcluir(e.target.value)}
+                autoComplete="off" autoCapitalize="none" autoCorrect="off" spellCheck={false}
+              />
+            </label>
+            <button type="submit" className="botao-principal perigo"
+              disabled={!PALAVRA_EXCLUIR_OK(palavraExcluir)}>
               Excluir pasta
             </button>
-            <button className="botao-texto" onClick={() => setPastaParaExcluir(null)}>
+            <button type="button" className="botao-texto" onClick={() => setPastaParaExcluir(null)}>
               Cancelar
             </button>
-          </div>
+          </form>
         </Modal>
       )}
 

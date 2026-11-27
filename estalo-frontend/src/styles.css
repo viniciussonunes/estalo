@@ -330,9 +330,11 @@ body {
   gap: 0.35rem;
 }
 .modal-excluir-botoes .botao-principal { width: 100%; }
+.modal-excluir-campo { width: 100%; margin-bottom: 0.6rem; }
+.botao-principal.perigo:disabled { opacity: 0.45; cursor: not-allowed; }
 /* Vermelho no botão que apaga: a cor é metade do aviso. */
 .botao-principal.perigo { background: var(--perigo); }
-.botao-principal.perigo:hover { background: #dc2626; }
+.botao-principal.perigo:hover:not(:disabled) { background: #dc2626; }
 
 /* ---------- Modal de trocar senha ---------- */
 .modal-senha { max-width: 400px; }

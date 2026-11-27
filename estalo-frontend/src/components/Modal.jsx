@@ -56,7 +56,10 @@ export default function Modal({ aberto, aoFechar, titulo, className = "", childr
     const marca = {};
     pilha.push(marca);
     focoAnterior.current = document.activeElement;
-    painelRef.current?.focus();
+    // Um campo marcado com data-autofocus recebe o foco no lugar do painel.
+    // (O autoFocus do React não serve: roda antes deste efeito, que então
+    // guardaria o próprio campo como "foco anterior" e roubaria o foco.)
+    (painelRef.current?.querySelector("[data-autofocus]") ?? painelRef.current)?.focus();
 
     function aoTeclar(e) {
       if (pilha[pilha.length - 1] !== marca) return;
