@@ -58,5 +58,11 @@ class Folder(Base):
         remote_side=[id],
     )
 
-    # Decks que ficam diretamente dentro desta pasta.
-    decks: Mapped[list["Deck"]] = relationship(back_populates="folder")
+    # Decks que ficam diretamente dentro desta pasta. Excluir a pasta
+    # apaga os decks (e, pelo cascade do Deck, cards, histórico e áudio).
+    # Sem o cascade, o SQLAlchemy só zerava folder_id e os decks iam pra
+    # raiz -- enquanto o pop-up do app avisava que seriam apagados.
+    decks: Mapped[list["Deck"]] = relationship(
+        back_populates="folder",
+        cascade="all, delete-orphan",
+    )

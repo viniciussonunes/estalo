@@ -12,11 +12,10 @@ O que estes testes seguram, e por quê:
   - **O app antigo continua recebendo PCM.** Ele trata a resposta como
     PCM; um MP3 tocaria como chiado. Só quem pede formato=mp3 recebe MP3.
   - **Nada fica órfão no Blob.** Remover o áudio, refazer a conversa e
-    apagar o deck apagam os arquivos -- depois do commit, pra um rollback
+    apagar o deck ou a pasta apagam os arquivos -- depois do commit, pra um rollback
     não levar o arquivo junto. (Apagar a PASTA hoje não apaga os decks de
-    dentro: eles vão pra raiz, com o áudio. Visto em 27/11/2026; é outro
-    assunto. Quando a pasta passar a apagar os decks pelo ORM, o áudio
-    sai junto pela relação Deck.audio, sem código novo aqui.)
+    dentro: eles iam pra raiz, com o áudio. Corrigido em 27/11/2026 com o
+    cascade em Folder.decks; o áudio sai junto pela relação Deck.audio.)
   - **O roteiro sai junto com o deck também no SQLite.** Antes só a FK do
     Postgres cuidava disso (débito técnico da fase 1).
 
@@ -219,6 +218,35 @@ def test_apagar_o_deck_apaga_roteiro_e_blob(client, db_session):
     db_session.expire_all()
     assert db_session.query(DeckAudio).filter(DeckAudio.deck_id == deck["id"]).count() == 0
     assert len(apagar.call_args.args[0]) == 2
+
+
+def test_apagar_a_pasta_apaga_os_decks_de_dentro(client, db_session):
+    """O pop-up avisa "isso apaga N decks e N cards" -- e agora apaga mesmo.
+    Antes o ORM só zerava folder_id e os decks, inclusive os das subpastas,
+    reapareciam na raiz com cards e áudio."""
+    from app.models import Card, Deck
+
+    auth = _autenticar(client, "f3_pasta@estalo.dev")
+    pasta = client.post("/folders", json={"name": "Certificações"}, headers=auth).json()
+    sub = client.post("/folders", json={"name": "MD-102", "parent_id": pasta["id"]}, headers=auth).json()
+    fora = client.post("/decks", json={"title": "Fica"}, headers=auth).json()
+
+    na_pasta = _deck_com_bloco_guardado(client, auth)
+    na_sub = client.post("/decks", json={"title": "Na sub", "folder_id": sub["id"]}, headers=auth).json()
+    client.post(f"/decks/{na_sub['id']}/cards", json={"front": "P2", "back": "R2"}, headers=auth)
+    assert client.patch(f"/decks/{na_pasta['id']}/move", json={"folder_id": pasta["id"]}, headers=auth).status_code == 200
+
+    with patch.object(audio_storage, "apagar") as apagar:
+        assert client.delete(f"/folders/{pasta['id']}", headers=auth).status_code == 204
+
+    db_session.expire_all()
+    ids = [na_pasta["id"], na_sub["id"]]
+    assert db_session.query(Deck).filter(Deck.id.in_(ids)).count() == 0
+    assert db_session.query(Card).filter(Card.deck_id.in_(ids)).count() == 0
+    assert db_session.query(DeckAudio).filter(DeckAudio.deck_id == na_pasta["id"]).count() == 0
+    assert len(apagar.call_args.args[0]) == 2
+    # Só o que estava dentro: o deck da raiz continua.
+    assert [d["id"] for d in client.get("/decks", headers=auth).json()] == [fora["id"]]
 
 
 def test_rollback_nao_apaga_do_blob(db_session):
